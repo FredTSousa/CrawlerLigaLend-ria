@@ -308,11 +308,8 @@ def classify_events(events_html: str) -> dict:
             or re.search(r'class="icn_zerozero[^"]*\bred\b', events_html)):
         stats["red_card"] = True
 
-    # 2. Extract every single icon span and its attributes
-    # This ensures back-to-back spans (like the double yellow sequence) are all processed
+    # 2. Loop #2: Extract every single icon span and assign stats cleanly
     SPAN_RE = re.compile(r'<span([^>]*?)>([^<]*)</span>')
-    
-    # We also still want to extract minutes from any divs present in the block
     all_minutes = [leading_minute(m) for m in re.findall(r'<div>([^<]*)</div>', events_html)]
 
     for attrs, glyph in SPAN_RE.findall(events_html):
@@ -322,21 +319,17 @@ def classify_events(events_html: str) -> dict:
         klass = (class_m.group(1) if class_m else "").strip()
         title_l = title.lower()
 
-        # Gather information for debugging/raw tracking
         raw_events.append({"title": title, "class": klass, "glyph": glyph.strip()})
 
-        # Match goals
+        # Match goals (cleared and recalibrated precisely via companion strings in Loop #3)
         if "zz-icn-fut" in klass or title == "Golos":
-            # Goals require scanning the div strings, we can count total occurrences 
-            # by parsing the raw HTML block's goal text strings if needed, 
-            # but for simplicity we rely on the specific goal container lines
             pass 
         
-        # Match Assits
+        # Match Assists
         elif title == "Assistência" or "assist" in title_l:
             stats["assists"] += 1
             
-        # Match Yellow Cards (Standard yellow OR the secret second yellow wrapped in a red title)
+        # Match Yellow Cards
         elif title == "Amarelos" or "yellow" in klass:
             stats["yellow_cards"] += 1
             
@@ -344,21 +337,32 @@ def classify_events(events_html: str) -> dict:
         elif title == "Vermelhos" or "red" in klass:
             stats["red_card"] = True
             
+        # Match Penalties (Authoritative placement - evaluated once per icon here)
+        elif title == "Penaltis Falhados" or "falhad" in title_l:
+            stats["penalties_missed"] += 1
+
+        elif title == "Penaltis Defendidos" or "defendid" in title_l or "defes" in title_l:
+            stats["penalties_defended"] += 1
+            
         elif title == "Entrou" or "entrou" in title_l:
-            if all_minutes: entered_min = all_minutes[-1] # Simplistic fallback
-        elif title:
+            if all_minutes: entered_min = all_minutes[-1]
+            
+        # Structural annotations
+        elif not title or any(x in klass for x in ["grey", "green", "red"]):
+            pass
+            
+        else:
             unknown.append({"title": title, "class": klass, "glyph": glyph})
 
-    # 3. Double-check goal/assist details via the original text blocks if needed
-    # Because your goals structure depends on the companion <div> string, let's process those cleanly:
+    # 3. Loop #3: Double-check complex text strings (ONLY for Goals and Subs)
     for attrs, glyph, minute_text in EVENT_RE.findall(events_html):
         klass = (CLASS_RE.search(attrs).group(1) if CLASS_RE.search(attrs) else "").strip()
         title = (TITLE_RE.search(attrs).group(1) if TITLE_RE.search(attrs) else "").strip()
         minute = leading_minute(minute_text)
+        title_l = title.lower()
         
         if "zz-icn-fut" in klass or title == "Golos":
             tokens = MINUTE_TOKEN_RE.findall(minute_text) or [("", "")]
-            # Clear default increment from span loop and count tokens precisely
             stats["goals"] = 0 
             for _min, mann in tokens:
                 a = mann.lower()
@@ -368,12 +372,10 @@ def classify_events(events_html: str) -> dict:
                     stats["goals"] += 1
                     if "g.p." in a or "grande penal" in a:
                         stats["penalties_scored"] += 1
-        elif title == "Entrou" or "entrou" in title.lower():
+                        
+        elif title == "Entrou" or "entrou" in title_l:
             entered_min = minute
-        elif "falhad" in title.lower() or "falhad" in minute_text.lower():
-            stats["penalties_missed"] += 1
-        elif ("defendid" in title.lower() or "defes" in title.lower()) and "penal" in title.lower():
-            stats["penalties_defended"] += 1
+            
         elif not title and "grey" in klass and minute is not None:
             left_min = minute
 
