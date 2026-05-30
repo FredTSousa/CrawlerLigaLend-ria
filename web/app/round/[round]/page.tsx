@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import CrawlButton from "@/components/CrawlButton";
+import Lineup from "@/components/Lineup";
 
 export const dynamic = "force-dynamic";
 
@@ -15,14 +16,25 @@ export default async function RoundPage({
   const { data: matches } = await supabase
     .from("matches")
     .select(
-      "id, played_on, home_score, away_score, url, " +
+      "id, played_on, home_score, away_score, url, home_team_id, away_team_id, " +
         "home_team:teams!matches_home_team_id_fkey(id,name), " +
         "away_team:teams!matches_away_team_id_fkey(id,name)",
     )
     .eq("round", round)
     .order("played_on", { ascending: true });
 
+  const { data: allPlayers } = await supabase
+    .from("match_player_details")
+    .select("*")
+    .eq("round", round);
+
   const games = (matches ?? []) as any[];
+  const byMatch = new Map<string, any[]>();
+  for (const p of (allPlayers ?? []) as any[]) {
+    const arr = byMatch.get(p.match_id) ?? [];
+    arr.push(p);
+    byMatch.set(p.match_id, arr);
+  }
 
   return (
     <>
@@ -33,41 +45,41 @@ export default async function RoundPage({
         </div>
       </div>
 
-      <div className="panel">
-        {games.length ? (
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th style={{ textAlign: "right" }}>Home</th>
-                <th className="num">Result</th>
-                <th>Away</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {games.map((g) => (
-                <tr key={g.id}>
-                  <td className="muted">{g.played_on ?? "—"}</td>
-                  <td style={{ textAlign: "right" }}>{g.home_team?.name}</td>
-                  <td className="num score">
-                    {g.home_score ?? "–"}-{g.away_score ?? "–"}
-                  </td>
-                  <td>{g.away_team?.name}</td>
-                  <td>
-                    <Link href={`/match/${g.id}`}>stats →</Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
+      {games.length ? (
+        games.map((g) => (
+          <details className="game" key={g.id}>
+            <summary>
+              <div className="teams">
+                <span className="h">{g.home_team?.name}</span>
+                <span className="score">
+                  {g.home_score ?? "–"}-{g.away_score ?? "–"}
+                </span>
+                <span className="a">{g.away_team?.name}</span>
+              </div>
+            </summary>
+            <div className="game-body">
+              <div className="game-actions">
+                <Link href={`/match/${g.id}`}>open match page →</Link>
+              </div>
+              <Lineup
+                home={{ id: g.home_team_id, name: g.home_team?.name }}
+                away={{ id: g.away_team_id, name: g.away_team?.name }}
+                players={byMatch.get(g.id) ?? []}
+              />
+            </div>
+          </details>
+        ))
+      ) : (
+        <div className="panel">
           <p className="muted">
             No matches stored for round {round}. Press “Re-crawl round” above.
           </p>
-        )}
-      </div>
-      <p><Link href="/">← Dashboard</Link></p>
+        </div>
+      )}
+
+      <p>
+        <Link href="/">← Dashboard</Link>
+      </p>
     </>
   );
 }

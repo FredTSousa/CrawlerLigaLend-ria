@@ -159,13 +159,16 @@ def _match_row(game: dict, *, competition_id: str | None, round_no: int | None,
 def _match_player_rows(game: dict) -> list[dict]:
     now = _now()
     rows = []
-    for p in game.get("players", []):
+    # The crawler emits players in zerozero lineup order (home XI, away XI,
+    # home subs, away subs); persist that order so the UI can mirror the site.
+    for i, p in enumerate(game.get("players", [])):
         s = p["stats"]
         m = p.get("minutes", {})
         rows.append({
             "match_id": game["game_id"],
             "player_id": p["id"],
             "team_id": (p.get("team") or {}).get("id"),
+            "order_index": i,
             "shirt_number": p.get("number"),
             "is_captain": p.get("captain", False),
             "is_starter": p.get("starter", False),

@@ -67,6 +67,7 @@ create table if not exists public.match_players (
     match_id            text not null references public.matches(id) on delete cascade,
     player_id           text not null references public.players(id),
     team_id             text references public.teams(id),
+    order_index         int,                    -- lineup order (as on zerozero)
     shirt_number        int,
     is_captain          boolean not null default false,
     is_starter          boolean not null default false,
@@ -182,6 +183,7 @@ select
     p.name              as player_name,
     mp.team_id,
     t.name              as team_name,
+    mp.order_index,
     mp.shirt_number,
     mp.is_captain,
     mp.is_starter,

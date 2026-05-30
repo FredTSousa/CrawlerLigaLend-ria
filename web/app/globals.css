@@ -85,3 +85,31 @@ input, select {
   background: var(--panel-2); border: 1px solid var(--border); font-weight: 600;
 }
 .login-card { max-width: 380px; margin: 80px auto; }
+
+/* Side-by-side lineup (zerozero-style) */
+.lineup { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 680px) { .lineup { grid-template-columns: 1fr; } }
+.lineup .team-col h3 { margin: 0 0 8px; font-size: 14px; }
+.subhead { margin: 12px 0 4px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.pline { display: flex; align-items: center; gap: 8px; padding: 5px 2px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.pline .num { width: 22px; text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+.pline .pname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pline .icons { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.chip { font-size: 13px; line-height: 1; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.chip .n { font-size: 11px; color: var(--muted); }
+.chip.in { color: var(--green); font-size: 12px; }
+.chip.out { color: var(--red); font-size: 12px; }
+.chip.og { background: #3d1717; color: var(--red); padding: 1px 5px; border-radius: 4px; font-weight: 700; font-size: 11px; }
+.chip.pen { background: var(--panel-2); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+
+/* Expandable game rows on the round page */
+details.game { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; background: var(--panel); }
+details.game > summary { cursor: pointer; padding: 12px 14px; list-style: none; }
+details.game > summary::-webkit-details-marker { display: none; }
+details.game[open] > summary { border-bottom: 1px solid var(--border); }
+summary .teams { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; }
+summary .teams .h { text-align: right; }
+summary .teams .a { text-align: left; }
+summary .teams .score { font-variant-numeric: tabular-nums; }
+.game-body { padding: 14px; }
+.game-actions { display: flex; justify-content: flex-end; margin-bottom: 10px; }

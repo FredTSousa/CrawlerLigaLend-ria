@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import CrawlButton from "@/components/CrawlButton";
+import Lineup from "@/components/Lineup";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,6 @@ export default async function MatchPage({
     .eq("match_id", params.id);
 
   const m = match as any;
-  const all = (players ?? []) as any[];
 
   if (!m) {
     return (
@@ -37,15 +37,6 @@ export default async function MatchPage({
       </div>
     );
   }
-
-  const sortPlayers = (teamId: string) =>
-    all
-      .filter((p) => p.team_id === teamId)
-      .sort(
-        (a, b) =>
-          Number(b.is_starter) - Number(a.is_starter) ||
-          (a.shirt_number ?? 99) - (b.shirt_number ?? 99),
-      );
 
   return (
     <>
@@ -67,63 +58,17 @@ export default async function MatchPage({
         </div>
       </div>
 
-      <TeamTable title={m.home_team?.name} rows={sortPlayers(m.home_team_id)} />
-      <TeamTable title={m.away_team?.name} rows={sortPlayers(m.away_team_id)} />
+      <div className="panel">
+        <Lineup
+          home={{ id: m.home_team_id, name: m.home_team?.name }}
+          away={{ id: m.away_team_id, name: m.away_team?.name }}
+          players={(players ?? []) as any[]}
+        />
+      </div>
 
       <p>
         <Link href={`/round/${m.round}`}>← Round {m.round}</Link>
       </p>
     </>
-  );
-}
-
-function TeamTable({ title, rows }: { title: string; rows: any[] }) {
-  if (!rows.length) return null;
-  return (
-    <div className="panel">
-      <h2>{title}</h2>
-      <table>
-        <thead>
-          <tr>
-            <th className="num">#</th>
-            <th>Player</th>
-            <th className="num">G</th>
-            <th className="num">A</th>
-            <th className="num">YC</th>
-            <th className="num">RC</th>
-            <th className="num">OG</th>
-            <th className="num">Pen ✓/✗/🧤</th>
-            <th className="num">In/Out</th>
-            <th className="num">&lt;20′</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((p) => (
-            <tr key={p.player_id}>
-              <td className="num muted">{p.shirt_number ?? ""}</td>
-              <td>
-                {p.player_name}
-                {p.is_captain && <span className="badge">C</span>}
-                {!p.is_starter && <span className="badge">sub</span>}
-              </td>
-              <td className="num">{p.goals || ""}</td>
-              <td className="num">{p.assists || ""}</td>
-              <td className="num tag-yellow">{p.yellow_cards || ""}</td>
-              <td className="num tag-red">{p.red_card ? "●" : ""}</td>
-              <td className="num">{p.own_goals || ""}</td>
-              <td className="num">
-                {p.penalties_scored || 0}/{p.penalties_missed || 0}/
-                {p.penalties_defended || 0}
-              </td>
-              <td className="num muted">
-                {p.entered_min != null ? `▲${p.entered_min}'` : ""}
-                {p.left_min != null ? ` ▼${p.left_min}'` : ""}
-              </td>
-              <td className="num">{p.played_under_20m ? "✓" : ""}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }
