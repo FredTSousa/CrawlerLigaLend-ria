@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -80,7 +81,17 @@ def _fmt_minute(m) -> str | None:
     s = str(m).strip() if m is not None else ""
     if not s:
         return None
+    if s.upper() in ("INT", "INTERVALO"):
+        return "HT"
     return f"{s}'" if re.fullmatch(r"\d+(\+\d+)?", s) else s
+
+
+# Full-time markers seen in the feed's minute field (refined from live data).
+FINISHED_RE = re.compile(r"\b(FIM|FINAL|TERMINAD|FT|AP|PEN|GP)\b", re.I)
+
+
+def _is_finished(raw) -> bool:
+    return bool(FINISHED_RE.search(str(raw or "")))
 
 
 def full_crawl(sb, session, url, *, status, minute=None, score=None):
@@ -106,75 +117,97 @@ def light_update(sb, gid, *, minute, gc, gf):
     })
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--match", required=True, help="zerozero match URL")
-    ap.add_argument("--light-interval", type=float, default=30,
-                    help="seconds between cheap live-endpoint polls")
-    ap.add_argument("--full-interval", type=float, default=300,
-                    help="seconds between routine full crawls (cards/subs)")
-    ap.add_argument("--max-minutes", type=float, default=180,
-                    help="safety cap; finalize and stop after this long")
-    args = ap.parse_args()
+def watch_loop(sb, session, match_url, *, light_interval, full_interval,
+               max_minutes):
+    gid = game_id_from(match_url)
+    referer = match_url
+    print(f"Watching match {gid}: {match_url}", file=sys.stderr)
 
-    sync._load_dotenv()
-    sb = sync.Supabase()
-    session = crawler.new_session()
-    gid = game_id_from(args.match)
-    referer = args.match
-    print(f"Watching match {gid}: {args.match}", file=sys.stderr)
-
-    # Seed teams/lineup once up front.
-    full_crawl(sb, session, args.match, status="scheduled")
+    full_crawl(sb, session, match_url, status="scheduled")  # seed lineup
 
     last_score = None
     last_full = time.time()
     started = time.time()
-    seen_live = False
 
-    try:
-        while True:
-            elapsed_min = (time.time() - started) / 60
-            if elapsed_min > args.max_minutes:
-                print("Max watch time reached — finalizing.", file=sys.stderr)
-                break
+    while True:
+        if (time.time() - started) / 60 > max_minutes:
+            print("Max watch time reached — finalizing.", file=sys.stderr)
+            break
+        try:
+            row = poll_light(session, gid, referer)
+        except Exception as e:  # noqa: BLE001 - keep watching on transient errors
+            print(f"  poll error: {e}", file=sys.stderr)
+            time.sleep(light_interval)
+            continue
 
-            try:
-                row = poll_light(session, gid, referer)
-            except Exception as e:  # noqa: BLE001 - keep watching on transient errors
-                print(f"  poll error: {e}", file=sys.stderr)
-                time.sleep(args.light_interval)
-                continue
+        print(f"[{time.strftime('%H:%M:%S')}] feed: {row}", file=sys.stderr)
 
-            # Log the raw feed so we can learn the 'minute'/'state' semantics.
-            print(f"[{time.strftime('%H:%M:%S')}] feed: {row}", file=sys.stderr)
+        if row:
+            raw_minute = _field(row, 2)
+            result = str(_field(row, 1) or "")
+            minute = _fmt_minute(raw_minute)
+            gc, gf = _int(_field(row, 3)), _int(_field(row, 4))
+            if result:  # live (has a score line)
+                score = (gc, gf)
+                light_update(sb, gid, minute=minute, gc=gc, gf=gf)
+                score_changed = score != last_score and last_score is not None
+                routine_due = (time.time() - last_full) >= full_interval
+                if score_changed or routine_due:
+                    full_crawl(sb, session, match_url, status="live",
+                               minute=minute, score=score)
+                    last_full = time.time()
+                last_score = score
+                if _is_finished(raw_minute):
+                    print(f"Full-time marker ({raw_minute}) — finalizing.",
+                          file=sys.stderr)
+                    break
 
-            if row:
-                result = str(_field(row, 1) or "")
-                minute = _fmt_minute(_field(row, 2))
-                gc, gf = _int(_field(row, 3)), _int(_field(row, 4))
-                if result:  # match is live (has a score line)
-                    seen_live = True
-                    score = (gc, gf)
-                    light_update(sb, gid, minute=minute, gc=gc, gf=gf)
+        time.sleep(light_interval)
 
-                    score_changed = score != last_score and last_score is not None
-                    routine_due = (time.time() - last_full) >= args.full_interval
-                    if score_changed or routine_due:
-                        full_crawl(sb, session, args.match, status="live",
-                                   minute=minute, score=score)
-                        last_full = time.time()
-                    last_score = score
-
-            time.sleep(args.light_interval)
-    except KeyboardInterrupt:
-        print("\nStopping — finalizing match.", file=sys.stderr)
-
-    # Final full crawl; mark final.
-    score = last_score if last_score else None
-    full_crawl(sb, session, args.match, status="final",
-               score=score, minute=None)
+    full_crawl(sb, session, match_url, status="final",
+               score=last_score or None, minute=None)
     print("Done. Match marked final.", file=sys.stderr)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--match", help="zerozero match URL (or env IN_MATCH)")
+    ap.add_argument("--run-id", type=int, help="crawl_runs row to update (or IN_RUN_ID)")
+    ap.add_argument("--light-interval", type=float, default=30)
+    ap.add_argument("--full-interval", type=float, default=120)
+    ap.add_argument("--max-minutes", type=float, default=200)
+    args = ap.parse_args()
+
+    sync._load_dotenv()
+    match_url = args.match or sync._env("IN_MATCH")
+    if not match_url:
+        print("No match URL (pass --match or set IN_MATCH).", file=sys.stderr)
+        return 2
+    rid_env = sync._env("IN_RUN_ID")
+    run_id = args.run_id or (int(rid_env) if rid_env else None)
+
+    sb = sync.Supabase()
+    session = crawler.new_session()
+
+    run_id = sync._begin_run(sb, run_id=run_id, trigger="manual", kind="watch",
+                             target=match_url,
+                             github_run_id=os.environ.get("GITHUB_RUN_ID"))
+    try:
+        watch_loop(sb, session, match_url,
+                   light_interval=args.light_interval,
+                   full_interval=args.full_interval,
+                   max_minutes=args.max_minutes)
+        sync._finish_run(sb, run_id, status="success", games_count=1)
+    except KeyboardInterrupt:
+        print("\nInterrupted — finalizing.", file=sys.stderr)
+        try:
+            full_crawl(sb, session, match_url, status="final")
+        except Exception:  # noqa: BLE001
+            pass
+        sync._finish_run(sb, run_id, status="success", games_count=1)
+    except Exception as err:  # noqa: BLE001
+        sync._finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        raise
     return 0
 
 

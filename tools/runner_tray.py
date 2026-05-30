@@ -26,11 +26,13 @@ RUNNER_DIR = os.path.join(os.environ.get("USERPROFILE", ""), "actions-runner")
 RUN_CMD = os.path.join(RUNNER_DIR, "run.cmd")
 LOG_FILE = os.path.join(RUNNER_DIR, "_tray_run.log")
 LISTENER = "Runner.Listener.exe"
+WORKER = "Runner.Worker.exe"  # exists only while a job (e.g. a live watch) runs
 
 # Windows: don't pop up console windows for our helper processes.
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 GREEN = (40, 180, 80, 255)
+BLUE = (60, 140, 240, 255)
 GREY = (120, 120, 120, 255)
 
 _proc: subprocess.Popen | None = None
@@ -41,15 +43,32 @@ _proc: subprocess.Popen | None = None
 # ----------------------------------------------------------------------------
 
 
-def _runner_up() -> bool:
-    """True if the runner listener process is alive (started by us or not)."""
+def _proc_running(image: str) -> bool:
     try:
         out = subprocess.run(
-            ["tasklist", "/FI", f"IMAGENAME eq {LISTENER}", "/NH"],
+            ["tasklist", "/FI", f"IMAGENAME eq {image}", "/NH"],
             capture_output=True, text=True, creationflags=_NO_WINDOW).stdout
-        return LISTENER.lower() in out.lower()
+        return image.lower() in out.lower()
     except Exception:
-        return _proc is not None and _proc.poll() is None
+        return False
+
+
+def _runner_up() -> bool:
+    """True if the runner listener process is alive (started by us or not)."""
+    if _proc_running(LISTENER):
+        return True
+    return _proc is not None and _proc.poll() is None
+
+
+def _job_running() -> bool:
+    """True while the runner is executing a job (e.g. a live watch)."""
+    return _proc_running(WORKER)
+
+
+def stop_job(icon=None, item=None) -> None:
+    """Cancel the current job (kills the worker) but keep the runner online."""
+    subprocess.run(["taskkill", "/F", "/T", "/IM", WORKER],
+                   creationflags=_NO_WINDOW, capture_output=True)
 
 
 def start_runner(icon=None, item=None) -> None:
@@ -85,18 +104,25 @@ def open_folder(icon=None, item=None) -> None:
 # ----------------------------------------------------------------------------
 
 
-def _make_icon(up: bool) -> Image.Image:
+def _make_icon(up: bool, busy: bool = False) -> Image.Image:
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    d.ellipse((6, 6, 58, 58), fill=GREEN if up else GREY,
+    fill = BLUE if (up and busy) else (GREEN if up else GREY)
+    d.ellipse((6, 6, 58, 58), fill=fill,
               outline=(255, 255, 255, 255), width=3)
     # A small "C" so it reads as Crawler LLP at a glance.
     d.text((22, 18), "C", fill=(255, 255, 255, 255))
     return img
 
 
+def _state_label() -> str:
+    if not _runner_up():
+        return "Stopped"
+    return "Working (job running)" if _job_running() else "Online (idle)"
+
+
 def _status_text(_=None) -> str:
-    return f"Status: {'Running' if _runner_up() else 'Stopped'}"
+    return f"Status: {_state_label()}"
 
 
 def _on_exit(icon, item) -> None:
@@ -107,12 +133,13 @@ def _on_exit(icon, item) -> None:
 def _monitor(icon: pystray.Icon) -> None:
     last = None
     while True:
-        up = _runner_up()
-        if up != last:
-            icon.icon = _make_icon(up)
-            icon.title = f"{APP_NAME} — {'Running' if up else 'Stopped'}"
+        state = (_runner_up(), _job_running())
+        if state != last:
+            up, busy = state
+            icon.icon = _make_icon(up, busy)
+            icon.title = f"{APP_NAME} — {_state_label()}"
             icon.update_menu()
-            last = up
+            last = state
         time.sleep(3)
 
 
@@ -128,6 +155,8 @@ def main() -> None:
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Start runner", start_runner,
                          visible=lambda i: not _runner_up()),
+        pystray.MenuItem("Stop current job", stop_job,
+                         visible=lambda i: _job_running()),
         pystray.MenuItem("Stop runner", stop_runner,
                          visible=lambda i: _runner_up()),
         pystray.MenuItem("Open runner folder", open_folder),

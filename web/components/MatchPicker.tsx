@@ -16,7 +16,10 @@ export default function MatchPicker() {
         style={{ flex: 1, minWidth: 260 }}
       />
       {valid ? (
-        <CrawlButton kind="match" target={url.trim()} key={url.trim()} label="Crawl match" />
+        <>
+          <CrawlButton kind="match" target={url.trim()} key={"c" + url.trim()} label="Crawl once" />
+          <CrawlButton kind="watch" target={url.trim()} key={"w" + url.trim()} label="Watch live" />
+        </>
       ) : (
         <button className="btn" disabled>
           Crawl match

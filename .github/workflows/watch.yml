@@ -1,0 +1,45 @@
+name: Watch live match
+
+# Long-running live watcher for one match. Triggered by the website's
+# "Watch live" button. Runs live_watch.py on the self-hosted runner: cheap
+# 30s polls + full crawls on goals / every 2 min, until full-time.
+on:
+  workflow_dispatch:
+    inputs:
+      match:
+        description: "Match URL to watch live"
+        required: true
+        type: string
+      run_id:
+        description: "crawl_runs id to update (set by the website)"
+        required: false
+        type: string
+
+# One live watch at a time; a new one replaces the old.
+concurrency:
+  group: watch-live
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: self-hosted
+    timeout-minutes: 210
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Watch live
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          IN_MATCH: ${{ github.event.inputs.match }}
+          IN_RUN_ID: ${{ github.event.inputs.run_id }}
+        run: python live_watch.py

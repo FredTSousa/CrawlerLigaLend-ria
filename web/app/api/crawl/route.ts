@@ -20,7 +20,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 
-  const kind = body.kind === "match" ? "match" : "round";
+  const kind =
+    body.kind === "match" ? "match" : body.kind === "watch" ? "watch" : "round";
   const target = String(body.target ?? "").trim();
   if (!target) {
     return NextResponse.json({ error: "Missing target" }, { status: 400 });
@@ -42,7 +43,10 @@ export async function POST(request: Request) {
 
   // 2) Dispatch the workflow with the run id + crawl target.
   const repo = process.env.GH_REPO;
-  const workflow = process.env.GH_WORKFLOW || "crawl.yml";
+  const workflow =
+    kind === "watch"
+      ? process.env.GH_WATCH_WORKFLOW || "watch.yml"
+      : process.env.GH_WORKFLOW || "crawl.yml";
   const ref = process.env.GH_REF || "main";
   const token = process.env.GH_DISPATCH_TOKEN;
 
@@ -58,7 +62,7 @@ export async function POST(request: Request) {
   }
 
   const inputs: Record<string, string> = { run_id: String(run.id) };
-  if (kind === "match") inputs.match = target;
+  if (kind === "match" || kind === "watch") inputs.match = target;
   else inputs.jornada = target;
 
   const ghRes = await fetch(

@@ -62,7 +62,12 @@ export default async function MatchPage({
               {m.away_team?.name}
             </h2>
           </div>
-          <CrawlButton kind="match" target={m.url} label="Re-crawl match" />
+          <span className="row">
+            {m.status !== "final" && (
+              <CrawlButton kind="watch" target={m.url} label="Watch live" />
+            )}
+            <CrawlButton kind="match" target={m.url} label="Re-crawl match" />
+          </span>
         </div>
       </div>
 

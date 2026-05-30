@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
-  kind: "round" | "match";
-  // round number, or match URL for kind="match"
+  kind: "round" | "match" | "watch";
+  // round number, or match URL for kind="match"/"watch"
   target: string | number;
   label?: string;
 };
@@ -27,6 +27,14 @@ export default function CrawlButton({ kind, target, label }: Props) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to trigger");
+      if (kind === "watch") {
+        // Long-running job: don't poll to completion; it streams into the
+        // page on its own (Live now / auto-refresh).
+        setStatus("watching");
+        setBusy(false);
+        router.refresh();
+        return;
+      }
       await poll(data.run_id);
     } catch (e: any) {
       setStatus("error: " + e.message);
@@ -65,7 +73,19 @@ export default function CrawlButton({ kind, target, label }: Props) {
     setTimeout(tick, 2500);
   }
 
-  const text = label || (kind === "round" ? "Crawl round" : "Crawl match");
+  const text =
+    label ||
+    (kind === "round"
+      ? "Crawl round"
+      : kind === "watch"
+        ? "Watch live"
+        : "Crawl match");
+
+  function pillClass(s: string) {
+    if (s === "watching" || s === "running" || s === "queued") return "running";
+    if (s === "success") return "success";
+    return "error";
+  }
 
   return (
     <span className="row">
@@ -73,9 +93,7 @@ export default function CrawlButton({ kind, target, label }: Props) {
         {busy ? "Crawling…" : text}
       </button>
       {status && (
-        <span className={`pill ${["queued", "running", "success", "error"].includes(status) ? status : "error"}`}>
-          {status}
-        </span>
+        <span className={`pill ${pillClass(status)}`}>{status}</span>
       )}
     </span>
   );
