@@ -1,2 +1,8 @@
 requests>=2.20
 curl_cffi>=0.7
+
+# abola.py (player-ratings scraper)
+beautifulsoup4>=4.12
+lxml>=5.0
+ddgs>=9.0
+# googlesearch-python  # optional fallback search backend
