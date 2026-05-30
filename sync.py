@@ -100,6 +100,14 @@ class Supabase:
         self._rest("PATCH", f"{table}?{match}", prefer="return=minimal",
                    json=patch)
 
+    def match_statuses(self, ids: list[str]) -> dict[str, str]:
+        """Current status of the given match ids (for forward-only updates)."""
+        if not ids:
+            return {}
+        inlist = ",".join(ids)
+        resp = self._rest("GET", f"matches?id=in.({inlist})&select=id,status")
+        return {r["id"]: r.get("status") for r in resp.json()}
+
 
 # ----------------------------------------------------------------------------
 # Row builders
@@ -141,6 +149,15 @@ def _collect_entities(games: list[dict]) -> tuple[list[dict], list[dict]]:
 def _match_row(game: dict, *, competition_id: str | None, round_no: int | None,
                scraped_at: str | None) -> dict:
     result = game.get("result") or {}
+    has_score = result.get("home") is not None and result.get("away") is not None
+
+    # A round (fixture) crawl only carries a score for matches that have been
+    # played, so a scored fixture is final. Direct match-URL crawls default to
+    # the crawler's status (currently 'scheduled' until live detection lands).
+    status = game.get("status") or "scheduled"
+    if round_no is not None and has_score:
+        status = "final"
+
     return {
         "id": game["game_id"],
         "competition_id": competition_id,
@@ -151,6 +168,9 @@ def _match_row(game: dict, *, competition_id: str | None, round_no: int | None,
         "away_team_id": (game.get("away_team") or {}).get("id"),
         "home_score": result.get("home"),
         "away_score": result.get("away"),
+        "status": status,
+        "minute": game.get("minute"),
+        "kickoff_at": game.get("kickoff_at"),
         "scraped_at": scraped_at or _now(),
         "updated_at": _now(),
     }
@@ -210,10 +230,20 @@ def write_games(sb: Supabase, games: list[dict], *,
     sb.upsert("teams", teams, "id")
     sb.upsert("players", players, "id")
 
-    sb.upsert("matches",
-              [_match_row(g, competition_id=competition_id, round_no=round_no,
-                          scraped_at=scraped_at) for g in games],
-              "id")
+    match_rows = [_match_row(g, competition_id=competition_id,
+                             round_no=round_no, scraped_at=scraped_at)
+                  for g in games]
+
+    # Status moves forward only (scheduled -> live -> final): a stale crawl
+    # must never revert a finished match back to live/scheduled.
+    rank = {"scheduled": 0, "live": 1, "final": 2, "postponed": 1}
+    existing = sb.match_statuses([r["id"] for r in match_rows])
+    for r in match_rows:
+        cur = existing.get(r["id"])
+        if cur and rank.get(cur, 0) > rank.get(r["status"], 0):
+            r["status"] = cur
+
+    sb.upsert("matches", match_rows, "id")
 
     match_players: list[dict] = []
     for g in games:
@@ -257,20 +287,23 @@ def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
     run_id = _begin_run(sb, run_id=run_id, trigger=trigger, kind=kind,
                         target=target, github_run_id=github_run_id)
     try:
-        comp = crawler.get_competition(delay=delay)
         if match_url:
+            # A single match may be any competition (not necessarily Liga
+            # Portugal), so don't tag it with the Liga edition.
             game = crawler.get_match(match_url, delay=delay)
             games = [game]
             round_no = None
             scraped_at = _now()
+            competition = None
         else:
-            data = crawler.crawl_round(jornada=jornada, competition=comp,
+            competition = crawler.get_competition(delay=delay)
+            data = crawler.crawl_round(jornada=jornada, competition=competition,
                                        delay=delay)
             games = data["games"]
             round_no = data["round"]
             scraped_at = data.get("scraped_at")
 
-        write_games(sb, games, competition=comp, round_no=round_no,
+        write_games(sb, games, competition=competition, round_no=round_no,
                     scraped_at=scraped_at)
         _finish_run(sb, run_id, status="success", games_count=len(games))
         print(f"Synced {len(games)} game(s). crawl_run #{run_id}",

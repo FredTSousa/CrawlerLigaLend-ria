@@ -268,6 +268,19 @@ def parse_game_header(html: str) -> dict:
     return {"home_team": home, "away_team": away, "result": score}
 
 
+def parse_game_status(html: str, result: dict | None) -> dict:
+    """Best-effort match state: {status, minute, kickoff_at}.
+
+    Conservative on purpose: zerozero renders "0-0" pre-game and injects the
+    live minute client-side, so the static HTML can't reliably distinguish
+    pre-game / live / final. We therefore default to 'scheduled' here and let
+    round crawls infer 'final' from the fixtures score (see sync._match_row).
+    Live/final detection from an in-progress page is wired in during a live
+    match, when the real markup can be inspected.
+    """
+    return {"status": "scheduled", "minute": None, "kickoff_at": None}
+
+
 # ----------------------------------------------------------------------------
 # Game page -> lineup & per-player events
 # ----------------------------------------------------------------------------
@@ -610,6 +623,7 @@ def get_match(game: dict | str, *,
         raise RuntimeError(f"Could not determine teams for {url}")
 
     players = parse_lineups(html, home, away)
+    state = parse_game_status(html, result)
 
     # surface any unmapped event types so the icon vocabulary can be extended
     unknown = [u for p in players for u in p.pop("_unknown_events", [])]
@@ -625,6 +639,9 @@ def get_match(game: dict | str, *,
         "home_team": home,
         "away_team": away,
         "result": result,
+        "status": state["status"],
+        "minute": state["minute"],
+        "kickoff_at": state["kickoff_at"],
         "players": players,
     }
 

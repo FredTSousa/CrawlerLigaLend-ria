@@ -50,6 +50,9 @@ create table if not exists public.matches (
     away_team_id   text references public.teams(id),
     home_score     int,
     away_score     int,
+    status         text not null default 'scheduled', -- scheduled|live|final|postponed
+    minute         text,                        -- live clock, e.g. "67'", "HT"
+    kickoff_at     timestamptz,                 -- scheduled start time
     scraped_at     timestamptz,                 -- when the crawler read this match
     updated_at     timestamptz not null default now()
 );

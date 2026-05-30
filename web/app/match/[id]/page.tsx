@@ -2,6 +2,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import CrawlButton from "@/components/CrawlButton";
 import Lineup from "@/components/Lineup";
+import LiveRefresh from "@/components/LiveRefresh";
+import StatusBadge from "@/components/StatusBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +17,8 @@ export default async function MatchPage({
   const { data: match } = await supabase
     .from("matches")
     .select(
-      "id, round, played_on, home_score, away_score, url, home_team_id, away_team_id, " +
+      "id, round, played_on, home_score, away_score, url, status, minute, " +
+        "home_team_id, away_team_id, " +
         "home_team:teams!matches_home_team_id_fkey(id,name), " +
         "away_team:teams!matches_away_team_id_fkey(id,name)",
     )
@@ -40,16 +43,21 @@ export default async function MatchPage({
 
   return (
     <>
+      <LiveRefresh active={m.status === "live"} />
       <div className="panel">
         <div className="row" style={{ justifyContent: "space-between" }}>
           <div>
-            <div className="muted">
-              Round {m.round} · {m.played_on ?? ""}
+            <div className="row muted" style={{ gap: 8 }}>
+              {m.round ? <span>Round {m.round} ·</span> : null}
+              <span>{m.played_on ?? ""}</span>
+              <StatusBadge status={m.status} minute={m.minute} />
             </div>
             <h2 style={{ margin: "6px 0" }}>
               {m.home_team?.name}{" "}
               <span className="score">
-                {m.home_score ?? "–"}-{m.away_score ?? "–"}
+                {m.status === "scheduled"
+                  ? "vs"
+                  : `${m.home_score ?? "–"}-${m.away_score ?? "–"}`}
               </span>{" "}
               {m.away_team?.name}
             </h2>
@@ -67,7 +75,11 @@ export default async function MatchPage({
       </div>
 
       <p>
-        <Link href={`/round/${m.round}`}>← Round {m.round}</Link>
+        {m.round ? (
+          <Link href={`/round/${m.round}`}>← Round {m.round}</Link>
+        ) : (
+          <Link href="/">← Dashboard</Link>
+        )}
       </p>
     </>
   );

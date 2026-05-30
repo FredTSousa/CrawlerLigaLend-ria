@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -55,7 +56,7 @@ export default function RunsPanel({ limit = 15 }: { limit?: number }) {
           <tr key={r.id}>
             <td className="muted">{fmt(r.created_at)}</td>
             <td>{r.trigger} · {r.kind}</td>
-            <td title={r.target || ""}>{shorten(r.target)}</td>
+            <td title={r.target || ""}>{targetCell(r)}</td>
             <td>
               <span className={`pill ${r.status}`}>{r.status}</span>
               {r.error && <span className="tag-red badge" title={r.error}>err</span>}
@@ -72,11 +73,14 @@ function fmt(iso: string) {
   const d = new Date(iso);
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
-function shorten(t: string | null) {
+function targetCell(r: Run) {
+  const t = r.target;
   if (!t) return "—";
-  if (t.startsWith("http")) {
-    const m = t.match(/\/jogo\/([^/]+)\//);
-    return m ? m[1] : t;
+  if (r.kind === "match" || t.startsWith("http")) {
+    const idM = t.match(/\/(\d+)(?:[/?#]|$)/);
+    const slugM = t.match(/\/jogo\/([^/]+)\//);
+    const label = slugM ? slugM[1] : t;
+    return idM ? <Link href={`/match/${idM[1]}`}>{label}</Link> : label;
   }
   return `Round ${t}`;
 }

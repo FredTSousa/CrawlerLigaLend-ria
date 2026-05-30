@@ -2,6 +2,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import CrawlButton from "@/components/CrawlButton";
 import Lineup from "@/components/Lineup";
+import LiveRefresh from "@/components/LiveRefresh";
+import StatusBadge from "@/components/StatusBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +18,7 @@ export default async function RoundPage({
   const { data: matches } = await supabase
     .from("matches")
     .select(
-      "id, played_on, home_score, away_score, url, home_team_id, away_team_id, " +
+      "id, played_on, home_score, away_score, url, status, minute, home_team_id, away_team_id, " +
         "home_team:teams!matches_home_team_id_fkey(id,name), " +
         "away_team:teams!matches_away_team_id_fkey(id,name)",
     )
@@ -36,8 +38,11 @@ export default async function RoundPage({
     byMatch.set(p.match_id, arr);
   }
 
+  const anyLive = games.some((g) => g.status === "live");
+
   return (
     <>
+      <LiveRefresh active={anyLive} />
       <div className="panel">
         <div className="row" style={{ justifyContent: "space-between" }}>
           <h2 style={{ margin: 0 }}>Round {round}</h2>
@@ -47,12 +52,20 @@ export default async function RoundPage({
 
       {games.length ? (
         games.map((g) => (
-          <details className="game" key={g.id}>
+          <details className="game" key={g.id} open={g.status === "live"}>
             <summary>
               <div className="teams">
                 <span className="h">{g.home_team?.name}</span>
                 <span className="score">
-                  {g.home_score ?? "–"}-{g.away_score ?? "–"}
+                  {g.status === "scheduled"
+                    ? "vs"
+                    : `${g.home_score ?? "–"}-${g.away_score ?? "–"}`}
+                  {g.status && g.status !== "final" && (
+                    <>
+                      {" "}
+                      <StatusBadge status={g.status} minute={g.minute} />
+                    </>
+                  )}
                 </span>
                 <span className="a">{g.away_team?.name}</span>
               </div>

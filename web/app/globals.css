@@ -113,3 +113,9 @@ summary .teams .a { text-align: left; }
 summary .teams .score { font-variant-numeric: tabular-nums; }
 .game-body { padding: 14px; }
 .game-actions { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+
+/* Live / status badges */
+.live-badge { background: var(--red); color: #fff; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.live-badge::before { content: "● "; }
+.sched-badge { color: var(--muted); font-size: 12px; border: 1px solid var(--border); padding: 1px 8px; border-radius: 999px; }
+.ft-badge { color: var(--muted); font-size: 12px; }
