@@ -34,12 +34,27 @@ from __future__ import annotations
 import argparse
 import html as htmllib
 import json
+import os
 import re
 import sys
 import time
 from datetime import datetime, timezone
 
 import requests
+
+# zerozero.pt's anti-bot layer fingerprints the TLS handshake; the stdlib
+# `requests` fingerprint gets a 403 from flagged IPs. curl_cffi impersonates a
+# real Chrome handshake, which gets through. Fall back to plain requests if it
+# isn't installed (e.g. quick local runs).
+try:
+    from curl_cffi import requests as cffi_requests  # type: ignore
+    _CFFI_OK = True
+except Exception:  # noqa: BLE001
+    cffi_requests = None
+    _CFFI_OK = False
+
+# curl_cffi browser profile to impersonate. Override via $IMPERSONATE.
+IMPERSONATE = os.environ.get("IMPERSONATE", "chrome")
 
 BASE = "https://www.zerozero.pt"
 COMPETITION_URL = f"{BASE}/competicao/liga-portuguesa"
@@ -67,16 +82,37 @@ HEADERS = {
 # ----------------------------------------------------------------------------
 
 
-def fetch(session: requests.Session, url: str, *, retries: int = 3,
-          delay: float = 1.0) -> str:
+def new_session():
+    """Create a scraping session. Prefers curl_cffi (Chrome-impersonating TLS)
+    so flagged IPs get past zerozero's 403; falls back to stdlib requests."""
+    if _CFFI_OK:
+        try:
+            return cffi_requests.Session(impersonate=IMPERSONATE)
+        except Exception:  # noqa: BLE001 - bad profile name, etc.
+            pass
+    return requests.Session()
+
+
+def fetch(session, url: str, *, retries: int = 3, delay: float = 1.0) -> str:
     """GET a URL with a polite delay and a few retries; return the HTML text."""
     last_err: Exception | None = None
     for attempt in range(1, retries + 1):
         try:
-            resp = session.get(url, headers=HEADERS, timeout=30)
+            if _CFFI_OK:
+                # Let the impersonated profile own the headers/ordering;
+                # only nudge the language.
+                resp = session.get(
+                    url, headers={"Accept-Language": HEADERS["Accept-Language"]},
+                    timeout=30)
+            else:
+                resp = session.get(url, headers=HEADERS, timeout=30)
             resp.raise_for_status()
-            # zerozero serves UTF-8; make sure requests decodes it as such.
-            resp.encoding = resp.apparent_encoding or "utf-8"
+            # zerozero serves UTF-8; make sure it decodes as such.
+            try:
+                resp.encoding = (getattr(resp, "apparent_encoding", None)
+                                 or "utf-8")
+            except Exception:  # noqa: BLE001
+                pass
             return resp.text
         except Exception as err:  # noqa: BLE001 - retry on any transport error
             last_err = err
@@ -467,7 +503,7 @@ ROUND_OPTION_RE = re.compile(
 
 
 def _session(session: requests.Session | None) -> requests.Session:
-    return session if session is not None else requests.Session()
+    return session if session is not None else new_session()
 
 
 def _competition_name(html: str) -> str | None:
@@ -588,7 +624,7 @@ def crawl_round(jornada: int | str | None = None, *,
     Provide a ``round_url`` directly, or a ``jornada`` number (the competition
     variables are resolved automatically unless ``competition`` is supplied).
     """
-    session = requests.Session()
+    session = new_session()
 
     if round_url:
         jm = re.search(r"jornada_in=(\d+)", round_url)
