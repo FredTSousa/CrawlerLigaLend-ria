@@ -173,7 +173,8 @@ create policy crawl_runs_insert on public.crawl_runs
 -- Convenience view for the UI (names joined in). security_invoker => RLS applies.
 -- ----------------------------------------------------------------------------
 
-create or replace view public.match_player_details
+drop view if exists public.match_player_details;
+create view public.match_player_details
 with (security_invoker = on) as
 select
     mp.match_id,
