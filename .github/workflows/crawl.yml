@@ -41,19 +41,13 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Crawl & sync
+        # No shell conditionals (self-hosted Windows defaults to PowerShell):
+        # sync.py reads the inputs below from the environment.
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          EVENT: ${{ github.event_name }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
           IN_JORNADA: ${{ github.event.inputs.jornada }}
           IN_MATCH: ${{ github.event.inputs.match }}
           IN_RUN_ID: ${{ github.event.inputs.run_id }}
-        run: |
-          set -e
-          if [ "$EVENT" = "schedule" ]; then
-            python sync.py --trigger schedule
-          elif [ -n "$IN_MATCH" ]; then
-            python sync.py --trigger manual --match "$IN_MATCH" ${IN_RUN_ID:+--run-id "$IN_RUN_ID"}
-          else
-            python sync.py --trigger manual ${IN_JORNADA:+--jornada "$IN_JORNADA"} ${IN_RUN_ID:+--run-id "$IN_RUN_ID"}
-          fi
+        run: python sync.py

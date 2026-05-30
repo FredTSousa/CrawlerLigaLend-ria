@@ -279,6 +279,15 @@ def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
         raise
 
 
+def _env(*names: str) -> str | None:
+    """First non-empty environment variable among names."""
+    for n in names:
+        v = os.environ.get(n)
+        if v and v.strip():
+            return v.strip()
+    return None
+
+
 def main() -> int:
     _load_dotenv()
     ap = argparse.ArgumentParser(description=__doc__)
@@ -296,8 +305,27 @@ def main() -> int:
                     help="Polite delay between zerozero requests.")
     args = ap.parse_args()
 
-    run(jornada=args.jornada, match_url=args.match, run_id=args.run_id,
-        trigger=args.trigger, github_run_id=args.github_run_id, delay=args.delay)
+    # CLI flags win; otherwise fall back to env vars (set by the workflow, so
+    # the workflow step needs no shell-specific conditionals).
+    jornada = args.jornada
+    match_url = args.match
+    if jornada is None and match_url is None:
+        match_url = _env("IN_MATCH")
+        if not match_url:
+            jor = _env("IN_JORNADA")
+            jornada = int(jor) if jor else None
+
+    run_id = args.run_id
+    if run_id is None:
+        rid = _env("IN_RUN_ID")
+        run_id = int(rid) if rid else None
+
+    trigger = args.trigger
+    if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
+        trigger = "schedule"
+
+    run(jornada=jornada, match_url=match_url, run_id=run_id,
+        trigger=trigger, github_run_id=args.github_run_id, delay=args.delay)
     return 0
 
 
