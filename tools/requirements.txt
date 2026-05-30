@@ -1,0 +1,4 @@
+# Dependencies for the Crawler LLP tray app (runner_tray.py).
+# Only needed on the machine that runs the self-hosted runner, NOT in CI.
+pystray>=0.19
+pillow>=10.0
