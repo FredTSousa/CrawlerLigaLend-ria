@@ -46,8 +46,16 @@ def _int(v):
         return None
 
 
+# The feed returns objects keyed "0".."5":
+#   "0"=id  "1"=result("gc-gf")  "2"=minute  "3"=home goals  "4"=away goals  "5"=state
+def _field(row, i):
+    if isinstance(row, dict):
+        return row.get(str(i))
+    return row[i] if i < len(row) else None
+
+
 def poll_light(session, gid: str, referer: str):
-    """Return the feed row [id,result,minute,gc,gf,state] for gid, or None."""
+    """Return the feed row (dict/list) for gid, or None if not present."""
     r = session.get(
         f"{LIVE_ENDPOINT}?ids={gid}&page=",
         headers={
@@ -63,9 +71,16 @@ def poll_light(session, gid: str, referer: str):
     except Exception:
         data = json.loads(r.text or "[]")
     for row in data:
-        if str(row[0]) == str(gid):
+        if str(_field(row, 0)) == str(gid):
             return row
     return None
+
+
+def _fmt_minute(m) -> str | None:
+    s = str(m).strip() if m is not None else ""
+    if not s:
+        return None
+    return f"{s}'" if re.fullmatch(r"\d+(\+\d+)?", s) else s
 
 
 def full_crawl(sb, session, url, *, status, minute=None, score=None):
@@ -135,8 +150,9 @@ def main() -> int:
             print(f"[{time.strftime('%H:%M:%S')}] feed: {row}", file=sys.stderr)
 
             if row:
-                result, minute = str(row[1]), str(row[2])
-                gc, gf = _int(row[3]), _int(row[4])
+                result = str(_field(row, 1) or "")
+                minute = _fmt_minute(_field(row, 2))
+                gc, gf = _int(_field(row, 3)), _int(_field(row, 4))
                 if result:  # match is live (has a score line)
                     seen_live = True
                     score = (gc, gf)
