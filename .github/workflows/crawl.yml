@@ -34,6 +34,11 @@ jobs:
     # Runs on a self-hosted runner on the user's machine (residential IP),
     # because zerozero.pt blocks GitHub-hosted datacenter IPs.
     runs-on: self-hosted
+    # Use cmd, not PowerShell: a Restricted PS execution policy on the runner
+    # blocks the per-step temp .ps1 scripts. cmd has no such restriction.
+    defaults:
+      run:
+        shell: cmd
     steps:
       - uses: actions/checkout@v4
 
