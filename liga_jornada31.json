@@ -1,0 +1,7485 @@
+{
+  "competition": "Liga Portugal Betclic 2025/26",
+  "round": 31,
+  "source_url": "https://www.zerozero.pt/competicao/liga-portuguesa?jornada_in=31&fase=217930",
+  "scraped_at": "2026-05-30T11:23:47.496677+00:00",
+  "games": [
+    {
+      "game_id": "11071716",
+      "url": "https://www.zerozero.pt/jogo/2026-04-24-fc-alverca-fc-arouca/11071716",
+      "date": "2026-04-24",
+      "home_team": {
+        "name": "FC Alverca",
+        "id": "1"
+      },
+      "away_team": {
+        "name": "FC Arouca",
+        "id": "3555"
+      },
+      "result": {
+        "home": 2,
+        "away": 1
+      },
+      "players": [
+        {
+          "name": "Matheus Mendes",
+          "id": "547452",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 31,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Naves",
+          "id": "717247",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 4,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Sergi G¾mez",
+          "id": "147674",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 5,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 68
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Bastien Meupiyou",
+          "id": "1009403",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 33,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Nabil Touaizi",
+          "id": "593854",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 2,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Lincoln",
+          "id": "383554",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 18,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rhaldney",
+          "id": "547497",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 26,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 90
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Isaac James",
+          "id": "786610",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 12,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Figueiredo",
+          "id": "646811",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 20,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 82
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Sandro Lima",
+          "id": "362248",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 91,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 68
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Chiquinho",
+          "id": "115421",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 10,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 90
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Ignacio de Arruabarrena",
+          "id": "456135",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 12,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Tiago Esgaio",
+          "id": "282197",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 28,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Jose Fontßn",
+          "id": "656586",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 3,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "MatĒas Rocha",
+          "id": "828526",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 4,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 83
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Bas Kuipers",
+          "id": "278824",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 25,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Taichi Fukui",
+          "id": "855057",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 21,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 83
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Espen van Ee",
+          "id": "1241419",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 22,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 75
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Pablo Gozßlbez",
+          "id": "667427",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 10,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 60
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Lee Hyunju",
+          "id": "945977",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 14,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 75
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Na’s Djouahra",
+          "id": "648183",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 7,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Barbero",
+          "id": "603583",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 17,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Diogo Spencer",
+          "id": "587622",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 82,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 90,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Steven Baseya",
+          "id": "956328",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 14,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 68,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Vasco Moreira",
+          "id": "375999",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 17,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 90,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Davy Gui",
+          "id": "2488923",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 6,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 82,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Marezi",
+          "id": "864740",
+          "team": {
+            "name": "FC Alverca",
+            "id": "1"
+          },
+          "number": 9,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 68,
+            "left": null
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Pedro Santos",
+          "id": "545909",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 89,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 75,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Mateo Flores",
+          "id": "1238624",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 46,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 75,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Fally Mayulu",
+          "id": "837382",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 9,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 83,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Alfonso Trezza",
+          "id": "627323",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 19,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 60,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Brian Mansilla",
+          "id": "953995",
+          "team": {
+            "name": "FC Arouca",
+            "id": "3555"
+          },
+          "number": 24,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 83,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        }
+      ]
+    },
+    {
+      "game_id": "11071706",
+      "url": "https://www.zerozero.pt/jogo/2026-04-25-cd-tondela-nacional/11071706",
+      "date": "2026-04-25",
+      "home_team": {
+        "name": "CD Tondela",
+        "id": "4336"
+      },
+      "away_team": {
+        "name": "Nacional",
+        "id": "27"
+      },
+      "result": {
+        "home": 0,
+        "away": 2
+      },
+      "players": [
+        {
+          "name": "Bernardo Fontes",
+          "id": "685952",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 31,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Bebeto",
+          "id": "108928",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 2,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Brayan Medina",
+          "id": "960088",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 20,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 1,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Joăo Silva",
+          "id": "433867",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 44,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rodrigo Conceiçăo",
+          "id": "376426",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 27,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 39
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Joe Hodge",
+          "id": "642683",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 10,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 76
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Juan Rodríguez",
+          "id": "1178626",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 32,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Hugo Félix",
+          "id": "539313",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 79,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 61
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Arjen van der Heide",
+          "id": "391622",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 26,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 60
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rony Lopes",
+          "id": "143936",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 16,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Ouattara Moudjatovic",
+          "id": "830725",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 70,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Kaique Pereira",
+          "id": "721159",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 1,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Alan Nuńez",
+          "id": "931730",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 16,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Léo Santos",
+          "id": "451640",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 34,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Zé Vitor",
+          "id": "725822",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 38,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "José Gomes",
+          "id": "368222",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 5,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 90
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Matheus Dias",
+          "id": "786826",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 6,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Daniel Júnior",
+          "id": "717241",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 10,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 78
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Filipe Soares",
+          "id": "166248",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 22,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 90
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Paulinho Bóia",
+          "id": "544690",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 11,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Chucho Ramírez",
+          "id": "503436",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 9,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gabriel Veron",
+          "id": "635259",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 27,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 14
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Tiago Manso",
+          "id": "472856",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 48,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 39,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Yaya Sithole",
+          "id": "485060",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 15,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 60,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Benjamin Kimpioka",
+          "id": "523939",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 23,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 76,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Makan Aďko",
+          "id": "844859",
+          "team": {
+            "name": "CD Tondela",
+            "id": "4336"
+          },
+          "number": 90,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 61,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Joăo Aurélio",
+          "id": "5560",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 2,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 90,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "André Sousa",
+          "id": "120764",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 18,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 78,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Joel Silva",
+          "id": "534225",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 26,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 90,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Pablo Ruan",
+          "id": "737139",
+          "team": {
+            "name": "Nacional",
+            "id": "27"
+          },
+          "number": 99,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 14,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        }
+      ]
+    },
+    {
+      "game_id": "11071718",
+      "url": "https://www.zerozero.pt/jogo/2026-04-25-benfica-moreirense/11071718",
+      "date": "2026-04-25",
+      "home_team": {
+        "name": "Benfica",
+        "id": "4"
+      },
+      "away_team": {
+        "name": "Moreirense",
+        "id": "6"
+      },
+      "result": {
+        "home": 4,
+        "away": 1
+      },
+      "players": [
+        {
+          "name": "Anatoliy Trubin",
+          "id": "594058",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 1,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Alexander Bah",
+          "id": "523006",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 6,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 58
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Nicolás Otamendi",
+          "id": "67588",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 30,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "António Silva",
+          "id": "490496",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 4,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Samuel Dahl",
+          "id": "741673",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 26,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Richard Ríos",
+          "id": "744267",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 20,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 90
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 1,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Fredrik Aursnes",
+          "id": "256199",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 8,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Dodi Lukebakio",
+          "id": "386235",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 11,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 58
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Leandro Barreiro",
+          "id": "591276",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 18,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 1,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rafa Silva",
+          "id": "261061",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 27,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 58
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Vangelis Pavlidis",
+          "id": "459841",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 14,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 75
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "André Ferreira",
+          "id": "323823",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 13,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Fabiano Souza",
+          "id": "584409",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 70,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Maracás",
+          "id": "448163",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 26,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gilberto Batista",
+          "id": "710289",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 66,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Diogo Travassos",
+          "id": "182351",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 2,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Afonso Assis",
+          "id": "1069591",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 25,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 46
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Mateja Stjepanović",
+          "id": "1040258",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 8,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 79
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Kiko Bondoso",
+          "id": "370064",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 10,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 67
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rodrigo Alonso",
+          "id": "741736",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 21,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Landerson",
+          "id": "927161",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 78,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 67
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Alan",
+          "id": "547290",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 11,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 79
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Amar Dedić",
+          "id": "748331",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 17,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 58,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Manu Silva",
+          "id": "523684",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 16,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 90,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Gianluca Prestianni",
+          "id": "977459",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 25,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 58,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Franjo Ivanovic",
+          "id": "883294",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 9,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 75,
+            "left": null
+          },
+          "stats": {
+            "goals": 2,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Andreas Schjelderup",
+          "id": "741885",
+          "team": {
+            "name": "Benfica",
+            "id": "4"
+          },
+          "number": 21,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 58,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Francisco Domingues",
+          "id": "520346",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 27,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 67,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Nile John",
+          "id": "706011",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 23,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 46,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Cédric Teguia",
+          "id": "593562",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 7,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 67,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Luís Hemir",
+          "id": "304566",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 9,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 79,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Yan Lincon",
+          "id": "737798",
+          "team": {
+            "name": "Moreirense",
+            "id": "6"
+          },
+          "number": 99,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 79,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        }
+      ]
+    },
+    {
+      "game_id": "11071720",
+      "url": "https://www.zerozero.pt/jogo/2026-04-25-vitoria-sc-rio-ave/11071720",
+      "date": "2026-04-25",
+      "home_team": {
+        "name": "Vitória SC",
+        "id": "18"
+      },
+      "away_team": {
+        "name": "Rio Ave",
+        "id": "31"
+      },
+      "result": {
+        "home": 2,
+        "away": 0
+      },
+      "players": [
+        {
+          "name": "Charles Silva",
+          "id": "139664",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 27,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Miguel Maga",
+          "id": "530914",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 2,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 59
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Thiago Balieiro",
+          "id": "829486",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 28,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Óscar Rivas",
+          "id": "937545",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 4,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Joăo Mendes",
+          "id": "589030",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 13,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Beni Mukendi",
+          "id": "715109",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 16,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Samu Silva",
+          "id": "218663",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 20,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Diogo Sousa",
+          "id": "648478",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 23,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 59
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Oumar Camara",
+          "id": "1260913",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 19,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 59
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gustavo Silva",
+          "id": "694119",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 11,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 81
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Noah Saviolo",
+          "id": "955533",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 48,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 67
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Cezary Miszta",
+          "id": "586033",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 1,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Marious Vrousai",
+          "id": "478812",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 17,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Jakub Brabec",
+          "id": "122956",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 32,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gustavo Mancha",
+          "id": "874375",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 39,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Nelson Abbey",
+          "id": "643047",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 6,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 77
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Tamás Nikitscher",
+          "id": "826425",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 44,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 76
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Andreas Ntoi",
+          "id": "914926",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 5,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Dario Spikic",
+          "id": "529104",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 18,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 69
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Ole Pohlmann",
+          "id": "603070",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 80,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 69
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Diogo Bezerra",
+          "id": "717155",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 7,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 86
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Jalen Blesa",
+          "id": "1173661",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 11,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Tony Strata",
+          "id": "955418",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 66,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 59,
+            "left": null
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Miguel Nogueira",
+          "id": "690579",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 88,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 59,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gonçalo Nogueira",
+          "id": "529446",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 30,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 59,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Telmo Arcanjo",
+          "id": "227576",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 18,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 67,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Nélson Oliveira",
+          "id": "10672",
+          "team": {
+            "name": "Vitória SC",
+            "id": "18"
+          },
+          "number": 7,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 81,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Joăo Tomé",
+          "id": "304563",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 20,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 69,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Omar Richards",
+          "id": "481366",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 77,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 77,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Ryan Guilherme",
+          "id": "791201",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 8,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 69,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rafael Lobato",
+          "id": "966454",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 25,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 86,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Tamble Monteiro",
+          "id": "420705",
+          "team": {
+            "name": "Rio Ave",
+            "id": "31"
+          },
+          "number": 9,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 76,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        }
+      ]
+    },
+    {
+      "game_id": "11071712",
+      "url": "https://www.zerozero.pt/jogo/2026-04-26-estoril-praia-fc-famalicao/11071712",
+      "date": "2026-04-26",
+      "home_team": {
+        "name": "Estoril Praia",
+        "id": "1734"
+      },
+      "away_team": {
+        "name": "FC Famalicão",
+        "id": "2175"
+      },
+      "result": {
+        "home": 0,
+        "away": 1
+      },
+      "players": [
+        {
+          "name": "Martin Turk",
+          "id": "834342",
+          "team": {
+            "name": "Estoril Praia",
+            "id": "1734"
+          },
+          "number": 16,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Felix Bacher",
+          "id": "652713",
+          "team": {
+            "name": "Estoril Praia",
+            "id": "1734"
+          },
+          "number": 25,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Antef Tsoungui",
+          "id": "660737",
+          "team": {
+            "name": "Estoril Praia",
+            "id": "1734"
+          },
+          "number": 5,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Ferro",
+          "id": "214368",
+          "team": {
+            "name": "Estoril Praia",
+            "id": "1734"
+          },
+          "number": 4,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 88
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Ricard Sánchez",
+          "id": "655926",
+          "team": {
+            "name": "Estoril Praia",
+            "id": "1734"
+          },
+          "number": 2,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Jordan Holsgrove",
+          "id": "511803",
+          "team": {
+            "name": "Estoril Praia",
+            "id": "1734"
+          },
+          "number": 10,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Xeka",
+          "id": "175578",
+          "team": {
+            "name": "Estoril Praia",
+            "id": "1734"
+          },
+          "number": 8,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Pedro Amaral",
+          "id": "155269",
+          "team": {
+            "name": "Estoril Praia",
+            "id": "1734"
+          },
+          "number": 24,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 76
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rafik Guitane",
+          "id": "511837",
+          "team": {
+            "name": "Estoril Praia",
+            "id": "1734"
+          },
+          "number": 99,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Yanis Begraoui",
+          "id": "638491",
+          "team": {
+            "name": "Estoril Praia",
+            "id": "1734"
+          },
+          "number": 14,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Joăo Carvalho",
+          "id": "155286",
+          "team": {
+            "name": "Estoril Praia",
+            "id": "1734"
+          },
+          "number": 12,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Lazar Carević",
+          "id": "465259",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 25,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rodrigo Pinheiro",
+          "id": "529440",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 17,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Justin de Haas",
+          "id": "564490",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 16,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 1,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Ibrahima Ba",
+          "id": "1271517",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 55,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rafa Soares",
+          "id": "105518",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 5,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Mathias de Amorim",
+          "id": "956604",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 14,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 83
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Tom van de Looi",
+          "id": "511855",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 6,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gil Dias",
+          "id": "368221",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 23,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 90
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gustavo Sá",
+          "id": "537332",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 20,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 86
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Sorriso",
+          "id": "691147",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 7,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Simon Elisor",
+          "id": "821430",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 12,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 86
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gonçalo Costa",
+          "id": "115423",
+          "team": {
+            "name": "Estoril Praia",
+            "id": "1734"
+          },
+          "number": 20,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 76,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Alejandro Marqués",
+          "id": "584222",
+          "team": {
+            "name": "Estoril Praia",
+            "id": "1734"
+          },
+          "number": 9,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 88,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Gustavo Garcia",
+          "id": "635258",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 2,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 90,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Léo Realpe",
+          "id": "703679",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 3,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 86,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Marcos Peńa",
+          "id": "1193103",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 8,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 83,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Umar Abubakar",
+          "id": "1382530",
+          "team": {
+            "name": "FC Famalicão",
+            "id": "2175"
+          },
+          "number": 9,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 86,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        }
+      ]
+    },
+    {
+      "game_id": "11071708",
+      "url": "https://www.zerozero.pt/jogo/2026-04-26-santa-clara-sc-braga/11071708",
+      "date": "2026-04-26",
+      "home_team": {
+        "name": "Santa Clara",
+        "id": "32"
+      },
+      "away_team": {
+        "name": "SC Braga",
+        "id": "15"
+      },
+      "result": {
+        "home": 2,
+        "away": 1
+      },
+      "players": [
+        {
+          "name": "Gabriel Batista",
+          "id": "484834",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 1,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Diogo Calila",
+          "id": "164903",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 2,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Frederico Venâncio",
+          "id": "153392",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 21,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Sidney Lima",
+          "id": "540834",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 23,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Guilherme Romăo",
+          "id": "547625",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 5,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Pedro Ferreira",
+          "id": "218214",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 8,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 3
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Serginho",
+          "id": "398696",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 35,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gustavo Klismahn",
+          "id": "547211",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 77,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 65
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Brenner Lucas",
+          "id": "777051",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 11,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 80
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gonçalo Pacięncia",
+          "id": "74894",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 39,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 79
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gabriel Silva",
+          "id": "609293",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 10,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Tiago Sá",
+          "id": "167098",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 12,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Yanis da Rocha",
+          "id": "954722",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 41,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gabriel Moscardo",
+          "id": "730300",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 17,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Vitor Carvalho",
+          "id": "544570",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 6,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 48
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Leonardo Lelo",
+          "id": "435987",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 5,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rodrigo Zalazar",
+          "id": "689707",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 10,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 48
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Demir Tiknaz",
+          "id": "896977",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 34,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 48
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Luisinho",
+          "id": "1004132",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 90,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Mario Dorgeles",
+          "id": "1006301",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 20,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Fran Navarro",
+          "id": "458086",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 39,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Amine El Ouazzani",
+          "id": "821376",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 9,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 59
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Darlan Mendes",
+          "id": "565031",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 37,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 80,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Djé Tavares",
+          "id": "1243240",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 65,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 3,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Welinton Torrăo",
+          "id": "547445",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 49,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 65,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Elias Manoel",
+          "id": "706557",
+          "team": {
+            "name": "Santa Clara",
+            "id": "32"
+          },
+          "number": 7,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 79,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Paulo Oliveira",
+          "id": "133030",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 15,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 48,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Florian Grillitsch",
+          "id": "358508",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 27,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 59,
+            "left": 85
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gorby Baptiste",
+          "id": "779156",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 29,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 48,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rodrigo Silva",
+          "id": "691597",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 70,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 85,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Joăo Vasconcelos",
+          "id": "604562",
+          "team": {
+            "name": "SC Braga",
+            "id": "15"
+          },
+          "number": 80,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 48,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        }
+      ]
+    },
+    {
+      "game_id": "11071714",
+      "url": "https://www.zerozero.pt/jogo/2026-04-26-est-amadora-fc-porto/11071714",
+      "date": "2026-04-26",
+      "home_team": {
+        "name": "Est. Amadora",
+        "id": "253884"
+      },
+      "away_team": {
+        "name": "FC Porto",
+        "id": "9"
+      },
+      "result": {
+        "home": 1,
+        "away": 2
+      },
+      "players": [
+        {
+          "name": "David Grilo",
+          "id": "366089",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 22,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Max Scholze",
+          "id": "1007260",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 21,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 46
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Stefan Leković",
+          "id": "902026",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 4,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Otávio",
+          "id": "942202",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 83,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Bruno Langa",
+          "id": "517243",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 24,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Kevin Jansson",
+          "id": "782624",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 6,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 46
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Eddy Doué",
+          "id": "3384291",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 39,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 46
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Robinho",
+          "id": "943111",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 8,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Abraham Marcus",
+          "id": "643683",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 99,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rodrigo Pinho",
+          "id": "392306",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 9,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 73
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Ianis Stoica",
+          "id": "606621",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 10,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 73
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Diogo Costa",
+          "id": "284406",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 99,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Alberto Costa",
+          "id": "544926",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 20,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 70
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Thiago Silva",
+          "id": "5481",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 3,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Jan Bednarek",
+          "id": "355551",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 5,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Jakub Kiwior",
+          "id": "504853",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 4,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 84
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Pablo Rosario",
+          "id": "507699",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 13,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gabri Veiga",
+          "id": "755125",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 10,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 70
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Victor Froholdt",
+          "id": "1013857",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 8,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Pepę",
+          "id": "474258",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 11,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 60
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Deniz Gül",
+          "id": "1018274",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 27,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 61
+          },
+          "stats": {
+            "goals": 2,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 1,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Oskar Pietuszewski",
+          "id": "1257471",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 77,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Jefferson Encada",
+          "id": "374344",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 17,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 46,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Paulo Moreira",
+          "id": "421294",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 19,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 46,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Sydney van Hooijdonk",
+          "id": "646213",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 20,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 73,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Alisson Souza",
+          "id": "968493",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 80,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 73,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Jovane Cabral",
+          "id": "461396",
+          "team": {
+            "name": "Est. Amadora",
+            "id": "253884"
+          },
+          "number": 11,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 46,
+            "left": null
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Martim Fernandes",
+          "id": "743949",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 52,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 70,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Rodrigo Mora",
+          "id": "545602",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 86,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 70,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Seko Fofana",
+          "id": "260290",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 42,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 84,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "William Gomes",
+          "id": "890221",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 7,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 60,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Terem Moffi",
+          "id": "598366",
+          "team": {
+            "name": "FC Porto",
+            "id": "9"
+          },
+          "number": 29,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 61,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        }
+      ]
+    },
+    {
+      "game_id": "11071710",
+      "url": "https://www.zerozero.pt/jogo/2026-04-26-afs-sporting/11071710",
+      "date": "2026-04-26",
+      "home_team": {
+        "name": "AFS",
+        "id": "296012"
+      },
+      "away_team": {
+        "name": "Sporting",
+        "id": "16"
+      },
+      "result": {
+        "home": 1,
+        "away": 1
+      },
+      "players": [
+        {
+          "name": "Adriel Ramos",
+          "id": "641420",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 1,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Mateus Pivô",
+          "id": "507549",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 97,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Paulo Vitor",
+          "id": "675415",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 3,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Cristian Devenish",
+          "id": "733529",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 42,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Leonardo Rivas",
+          "id": "728579",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 12,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Roni Moura",
+          "id": "547658",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 70,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gustavo Mendonça",
+          "id": "385897",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 23,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 73
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Pedro Lima",
+          "id": "717259",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 8,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 85
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 1,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Babatunde Akinsola",
+          "id": "1185947",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 11,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 90
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Diego Duarte",
+          "id": "610226",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 20,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 85
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Guilherme Neiva",
+          "id": "885156",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 21,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 73
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rui Silva",
+          "id": "275322",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 1,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Georgios Vagiannidis",
+          "id": "768651",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 13,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 1,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Ousmane Diomande",
+          "id": "953339",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 26,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Zeno Debast",
+          "id": "741625",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 6,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Ricardo Mangas",
+          "id": "164909",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 91,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 74
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Giorgi Kochorashvili",
+          "id": "481908",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 14,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 84
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Hidemasa Morita",
+          "id": "624515",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 5,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Geovany Quenda",
+          "id": "643109",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 7,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 56
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Francisco Trincăo",
+          "id": "500256",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 17,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Pedro Gonçalves",
+          "id": "338388",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 8,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 74
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rafael Nel",
+          "id": "677872",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 90,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 56
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Guillem Molina",
+          "id": "663310",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 5,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 85,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Carlos Ponck",
+          "id": "396550",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 26,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 90,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Tiago Galletto",
+          "id": "787380",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 19,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 73,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Nenę",
+          "id": "32428",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 18,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 85,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Óscar Perea",
+          "id": "960085",
+          "team": {
+            "name": "AFS",
+            "id": "296012"
+          },
+          "number": 14,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 73,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Maxi Araújo",
+          "id": "631995",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 20,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 74,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Daniel Bragança",
+          "id": "84850",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 23,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 84,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Geny Catamo",
+          "id": "639363",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 10,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 56,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Luís Guilherme",
+          "id": "829332",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 31,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 74,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Luis Suárez",
+          "id": "504173",
+          "team": {
+            "name": "Sporting",
+            "id": "16"
+          },
+          "number": 97,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 56,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        }
+      ]
+    },
+    {
+      "game_id": "11071704",
+      "url": "https://www.zerozero.pt/jogo/2026-04-27-gil-vicente-casa-pia-ac/11071704",
+      "date": "2026-04-27",
+      "home_team": {
+        "name": "Gil Vicente",
+        "id": "11"
+      },
+      "away_team": {
+        "name": "Casa Pia AC",
+        "id": "2412"
+      },
+      "result": {
+        "home": 2,
+        "away": 1
+      },
+      "players": [
+        {
+          "name": "Dani Figueira",
+          "id": "421994",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 99,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Zé Carlos",
+          "id": "221801",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 2,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Jonathan Buatu",
+          "id": "150707",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 39,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Marvin Elimbi",
+          "id": "853804",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 4,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Jonathan Mutombo",
+          "id": "653217",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 45,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 82
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Zé Carlos",
+          "id": "450174",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 6,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 87
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Santi García",
+          "id": "825862",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 95,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Murilo Souza",
+          "id": "245832",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 77,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 87
+          },
+          "stats": {
+            "goals": 2,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 1,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Luís Esteves",
+          "id": "88263",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 10,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Martín Fernández",
+          "id": "828531",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 32,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 61
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Héctor Hernández",
+          "id": "355293",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 23,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 61
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Patrick Sequeira",
+          "id": "485088",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 1,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "André Geraldes",
+          "id": "123099",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 18,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "David Sousa",
+          "id": "686428",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 43,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Joăo Goulart",
+          "id": "477778",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 4,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Gaizka Larrazabal",
+          "id": "521106",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 72,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Iyad Mohamed",
+          "id": "824976",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 24,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 85
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Rafael Brito",
+          "id": "503779",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 8,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Pedro Rosas",
+          "id": "558991",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 75,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 74
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Jérémy Livolant",
+          "id": "491643",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 29,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 86
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Cassiano",
+          "id": "144974",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 90,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 85
+          },
+          "stats": {
+            "goals": 1,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 1,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Joăo Marques",
+          "id": "155243",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 11,
+          "captain": false,
+          "starter": true,
+          "minutes": {
+            "entered": null,
+            "left": 74
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Hevertton Santos",
+          "id": "384162",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 20,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 82,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Antonio Espigares",
+          "id": "896418",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 48,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 87,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Sergio Bermejo",
+          "id": "459549",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 17,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 87,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Gustavo Varela",
+          "id": "508999",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 89,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 61,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 1,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Agustín Moreira",
+          "id": "964768",
+          "team": {
+            "name": "Gil Vicente",
+            "id": "11"
+          },
+          "number": 27,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 61,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": false
+          }
+        },
+        {
+          "name": "Abdu Conté",
+          "id": "229988",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 5,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 74,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Sebastián Pérez",
+          "id": "185613",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 42,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 85,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Lawrence Ofori",
+          "id": "554787",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 80,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 85,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Clau Mendes",
+          "id": "781342",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 99,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 86,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        },
+        {
+          "name": "Dailon Livramento",
+          "id": "759126",
+          "team": {
+            "name": "Casa Pia AC",
+            "id": "2412"
+          },
+          "number": 10,
+          "captain": false,
+          "starter": false,
+          "minutes": {
+            "entered": 74,
+            "left": null
+          },
+          "stats": {
+            "goals": 0,
+            "assists": 0,
+            "yellow_cards": 0,
+            "red_card": false,
+            "own_goals": 0,
+            "penalties_scored": 0,
+            "penalties_missed": 0,
+            "penalties_defended": 0,
+            "played_under_20m": true
+          }
+        }
+      ]
+    }
+  ]
+}

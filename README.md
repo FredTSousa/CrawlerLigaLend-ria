@@ -1,0 +1,116 @@
+# CrawlerLigaLendária
+
+A web crawler for [zerozero.pt](https://www.zerozero.pt/) that collects Liga
+Portugal results and per-player statistics, **fixture by fixture, game by
+game**, through three small composable functions.
+
+For each game it records **only the players who actually played** (starters +
+substitutes who came on — the greyed-out unused substitutes are excluded).
+Teams and players are emitted as `{ "name": ..., "id": ... }`.
+
+## The pipeline (3 functions)
+
+```python
+import crawler
+
+# 1. From the competition landing page, get the variables to request fixtures.
+comp = crawler.get_competition()
+#   -> {name, url, id_edicao, fase, rounds: [1..34], current_round}
+
+# 2. From a fixture (round number), get all matches + the link to each.
+fixture = crawler.get_fixture(comp, 31)
+#   -> {round, url, games: [{game_id, slug, url, date,
+#                            home_team{name,id}, away_team{name,id}, result}]}
+
+# 3. From a match, get the JSON with the data.
+for game in fixture["games"]:
+    data = crawler.get_match(game)      # accepts the game dict ...
+#   data = crawler.get_match(game["url"])  # ... or just the match URL
+```
+
+Each stage is independent: `get_match` works from a bare match URL (it reads
+the teams/result from the match page), and `get_fixture` accepts either the
+`comp` dict or a bare `fase` value. A `crawl_round(...)` helper composes all
+three for one round.
+
+## What it extracts
+
+Per game: `home_team`, `away_team`, final `result` (`{home, away}`), date, URL.
+
+Per player who played: `team`, shirt `number`, `captain`, `starter`, the
+`minutes` they entered/left, and a `stats` block:
+
+| stat | meaning |
+|------|---------|
+| `goals` | goals scored (excludes own goals) |
+| `assists` | assists |
+| `yellow_cards` | yellow cards shown |
+| `red_card` | `true` if sent off (straight red **or** second yellow) |
+| `own_goals` | own goals |
+| `penalties_scored` | goals scored from a penalty (subset of `goals`) |
+| `penalties_missed` | penalties missed |
+| `penalties_defended` | penalties saved (goalkeepers) |
+| `played_under_20m` | `true` if entered at/after the 70' **or** subbed out before the 20' |
+
+## Requirements
+
+- Python 3.10+
+- `requests`  (`pip install -r requirements.txt`)
+
+## Command-line usage
+
+```bash
+# Crawl a round by number (resolves fase automatically). Default = current round.
+python crawler.py --jornada 31 --out liga_jornada31.json
+
+# Just print the competition variables (fase, id_edicao, rounds, current_round)
+python crawler.py --list-rounds
+
+# Crawl a specific round URL
+python crawler.py --url "https://www.zerozero.pt/competicao/liga-portuguesa?jornada_in=32&fase=217930" --out liga_jornada32.json
+
+# Crawl a single match (prints its JSON to stdout)
+python crawler.py --match "https://www.zerozero.pt/jogo/2026-04-25-benfica-moreirense/11071718"
+
+# Tune the polite delay (seconds) between requests
+python crawler.py --jornada 31 --delay 2.0
+```
+
+Without `--out` the JSON is printed to stdout; progress goes to stderr.
+
+## How it works
+
+1. **Competition page** → the `form_edicao` form yields `fase`, `id_edicao`
+   and the `jornada_in` round list (`get_competition`).
+2. **Round page** (`#fixture_games` table) → the authoritative list of games,
+   each team's `name` + `id` (the id is read from the crest image filename,
+   which is present even for clubs whose links omit it), and the final score
+   (`get_fixture` / `parse_round_games`).
+3. **Each match page** → the lineup block, segmented by the `<div class="subtitle">`
+   markers (`Home`, `Away`, `Suplentes`, `Suplentes`, `Treinadores`). A player
+   `<div>` flagged `inactive` is a greyed-out unused sub and is skipped
+   (`get_match` / `parse_lineups`).
+4. **Events** are read from each player's `events` div. A single goal icon can
+   represent a brace — the minute `<div>` lists every minute (`89' 90+1'`), with
+   per-minute annotations: `(g.p.)` = penalty goal, `(p.b.)` = own goal.
+
+### Event-icon mapping (verified)
+
+| event | signal |
+|-------|--------|
+| goal | `zz-icn-fut-11` / `title="Golos"` |
+| penalty goal | goal icon + `(g.p.)` in the minute |
+| own goal | goal icon + `(p.b.)` in the minute |
+| assist | `title="Assistência"` |
+| yellow | `title="Amarelos"` |
+| red | `title="Vermelhos"` or an `icn_zerozero red` glyph |
+| sub on | `title="Entrou"` + minute |
+| sub off | untitled `icn_zerozero grey` glyph + minute |
+
+> **Note on penalties missed / defended.** Round 31 contained no missed or
+> saved penalties, so those icons could not be observed first-hand. The crawler
+> detects them heuristically (event titles containing `falhad` →
+> missed; `defendid`/`defes` + `penal` → defended) and **logs any unrecognised
+> event type to stderr** (`? unmapped events in <game>: ...`). If you crawl a
+> round that has one and see such a log line, add the exact title to
+> `classify_events` in `crawler.py`.
