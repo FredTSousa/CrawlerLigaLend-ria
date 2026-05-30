@@ -94,6 +94,38 @@ def _is_finished(raw) -> bool:
     return bool(FINISHED_RE.search(str(raw or "")))
 
 
+# Status file the tray reads to show which matches are being watched.
+STATUS_FILE = os.path.join(
+    os.environ.get("USERPROFILE", "."), "actions-runner", "_watch_status.json")
+
+
+def write_status(items: list[dict]) -> None:
+    try:
+        with open(STATUS_FILE, "w", encoding="utf-8") as fh:
+            json.dump({"updated": time.time(), "matches": items}, fh)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def poll_multi(session, ids: str, referer: str) -> dict:
+    """Poll the live endpoint for several ids at once; return {id: row}."""
+    r = session.get(
+        f"{LIVE_ENDPOINT}?ids={ids}&page=",
+        headers={
+            "Referer": referer,
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+        },
+        timeout=20,
+    )
+    r.raise_for_status()
+    try:
+        data = r.json()
+    except Exception:
+        data = json.loads(r.text or "[]")
+    return {str(_field(row, 0)): row for row in data}
+
+
 def full_crawl(sb, session, url, *, status, minute=None, score=None):
     """Fetch the full match page and upsert players + match (heavier call)."""
     game = crawler.get_match(url, session=session)
@@ -169,9 +201,89 @@ def watch_loop(sb, session, match_url, *, light_interval, full_interval,
     print("Done. Match marked final.", file=sys.stderr)
 
 
+def daemon_loop(sb, session, *, light_interval, full_interval, max_minutes,
+                idle_exit_cycles=6):
+    """Follow every match flagged watch=true in the DB, all in one poll.
+    Exits when nothing is left to watch (frees the runner)."""
+    referer = "https://www.zerozero.pt/"
+    state: dict[str, dict] = {}   # gid -> {last_score, last_full}
+    started = time.time()
+    idle = 0
+
+    while True:
+        if (time.time() - started) / 60 > max_minutes:
+            print("Max watch time reached — stopping daemon.", file=sys.stderr)
+            break
+
+        try:
+            targets = sb.watch_list()  # [{id,url}]
+        except Exception as e:  # noqa: BLE001
+            print(f"  watch_list error: {e}", file=sys.stderr)
+            time.sleep(light_interval)
+            continue
+
+        if not targets:
+            write_status([])
+            idle += 1
+            if idle >= idle_exit_cycles:
+                print("No matches to watch — daemon idle, exiting.",
+                      file=sys.stderr)
+                break
+            time.sleep(light_interval)
+            continue
+        idle = 0
+
+        ids = "|".join(t["id"] for t in targets)
+        try:
+            rows = poll_multi(session, ids, referer)
+        except Exception as e:  # noqa: BLE001
+            print(f"  poll error: {e}", file=sys.stderr)
+            time.sleep(light_interval)
+            continue
+
+        statuses = []
+        for t in targets:
+            gid, url = t["id"], t["url"]
+            row = rows.get(str(gid))
+            st = state.setdefault(gid, {"last_score": None, "last_full": 0.0})
+            if not row:
+                continue
+            raw_minute = _field(row, 2)
+            result = str(_field(row, 1) or "")
+            minute = _fmt_minute(raw_minute)
+            gc, gf = _int(_field(row, 3)), _int(_field(row, 4))
+            if not result:
+                continue
+            score = (gc, gf)
+            light_update(sb, gid, minute=minute, gc=gc, gf=gf)
+            changed = score != st["last_score"] and st["last_score"] is not None
+            routine = (time.time() - st["last_full"]) >= full_interval
+            if changed or routine:
+                full_crawl(sb, session, url, status="live", minute=minute,
+                           score=score)
+                st["last_full"] = time.time()
+            st["last_score"] = score
+            statuses.append({"id": gid, "url": url, "minute": minute,
+                             "score": f"{gc}-{gf}"})
+            if _is_finished(raw_minute):
+                print(f"Full-time ({raw_minute}) for {gid} — finalizing.",
+                      file=sys.stderr)
+                full_crawl(sb, session, url, status="final", score=score)
+                sb.set_watch(gid, False)
+
+        print(f"[{time.strftime('%H:%M:%S')}] watching {len(statuses)}: "
+              f"{statuses}", file=sys.stderr)
+        write_status(statuses)
+        time.sleep(light_interval)
+
+    write_status([])
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--match", help="zerozero match URL (or env IN_MATCH)")
+    ap.add_argument("--match", help="single match URL (or env IN_MATCH)")
+    ap.add_argument("--daemon", action="store_true",
+                    help="follow all matches flagged watch=true in the DB")
     ap.add_argument("--run-id", type=int, help="crawl_runs row to update (or IN_RUN_ID)")
     ap.add_argument("--light-interval", type=float, default=30)
     ap.add_argument("--full-interval", type=float, default=120)
@@ -179,16 +291,35 @@ def main() -> int:
     args = ap.parse_args()
 
     sync._load_dotenv()
-    match_url = args.match or sync._env("IN_MATCH")
-    if not match_url:
-        print("No match URL (pass --match or set IN_MATCH).", file=sys.stderr)
-        return 2
     rid_env = sync._env("IN_RUN_ID")
     run_id = args.run_id or (int(rid_env) if rid_env else None)
-
     sb = sync.Supabase()
     session = crawler.new_session()
 
+    daemon = args.daemon or sync._env("WATCH_DAEMON")
+    if daemon:
+        run_id = sync._begin_run(sb, run_id=run_id, trigger="manual",
+                                 kind="watch", target="watch-list",
+                                 github_run_id=os.environ.get("GITHUB_RUN_ID"))
+        try:
+            daemon_loop(sb, session, light_interval=args.light_interval,
+                        full_interval=args.full_interval,
+                        max_minutes=args.max_minutes)
+            sync._finish_run(sb, run_id, status="success")
+        except KeyboardInterrupt:
+            print("\nInterrupted.", file=sys.stderr)
+            sync._finish_run(sb, run_id, status="success")
+        except Exception as err:  # noqa: BLE001
+            sync._finish_run(sb, run_id, status="error", error=str(err)[:2000])
+            raise
+        return 0
+
+    # Single-match mode (manual / local use).
+    match_url = args.match or sync._env("IN_MATCH")
+    if not match_url:
+        print("No match URL (pass --match, --daemon, or set IN_MATCH).",
+              file=sys.stderr)
+        return 2
     run_id = sync._begin_run(sb, run_id=run_id, trigger="manual", kind="watch",
                              target=match_url,
                              github_run_id=os.environ.get("GITHUB_RUN_ID"))

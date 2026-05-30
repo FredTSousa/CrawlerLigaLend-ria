@@ -41,6 +41,22 @@ export async function POST(request: Request) {
     );
   }
 
+  // For a watch, flag the match in the DB so the daemon picks it up. Create a
+  // stub row if it doesn't exist yet (teams fill in on the first crawl).
+  if (kind === "watch") {
+    const idMatch = target.match(/\/(\d+)(?:[/?#]|$)/);
+    const matchId = idMatch ? idMatch[1] : null;
+    if (!matchId) {
+      return NextResponse.json({ error: "Invalid match URL" }, { status: 400 });
+    }
+    const { error: upErr } = await supabase
+      .from("matches")
+      .upsert({ id: matchId, url: target, watch: true }, { onConflict: "id" });
+    if (upErr) {
+      return NextResponse.json({ error: upErr.message }, { status: 500 });
+    }
+  }
+
   // 2) Dispatch the workflow with the run id + crawl target.
   const repo = process.env.GH_REPO;
   const workflow =

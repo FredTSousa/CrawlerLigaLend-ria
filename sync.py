@@ -108,6 +108,15 @@ class Supabase:
         resp = self._rest("GET", f"matches?id=in.({inlist})&select=id,status")
         return {r["id"]: r.get("status") for r in resp.json()}
 
+    def watch_list(self) -> list[dict]:
+        """Matches flagged for live watching that aren't finished yet."""
+        resp = self._rest(
+            "GET", "matches?watch=is.true&status=neq.final&select=id,url")
+        return resp.json()
+
+    def set_watch(self, match_id: str, on: bool) -> None:
+        self.update("matches", f"id=eq.{match_id}", {"watch": on})
+
 
 # ----------------------------------------------------------------------------
 # Row builders

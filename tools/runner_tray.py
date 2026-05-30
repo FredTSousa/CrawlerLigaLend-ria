@@ -13,7 +13,9 @@ It manages the runner installed at  %USERPROFILE%\\actions-runner  (run.cmd).
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import subprocess
 import threading
 import time
@@ -25,6 +27,7 @@ APP_NAME = "Crawler LLP"
 RUNNER_DIR = os.path.join(os.environ.get("USERPROFILE", ""), "actions-runner")
 RUN_CMD = os.path.join(RUNNER_DIR, "run.cmd")
 LOG_FILE = os.path.join(RUNNER_DIR, "_tray_run.log")
+WATCH_STATUS = os.path.join(RUNNER_DIR, "_watch_status.json")
 LISTENER = "Runner.Listener.exe"
 WORKER = "Runner.Worker.exe"  # exists only while a job (e.g. a live watch) runs
 
@@ -63,6 +66,24 @@ def _runner_up() -> bool:
 def _job_running() -> bool:
     """True while the runner is executing a job (e.g. a live watch)."""
     return _proc_running(WORKER)
+
+
+def _watch_matches() -> list:
+    """Matches currently being watched, from the watcher's status file."""
+    try:
+        with open(WATCH_STATUS, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if time.time() - float(data.get("updated", 0)) > 120:
+            return []  # stale -> watcher not running
+        return data.get("matches", [])
+    except Exception:
+        return []
+
+
+def _match_label(m: dict) -> str:
+    mm = re.search(r"/jogo/([^/]+)/", m.get("url", ""))
+    slug = mm.group(1) if mm else str(m.get("id", "?"))
+    return f"{slug} {m.get('minute') or ''}".strip()
 
 
 def stop_job(icon=None, item=None) -> None:
@@ -118,7 +139,15 @@ def _make_icon(up: bool, busy: bool = False) -> Image.Image:
 def _state_label() -> str:
     if not _runner_up():
         return "Stopped"
+    watching = _watch_matches()
+    if watching:
+        return "Watching " + ", ".join(_match_label(m) for m in watching)
     return "Working (job running)" if _job_running() else "Online (idle)"
+
+
+def _active() -> bool:
+    """A job or a live watch is in progress (icon goes blue)."""
+    return _job_running() or bool(_watch_matches())
 
 
 def _status_text(_=None) -> str:
@@ -133,11 +162,12 @@ def _on_exit(icon, item) -> None:
 def _monitor(icon: pystray.Icon) -> None:
     last = None
     while True:
-        state = (_runner_up(), _job_running())
+        label = _state_label()
+        state = (_runner_up(), _active(), label)
         if state != last:
-            up, busy = state
-            icon.icon = _make_icon(up, busy)
-            icon.title = f"{APP_NAME} — {_state_label()}"
+            up, active, _ = state
+            icon.icon = _make_icon(up, active)
+            icon.title = f"{APP_NAME} — {label}"
             icon.update_menu()
             last = state
         time.sleep(3)

@@ -53,6 +53,7 @@ create table if not exists public.matches (
     status         text not null default 'scheduled', -- scheduled|live|final|postponed
     minute         text,                        -- live clock, e.g. "67'", "HT"
     kickoff_at     timestamptz,                 -- scheduled start time
+    watch          boolean not null default false, -- live watcher should follow this
     scraped_at     timestamptz,                 -- when the crawler read this match
     updated_at     timestamptz not null default now()
 );
@@ -170,6 +171,17 @@ end $$;
 drop policy if exists crawl_runs_insert on public.crawl_runs;
 create policy crawl_runs_insert on public.crawl_runs
     for insert to authenticated
+    with check (public.is_allowed());
+
+-- Let the site flag matches for live watching (create/update).
+drop policy if exists matches_insert on public.matches;
+create policy matches_insert on public.matches
+    for insert to authenticated
+    with check (public.is_allowed());
+drop policy if exists matches_update on public.matches;
+create policy matches_update on public.matches
+    for update to authenticated
+    using (public.is_allowed())
     with check (public.is_allowed());
 
 -- ----------------------------------------------------------------------------
