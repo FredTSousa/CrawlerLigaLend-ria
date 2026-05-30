@@ -303,33 +303,63 @@ def classify_events(events_html: str) -> dict:
     raw_events: list[dict] = []
     unknown: list[dict] = []
 
-    # A red card (incl. a second yellow) renders as a "Vermelhos" icon that is
-    # NOT followed directly by a minute <div> (a companion red glyph sits in
-    # between), so it escapes the span+div event scan below — detect it here.
+    # 1. Broadly check for any visual indicator of a red card
     if ('title="Vermelhos"' in events_html
             or re.search(r'class="icn_zerozero[^"]*\bred\b', events_html)):
         stats["red_card"] = True
 
-    for attrs, glyph, minute_text in EVENT_RE.findall(events_html):
+    # 2. Extract every single icon span and its attributes
+    # This ensures back-to-back spans (like the double yellow sequence) are all processed
+    SPAN_RE = re.compile(r'<span([^>]*?)>([^<]*)</span>')
+    
+    # We also still want to extract minutes from any divs present in the block
+    all_minutes = [leading_minute(m) for m in re.findall(r'<div>([^<]*)</div>', events_html)]
+
+    for attrs, glyph in SPAN_RE.findall(events_html):
         title_m = TITLE_RE.search(attrs)
         class_m = CLASS_RE.search(attrs)
         title = (title_m.group(1) if title_m else "").strip()
         klass = (class_m.group(1) if class_m else "").strip()
-        glyph = glyph.strip()
-        minute_text = minute_text.strip()
-        minute = leading_minute(minute_text)
-        annot = minute_text.lower()
-
-        raw_events.append({"title": title, "class": klass,
-                           "glyph": glyph, "minute": minute_text})
-
-        is_goal_icon = "zz-icn-fut" in klass or title == "Golos"
         title_l = title.lower()
 
-        if is_goal_icon:
-            # One icon may represent several goals (a brace); the minute <div>
-            # lists each, with per-minute (g.p.)/(p.b.) annotations.
+        # Gather information for debugging/raw tracking
+        raw_events.append({"title": title, "class": klass, "glyph": glyph.strip()})
+
+        # Match goals
+        if "zz-icn-fut" in klass or title == "Golos":
+            # Goals require scanning the div strings, we can count total occurrences 
+            # by parsing the raw HTML block's goal text strings if needed, 
+            # but for simplicity we rely on the specific goal container lines
+            pass 
+        
+        # Match Assits
+        elif title == "Assistência" or "assist" in title_l:
+            stats["assists"] += 1
+            
+        # Match Yellow Cards (Standard yellow OR the secret second yellow wrapped in a red title)
+        elif title == "Amarelos" or "yellow" in klass:
+            stats["yellow_cards"] += 1
+            
+        # Match Red Cards
+        elif title == "Vermelhos" or "red" in klass:
+            stats["red_card"] = True
+            
+        elif title == "Entrou" or "entrou" in title_l:
+            if all_minutes: entered_min = all_minutes[-1] # Simplistic fallback
+        elif title:
+            unknown.append({"title": title, "class": klass, "glyph": glyph})
+
+    # 3. Double-check goal/assist details via the original text blocks if needed
+    # Because your goals structure depends on the companion <div> string, let's process those cleanly:
+    for attrs, glyph, minute_text in EVENT_RE.findall(events_html):
+        klass = (CLASS_RE.search(attrs).group(1) if CLASS_RE.search(attrs) else "").strip()
+        title = (TITLE_RE.search(attrs).group(1) if TITLE_RE.search(attrs) else "").strip()
+        minute = leading_minute(minute_text)
+        
+        if "zz-icn-fut" in klass or title == "Golos":
             tokens = MINUTE_TOKEN_RE.findall(minute_text) or [("", "")]
+            # Clear default increment from span loop and count tokens precisely
+            stats["goals"] = 0 
             for _min, mann in tokens:
                 a = mann.lower()
                 if "p.b." in a or "auto" in a:
@@ -338,30 +368,16 @@ def classify_events(events_html: str) -> dict:
                     stats["goals"] += 1
                     if "g.p." in a or "grande penal" in a:
                         stats["penalties_scored"] += 1
-        elif title == "Assistência" or "assist" in title_l:
-            stats["assists"] += len(MINUTE_TOKEN_RE.findall(minute_text)) or 1
-        elif title == "Amarelos" or "amarelo" in title_l:
-            stats["yellow_cards"] += len(MINUTE_TOKEN_RE.findall(minute_text)) or 1
-        elif title == "Vermelhos" or "vermelho" in title_l:
-            stats["red_card"] = True
-        elif title == "Entrou" or "entrou" in title_l:
+        elif title == "Entrou" or "entrou" in title.lower():
             entered_min = minute
-        elif "falhad" in title_l or "falhad" in annot:
-            # penalty missed
+        elif "falhad" in title.lower() or "falhad" in minute_text.lower():
             stats["penalties_missed"] += 1
-        elif ("defendid" in title_l or "defes" in title_l) and (
-                "penal" in title_l or "grande penal" in title_l):
+        elif ("defendid" in title.lower() or "defes" in title.lower()) and "penal" in title.lower():
             stats["penalties_defended"] += 1
-        elif (not title and "icn_zerozero" in klass and "grey" in klass
-              and minute is not None):
-            # untitled GREY icon followed by a minute = substituted OUT
-            # (the red companion glyph is icn_zerozero red, not grey).
+        elif not title and "grey" in klass and minute is not None:
             left_min = minute
-        elif title:
-            unknown.append({"title": title, "class": klass,
-                            "glyph": glyph, "minute": minute_text})
 
-    # two yellows -> a red was shown
+    # Cascade rules
     if stats["yellow_cards"] >= 2:
         stats["red_card"] = True
 
