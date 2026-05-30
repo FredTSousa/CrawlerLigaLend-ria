@@ -86,12 +86,11 @@ def _fmt_minute(m) -> str | None:
     return f"{s}'" if re.fullmatch(r"\d+(\+\d+)?", s) else s
 
 
-# Full-time markers seen in the feed's minute field (refined from live data).
-FINISHED_RE = re.compile(r"\b(FIM|FINAL|TERMINAD|FT|AP|PEN|GP)\b", re.I)
-
-
-def _is_finished(raw) -> bool:
-    return bool(FINISHED_RE.search(str(raw or "")))
+def _is_finished_row(row) -> bool:
+    """The feed's state field (index 5): "0" = live, "1" = finished/not-live.
+    This is the reliable end signal — holds for normal time, extra time and
+    penalties (the minute field just goes empty)."""
+    return str(_field(row, 5) or "") == "1"
 
 
 # Status file the tray reads to show which matches are being watched.
@@ -175,11 +174,15 @@ def watch_loop(sb, session, match_url, *, light_interval, full_interval,
         print(f"[{time.strftime('%H:%M:%S')}] feed: {row}", file=sys.stderr)
 
         if row:
-            raw_minute = _field(row, 2)
             result = str(_field(row, 1) or "")
-            minute = _fmt_minute(raw_minute)
+            minute = _fmt_minute(_field(row, 2))
             gc, gf = _int(_field(row, 3)), _int(_field(row, 4))
-            if result:  # live (has a score line)
+            finished = _is_finished_row(row)
+            if result and finished:
+                print("Full-time (state=1) — finalizing.", file=sys.stderr)
+                last_score = (gc, gf)
+                break
+            if result:  # live
                 score = (gc, gf)
                 light_update(sb, gid, minute=minute, gc=gc, gf=gf)
                 score_changed = score != last_score and last_score is not None
@@ -189,10 +192,6 @@ def watch_loop(sb, session, match_url, *, light_interval, full_interval,
                                minute=minute, score=score)
                     last_full = time.time()
                 last_score = score
-                if _is_finished(raw_minute):
-                    print(f"Full-time marker ({raw_minute}) — finalizing.",
-                          file=sys.stderr)
-                    break
 
         time.sleep(light_interval)
 
@@ -248,13 +247,18 @@ def daemon_loop(sb, session, *, light_interval, full_interval, max_minutes,
             st = state.setdefault(gid, {"last_score": None, "last_full": 0.0})
             if not row:
                 continue
-            raw_minute = _field(row, 2)
             result = str(_field(row, 1) or "")
-            minute = _fmt_minute(raw_minute)
+            minute = _fmt_minute(_field(row, 2))
             gc, gf = _int(_field(row, 3)), _int(_field(row, 4))
             if not result:
                 continue
             score = (gc, gf)
+            if _is_finished_row(row):  # state=1 -> finished (incl. ET/pens)
+                print(f"Full-time (state=1) for {gid} — finalizing.",
+                      file=sys.stderr)
+                full_crawl(sb, session, url, status="final", score=score)
+                sb.set_watch(gid, False)
+                continue
             light_update(sb, gid, minute=minute, gc=gc, gf=gf)
             changed = score != st["last_score"] and st["last_score"] is not None
             routine = (time.time() - st["last_full"]) >= full_interval
@@ -265,11 +269,6 @@ def daemon_loop(sb, session, *, light_interval, full_interval, max_minutes,
             st["last_score"] = score
             statuses.append({"id": gid, "url": url, "minute": minute,
                              "score": f"{gc}-{gf}"})
-            if _is_finished(raw_minute):
-                print(f"Full-time ({raw_minute}) for {gid} — finalizing.",
-                      file=sys.stderr)
-                full_crawl(sb, session, url, status="final", score=score)
-                sb.set_watch(gid, False)
 
         print(f"[{time.strftime('%H:%M:%S')}] watching {len(statuses)}: "
               f"{statuses}", file=sys.stderr)
