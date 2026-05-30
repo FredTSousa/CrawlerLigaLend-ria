@@ -9,21 +9,25 @@ export const dynamic = "force-dynamic";
 
 export default async function RoundPage({
   params,
+  searchParams,
 }: {
   params: { round: string };
+  searchParams: { comp?: string };
 }) {
   const round = Number(params.round);
+  const comp = searchParams?.comp;
   const supabase = createClient();
 
-  const { data: matches } = await supabase
+  let query = supabase
     .from("matches")
     .select(
       "id, played_on, home_score, away_score, url, status, minute, home_team_id, away_team_id, " +
         "home_team:teams!matches_home_team_id_fkey(id,name), " +
         "away_team:teams!matches_away_team_id_fkey(id,name)",
     )
-    .eq("round", round)
-    .order("played_on", { ascending: true });
+    .eq("round", round);
+  if (comp) query = query.eq("competition_id", comp);
+  const { data: matches } = await query.order("played_on", { ascending: true });
 
   const { data: allPlayers } = await supabase
     .from("match_player_details")

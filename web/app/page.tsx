@@ -8,6 +8,8 @@ import StatusBadge from "@/components/StatusBadge";
 
 export const dynamic = "force-dynamic";
 
+const MISC = "Miscellaneous";
+
 export default async function Dashboard() {
   const supabase = createClient();
 
@@ -22,14 +24,41 @@ export default async function Dashboard() {
 
   const liveGames = (live ?? []) as any[];
 
+  // All matches, grouped by league below.
   const { data: matches } = await supabase
     .from("matches")
-    .select("round")
-    .not("round", "is", null);
+    .select(
+      "id, round, status, played_on, competition_id, " +
+        "home_team:teams!matches_home_team_id_fkey(name), " +
+        "away_team:teams!matches_away_team_id_fkey(name), " +
+        "competition:competitions(id,name)",
+    )
+    .order("round", { ascending: false })
+    .order("played_on", { ascending: false });
 
-  const rounds = Array.from(
-    new Set((matches ?? []).map((m: any) => m.round as number)),
-  ).sort((a, b) => b - a);
+  type Group = {
+    id: string | null;
+    name: string;
+    rounds: Set<number>;
+    loose: any[]; // matches without a round (one-offs)
+  };
+  const groups = new Map<string, Group>();
+  for (const m of (matches ?? []) as any[]) {
+    const key = m.competition_id ?? "__misc__";
+    const name = m.competition?.name ?? MISC;
+    let g = groups.get(key);
+    if (!g) {
+      g = { id: m.competition_id ?? null, name, rounds: new Set(), loose: [] };
+      groups.set(key, g);
+    }
+    if (m.round != null) g.rounds.add(m.round as number);
+    else g.loose.push(m);
+  }
+  const leagues = [...groups.values()].sort(
+    (a, b) =>
+      (a.name === MISC ? 1 : 0) - (b.name === MISC ? 1 : 0) ||
+      a.name.localeCompare(b.name),
+  );
 
   const { data: comp } = await supabase
     .from("competitions")
@@ -63,30 +92,62 @@ export default async function Dashboard() {
       )}
 
       <div className="panel">
-        <h2>{comp?.name ?? "Liga Portugal"}</h2>
-        <RoundPicker current={rounds[0] ?? 1} />
+        <h2>Games by league</h2>
+        {leagues.length ? (
+          leagues.map((g) => (
+            <div key={g.id ?? "misc"} style={{ marginBottom: 16 }}>
+              <h3 style={{ margin: "0 0 8px" }}>{g.name}</h3>
+              {g.rounds.size > 0 && (
+                <div className="grid-rounds" style={{ marginBottom: 8 }}>
+                  {[...g.rounds]
+                    .sort((a, b) => b - a)
+                    .map((r) => (
+                      <Link
+                        key={r}
+                        href={`/round/${r}${g.id ? `?comp=${g.id}` : ""}`}
+                        className="round-chip"
+                      >
+                        {r}
+                      </Link>
+                    ))}
+                </div>
+              )}
+              {g.loose.length > 0 && (
+                <table>
+                  <tbody>
+                    {g.loose.map((m) => (
+                      <tr key={m.id}>
+                        <td style={{ textAlign: "right" }}>{m.home_team?.name}</td>
+                        <td className="num score">
+                          {m.status === "scheduled"
+                            ? "vs"
+                            : `${m.home_score ?? "–"}-${m.away_score ?? "–"}`}
+                        </td>
+                        <td>{m.away_team?.name}</td>
+                        <td className="muted">{m.played_on ?? ""}</td>
+                        <td>
+                          <Link href={`/match/${m.id}`}>stats →</Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          ))
+        ) : (
+          <p className="muted">No data yet — crawl a round or a match below.</p>
+        )}
+      </div>
+
+      <div className="panel">
+        <h2>{comp?.name ?? "Liga Portugal"} — crawl a round</h2>
+        <RoundPicker current={1} />
       </div>
 
       <div className="panel">
         <h2>Crawl a match by URL</h2>
         <MatchPicker />
-      </div>
-
-      <div className="panel">
-        <h2>Rounds with data</h2>
-        {rounds.length ? (
-          <div className="grid-rounds">
-            {rounds.map((r) => (
-              <Link key={r} href={`/round/${r}`} className="round-chip">
-                {r}
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <p className="muted">
-            No data yet. Pick a round above and press “Crawl round”.
-          </p>
-        )}
       </div>
 
       <div className="panel">
