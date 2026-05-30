@@ -34,6 +34,22 @@ import crawler
 COMPETITION_SLUG = "liga-portuguesa"
 
 
+def _load_dotenv(path: str = ".env") -> None:
+    """Load KEY=VALUE lines from a local .env (gitignored) for local runs.
+    Does not override variables already set in the environment (so GitHub
+    Actions secrets win, and .env simply doesn't exist there)."""
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            os.environ.setdefault(key.strip(),
+                                  val.strip().strip('"').strip("'"))
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -264,6 +280,7 @@ def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
 
 
 def main() -> int:
+    _load_dotenv()
     ap = argparse.ArgumentParser(description=__doc__)
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--jornada", type=int,
