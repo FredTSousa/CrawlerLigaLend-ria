@@ -1,0 +1,82 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+
+type Run = {
+  id: number;
+  trigger: string | null;
+  kind: string | null;
+  target: string | null;
+  status: string;
+  games_count: number | null;
+  error: string | null;
+  created_at: string;
+  finished_at: string | null;
+};
+
+export default function RunsPanel({ limit = 15 }: { limit?: number }) {
+  const [runs, setRuns] = useState<Run[]>([]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    let active = true;
+    const load = async () => {
+      const { data } = await supabase
+        .from("crawl_runs")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (active && data) setRuns(data as Run[]);
+    };
+    load();
+    const t = setInterval(load, 4000);
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
+  }, [limit]);
+
+  if (!runs.length) return <p className="muted">No crawl runs yet.</p>;
+
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Trigger</th>
+          <th>Target</th>
+          <th>Status</th>
+          <th className="num">Games</th>
+        </tr>
+      </thead>
+      <tbody>
+        {runs.map((r) => (
+          <tr key={r.id}>
+            <td className="muted">{fmt(r.created_at)}</td>
+            <td>{r.trigger} · {r.kind}</td>
+            <td title={r.target || ""}>{shorten(r.target)}</td>
+            <td>
+              <span className={`pill ${r.status}`}>{r.status}</span>
+              {r.error && <span className="tag-red badge" title={r.error}>err</span>}
+            </td>
+            <td className="num">{r.games_count ?? "—"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function fmt(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+function shorten(t: string | null) {
+  if (!t) return "—";
+  if (t.startsWith("http")) {
+    const m = t.match(/\/jogo\/([^/]+)\//);
+    return m ? m[1] : t;
+  }
+  return `Round ${t}`;
+}
