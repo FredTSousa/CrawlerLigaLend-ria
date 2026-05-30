@@ -368,10 +368,11 @@ def classify_events(events_html: str) -> dict:
                 a = mann.lower()
                 if "p.b." in a or "auto" in a:
                     stats["own_goals"] += 1
+                elif "g.p." in a or "grande penal" in a:
+                    # Penalty goal: counted separately, NOT as an open-play goal.
+                    stats["penalties_scored"] += 1
                 else:
                     stats["goals"] += 1
-                    if "g.p." in a or "grande penal" in a:
-                        stats["penalties_scored"] += 1
                         
         elif title == "Entrou" or "entrou" in title_l:
             entered_min = minute

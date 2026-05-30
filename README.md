@@ -42,12 +42,12 @@ Per player who played: `team`, shirt `number`, `captain`, `starter`, the
 
 | stat | meaning |
 |------|---------|
-| `goals` | goals scored (excludes own goals) |
+| `goals` | open-play goals (excludes penalties and own goals) |
 | `assists` | assists |
 | `yellow_cards` | yellow cards shown |
 | `red_card` | `true` if sent off (straight red **or** second yellow) |
 | `own_goals` | own goals |
-| `penalties_scored` | goals scored from a penalty (subset of `goals`) |
+| `penalties_scored` | penalties converted (counted separately — a player's total goals = `goals + penalties_scored`) |
 | `penalties_missed` | penalties missed |
 | `penalties_defended` | penalties saved (goalkeepers) |
 | `played_under_20m` | `true` if entered at/after the 70' **or** subbed out before the 20' |
