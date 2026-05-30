@@ -31,16 +31,14 @@ permissions:
 
 jobs:
   crawl:
-    runs-on: ubuntu-latest
+    # Runs on a self-hosted runner on the user's machine (residential IP),
+    # because zerozero.pt blocks GitHub-hosted datacenter IPs.
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt
 
       - name: Crawl & sync
         env:
