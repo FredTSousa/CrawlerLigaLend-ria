@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import RoundPicker from "@/components/RoundPicker";
+import MatchPicker from "@/components/MatchPicker";
 import RunsPanel from "@/components/RunsPanel";
 import LiveRefresh from "@/components/LiveRefresh";
 import StatusBadge from "@/components/StatusBadge";
@@ -64,6 +65,11 @@ export default async function Dashboard() {
       <div className="panel">
         <h2>{comp?.name ?? "Liga Portugal"}</h2>
         <RoundPicker current={rounds[0] ?? 1} />
+      </div>
+
+      <div className="panel">
+        <h2>Crawl a match by URL</h2>
+        <MatchPicker />
       </div>
 
       <div className="panel">
