@@ -172,6 +172,16 @@ TEAM_ALIASES = [
     {"avs", "afs", "aves"},
 ]
 
+# Per-team alternative NAMES A Bola may use, keyed by _norm(zerozero name) ->
+# [alias display names]. Empty by default; reporter_sync populates it from the
+# DB (the team-aliases page) so e.g. 'AFS' -> ['Aves SAD'] without code changes.
+TEAM_ALIAS_NAMES: dict[str, list[str]] = {}
+
+
+def _alias_names(team: str) -> list[str]:
+    """A team's own name plus any configured alias names (for search queries)."""
+    return [team, *TEAM_ALIAS_NAMES.get(_norm(team), [])]
+
 
 def _expand_aliases(tokens: set[str]) -> set[str]:
     out = set(tokens)
@@ -186,8 +196,10 @@ def _team_tokens(team: str) -> set[str]:
     """Distinctive name tokens for matching a team in a URL / page. A Bola uses
     short forms ('Estoril Praia' -> 'estoril', 'Vitória SC' -> 'vitoria',
     'SC Braga' -> 'braga'), so drop club-type words and keep the rest, then add
-    known aliases so e.g. 'AFS' still matches A Bola's 'Aves SAD'."""
-    toks = {_norm(w) for w in re.split(r"\s+", team.strip()) if w}
+    known aliases (built-in groups + configured alias names) so e.g. 'AFS' still
+    matches A Bola's 'Aves SAD'."""
+    toks = {_norm(w) for nm in _alias_names(team)
+            for w in re.split(r"\s+", nm.strip()) if w}
     sig = {t for t in toks if t and len(t) >= 3 and t not in CLUB_ABBR}
     return _expand_aliases(sig or {_norm(team)})
 
@@ -205,16 +217,31 @@ def _in_window(d: date, game_date: date) -> bool:
 
 
 def find_team_notas(team: str, game_date: date) -> str | None:
-    """Find the 'as notas do <team>' page for a match on/just after game_date."""
+    """Find the 'as notas do <team>' page for a match on/just after game_date.
+    A Bola's name for a team may differ from zerozero's ('AFS' -> 'Aves SAD'),
+    so we SEARCH with the team's aliases too -- not just filter results by them
+    (the bug that hid AFS: the query asked for 'AFS', which A Bola doesn't index,
+    while the page is 'as notas do Aves SAD')."""
     tokens = _team_tokens(team)
-    clean = _clean_team(team)
-    for q in (f"as notas do {clean}", f"notas {clean}", f"as notas do {team}"):
-        cands = [(d, u) for d, u in abola_search(q, pages=2)
-                 if _in_window(d, game_date) and "notas" in u
-                 and any(t in u.lower() for t in tokens)]
-        cands.sort()
-        if cands:
-            return cands[0][1]
+    terms, seen = [], set()
+    for nm in _alias_names(team):                 # configured/own names first
+        for t in (nm, _clean_team(nm)):
+            t = t.strip()
+            if t and t.lower() not in seen:
+                seen.add(t.lower())
+                terms.append(t)
+    for tok in tokens:                            # built-in aliases, e.g. 'aves'
+        if tok not in seen:
+            seen.add(tok)
+            terms.append(tok)
+    for term in terms:
+        for q in (f"as notas do {term}", f"notas {term}"):
+            cands = [(d, u) for d, u in abola_search(q, pages=2)
+                     if _in_window(d, game_date) and "notas" in u
+                     and any(t in u.lower() for t in tokens)]
+            cands.sort()
+            if cands:
+                return cands[0][1]
     return None
 
 

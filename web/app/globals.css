@@ -129,6 +129,11 @@ input, select {
 .linkrow select, .linkrow input { padding: 4px 8px; font-size: 13px; }
 .leftover { background: #221a10; border: 1px solid #3a2e10; border-radius: 6px; padding: 6px 10px; margin: 4px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
+/* Team-alias chips */
+.aliaschip { display: inline-flex; align-items: center; gap: 4px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 2px 4px 2px 8px; margin: 2px 6px 2px 0; font-size: 13px; }
+.aliaschip button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
+.aliaschip button:hover { color: var(--red); }
+
 /* Expandable game rows on the round page */
 details.game { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; background: var(--panel); }
 details.game > summary { cursor: pointer; padding: 12px 14px; list-style: none; }

@@ -31,6 +31,22 @@ def _is_big_three(home: str, away: str) -> bool:
     return any(k in blob for k in BIG_THREE)
 
 
+def _load_team_aliases(sb) -> None:
+    """Populate abola.TEAM_ALIAS_NAMES from the team_aliases table, so A Bola is
+    searched with the names it actually uses (e.g. 'AFS' -> 'Aves SAD'). Best
+    effort: a missing table just leaves the built-in aliases in effect."""
+    try:
+        rows = sb._rest("GET", "team_aliases?select=alias,team:teams(name)").json()
+    except Exception:  # noqa: BLE001
+        return
+    m: dict[str, list[str]] = {}
+    for r in rows:
+        name = (r.get("team") or {}).get("name")
+        if name and r.get("alias"):
+            m.setdefault(abola._norm(name), []).append(r["alias"])
+    abola.TEAM_ALIAS_NAMES = m
+
+
 def _fetch_match(sb: sync.Supabase, match_id: str) -> dict | None:
     rows = sb._rest(
         "GET",
@@ -168,6 +184,7 @@ def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
         delay: float) -> dict:
     sync._load_dotenv()
     sb = sync.Supabase()
+    _load_team_aliases(sb)
     run_id = sync._begin_run(sb, run_id=run_id, trigger="manual", kind="reporter",
                              target=match_id, github_run_id=github_run_id,
                              source="abola")
@@ -206,6 +223,7 @@ def run_round(games: list[dict], *, round_no: int | None = None,
     each crónica once), then stores + links each. One reporter crawl_runs row."""
     sync._load_dotenv()
     sb = sync.Supabase()
+    _load_team_aliases(sb)
     run_id = sync._begin_run(
         sb, run_id=run_id, trigger="manual", kind="reporter",
         target=(str(round_no) if round_no is not None else "round"),
