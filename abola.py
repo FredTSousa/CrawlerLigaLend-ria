@@ -481,30 +481,30 @@ def _deepdive_entry(el, id_map: dict) -> list[dict]:
 
 
 def _leading_score_row(el) -> list[dict]:
-    """Deep dive with the score BEFORE the name: '<strong>7 Rui Silva —</strong>
-    narrative' (Sporting/Porto own-team pages). The full name is in the text
-    (the autolink is often just the surname, e.g. 'Maxi' for 'Maxi Araújo'), so
-    take the name from the text and the id from the first player link."""
-    strong = el.find("strong")
-    if not strong:
-        return []
-    m = re.match(r"\s*(10|\d)(?!\d)", strong.get_text(" ", strip=True))
+    """Deep dive with the score BEFORE the name. Three spellings seen:
+        '7 Rui Silva — narrative'        (score then name, space-separated)
+        '5 Diomande — narrative'         (bold is just the score; name is a link)
+        '5 - MAXI ARAÚJO — narrative'    ('-' between the score and the name)
+    Parse from TEXT: the score is the leading number, the name is what's left
+    after dropping the score (and a '-' separator) up to the narrative dash, and
+    the id comes from the first player link. A player autolink is required so
+    listicles ('5 Coisas — …') are out."""
+    full = el.get_text(" ", strip=True)
+    m = re.match(r"\s*(10|\d)(?!\d)", full)
     if not m:
         return []
     a = el.find("a", attrs={"data-resource-type": "player"})
-    if not a:                                # a real rating row links the player
+    if not a:
         return []
-    full = el.get_text(" ", strip=True)
-    parts = re.split(r"\s[–—-]\s", full, maxsplit=1)
-    if len(parts) < 2:                       # require the narrative separator
-        return []
-    name = _player_name(re.sub(r"^\s*\d+\s*", "", parts[0]))
-    if not name or not name[:1].isupper():   # not a listicle ("5 Coisas — …")
+    rest = re.sub(r"^\s*\d+\s*[–—-]*\s*", "", full)   # drop score + '-' separator
+    parts = re.split(r"\s[–—-]\s", rest, maxsplit=1)   # split off the narrative
+    name = _player_name(parts[0])
+    if not name or not name[:1].isupper():
         return []
     return [{
         "player_name": name, "player_id": _player_id(a),
         "score": int(m.group(1)), "is_mvp": False,
-        "description": parts[1].strip() or None,
+        "description": (parts[1].strip() or None) if len(parts) > 1 else None,
     }]
 
 
