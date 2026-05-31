@@ -55,11 +55,16 @@ export default function ReporterLinker({
   const supabase = createClient();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // Entries linked this session — the stored ratings only re-annotate on the
-  // next sync, so hide them from the leftover list immediately.
-  const [resolved, setResolved] = useState<Set<string>>(new Set());
+  // Which player each entry was linked to THIS session (the stored ratings only
+  // re-annotate on the next sync). Combined with the live reporter_linked state,
+  // this lets an entry return to the leftover list when its player is unlinked.
+  const [manualLinks, setManualLinks] = useState<Record<string, string>>({});
 
-  async function call(fn: string, args: Record<string, unknown>, resolveKey?: string) {
+  async function call(
+    fn: string,
+    args: Record<string, unknown>,
+    link?: { key: string; playerId: string },
+  ) {
     setBusy(true);
     setErr(null);
     const { error } = await supabase.rpc(fn, args);
@@ -68,7 +73,7 @@ export default function ReporterLinker({
       setErr(error.message);
       return;
     }
-    if (resolveKey) setResolved((p) => new Set(p).add(resolveKey));
+    if (link) setManualLinks((p) => ({ ...p, [link.key]: link.playerId }));
     router.refresh();
   }
 
@@ -84,7 +89,7 @@ export default function ReporterLinker({
         p_team_id: teamId,
         p_abola_id: entry.player_id ?? null,
       },
-      key,
+      { key, playerId: player.player_id },
     );
   }
 
@@ -106,9 +111,18 @@ export default function ReporterLinker({
 
   function section(team: Team, ratings: Rating[]) {
     const roster = players.filter((p) => p.team_id === team.id).sort(order);
+    // An entry is a leftover unless the player it's linked to (this session, or
+    // from the last sync) is CURRENTLY linked -- so unlinking a player frees its
+    // A Bola entry back into the dropdown.
+    const linkedIds = new Set(
+      roster.filter((p) => p.reporter_linked).map((p) => p.player_id),
+    );
     const leftovers = ratings
       .map((r, i) => ({ r, key: `${team.id}:${i}` }))
-      .filter(({ r, key }) => !r.zz_player_id && !resolved.has(key));
+      .filter(({ r, key }) => {
+        const pid = manualLinks[key] ?? r.zz_player_id;
+        return !(pid && linkedIds.has(pid));
+      });
     const linkedCount = roster.filter((p) => p.reporter_linked).length;
 
     return (
