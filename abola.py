@@ -434,19 +434,31 @@ def _immediate_rating(a) -> tuple[bool, int | None]:
 
 
 def _deepdive_entry(el, id_map: dict) -> list[dict]:
-    """One '<Name> (5) — narrative...' rating row (the big-three deep-dive
-    shape). Prefer the first autolink that carries a rating (keeps the id);
-    fall back to text when the player isn't linked."""
+    """One deep-dive rating row. The score sits in any of three spots:
+        'Diogo Costa (6) — …'   (after the name)
+        '(1) Bednarek — …'      (parenthetical, before the name)
+    plus the leading bare-number form handled by _leading_score_row. Prefer an
+    autolink for the id; fall back to text when the player isn't linked."""
     full = el.get_text(" ", strip=True)
-    desc = None
     parts = re.split(r"\s[–—-]\s", full, maxsplit=1)
-    if len(parts) > 1:
-        desc = parts[1].strip() or None
-    for a in el.find_all("a", attrs={"data-resource-type": "player"}):
-        has, sc = _immediate_rating(a)
+    desc = (parts[1].strip() or None) if len(parts) > 1 else None
+    a = el.find("a", attrs={"data-resource-type": "player"})
+    # Parenthetical score BEFORE the name: "(6) William Gomes — …"
+    lead = re.match(r"\s*\(\s*(" + _RATING + r")\s*\)\s*(.+)", parts[0])
+    if lead:
+        name = _player_name(lead.group(2))
+        if name:
+            return [{
+                "player_name": name,
+                "player_id": _player_id(a) if a else _attach_id(name, id_map),
+                "score": _score(lead.group(1)), "is_mvp": False, "description": desc,
+            }]
+    # Score AFTER the name: prefer an autolink that carries the rating.
+    for link in el.find_all("a", attrs={"data-resource-type": "player"}):
+        has, sc = _immediate_rating(link)
         if has:
             return [{
-                "player_name": a.get_text(strip=True), "player_id": _player_id(a),
+                "player_name": link.get_text(strip=True), "player_id": _player_id(link),
                 "score": sc, "is_mvp": False, "description": desc,
             }]
     m = ENTRY_RE.search(full)
@@ -606,6 +618,29 @@ def apply_mvp(teams: dict, boxes: list[dict]) -> None:
                 })
 
 
+def _dedupe_players(plist: list[dict]) -> list[dict]:
+    """Merge a player listed twice on one page -- some big-three pages carry a
+    one-line summary AND a per-player deep dive. Key by (name, score): the two
+    representations of one player share both, so they merge (keeping the richer
+    description/id); two DIFFERENT players who happen to share a name keep
+    distinct scores (Gil Vicente's two 'Zé Carlos', 5 and -), so they survive."""
+    merged: dict[tuple, dict] = {}
+    order: list[tuple] = []
+    for p in plist:
+        key = (_norm(p["player_name"]), p["score"])
+        if key not in merged:
+            merged[key] = p
+            order.append(key)
+        else:
+            ex = merged[key]
+            if not ex.get("description") and p.get("description"):
+                ex["description"] = p["description"]
+            if not ex.get("player_id") and p.get("player_id"):
+                ex["player_id"] = p["player_id"]
+            ex["is_mvp"] = ex.get("is_mvp") or p.get("is_mvp")
+    return [merged[k] for k in order]
+
+
 def parse_page(html: str, default_team: str | None = None) -> dict:
     """Parse one A Bola ratings page into {teams, mvp_boxes}.
 
@@ -622,11 +657,6 @@ def parse_page(html: str, default_team: str | None = None) -> dict:
         teams.setdefault(current, [])
 
     def add(rows):
-        # Each ratings element is parsed once (we iterate <p>/<hN>, not their
-        # wrapper <div>s), so we DON'T dedupe by name -- a team can legitimately
-        # field two players with the same name (e.g. Gil Vicente's two "Zé
-        # Carlos"), and both must be kept (then linked manually, since the name
-        # is ambiguous).
         bucket = teams.setdefault(current, [])
         bucket.extend(r for r in rows if r["player_name"])
 
@@ -644,6 +674,9 @@ def parse_page(html: str, default_team: str | None = None) -> dict:
             rows = _rating_rows(el)
             if rows:
                 add(rows)
+
+    for tname in teams:
+        teams[tname] = _dedupe_players(teams[tname])
 
     boxes = _mvp_boxes(soup)
     for b in boxes:  # tag each box with its page so apply_mvp can place it
