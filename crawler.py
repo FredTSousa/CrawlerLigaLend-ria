@@ -107,10 +107,13 @@ def fetch(session, url: str, *, retries: int = 3, delay: float = 1.0) -> str:
             else:
                 resp = session.get(url, headers=HEADERS, timeout=30)
             resp.raise_for_status()
-            # zerozero serves UTF-8; make sure it decodes as such.
+            # zerozero declares Windows-1252 (e.g. "Trincão" is byte 0xE3, not
+            # UTF-8). Respect the response's declared encoding; only guess when
+            # none is given. (Forcing utf-8 here corrupts accents to U+FFFD.)
             try:
-                resp.encoding = (getattr(resp, "apparent_encoding", None)
-                                 or "utf-8")
+                if not resp.encoding:
+                    resp.encoding = (getattr(resp, "apparent_encoding", None)
+                                     or "utf-8")
             except Exception:  # noqa: BLE001
                 pass
             return resp.text
