@@ -29,6 +29,7 @@ import re
 import sys
 import time
 import unicodedata
+import urllib.parse
 from datetime import date, datetime
 
 import requests
@@ -47,43 +48,37 @@ MAX_DATE_LAG_DAYS = 4
 
 
 # ----------------------------------------------------------------------------
-# Search backend (pluggable)
+# Search backend — A Bola's own search at /pesquisar (server-rendered results)
 # ----------------------------------------------------------------------------
 
-
-def _ddg_search(query: str, num_results: int = 15, *, retries: int = 3,
-                backoff: float = 6.0) -> list[str]:
-    """DuckDuckGo backend (no API key). Retries with backoff because DDG
-    throttles bursts of queries (space your runs out)."""
-    from ddgs import DDGS
-    for attempt in range(1, retries + 1):
-        try:
-            with DDGS() as d:
-                urls = [r["href"] for r in d.text(query, max_results=num_results)
-                        if r.get("href")]
-            if urls:
-                return urls
-        except Exception as err:  # noqa: BLE001
-            print(f"  ! DDG search {attempt}/{retries} {query!r}: {err}",
-                  file=sys.stderr)
-        if attempt < retries:
-            time.sleep(backoff * attempt)
-    return []
+SEARCH_URL = "https://www.abola.pt/pesquisar?q="
+ARTICLE_RE = re.compile(
+    r'href="((?:https://www\.abola\.pt)?/(?:futebol/)?noticias/[a-z0-9\-]+-\d{12,})"')
 
 
-def _google_search(query: str, num_results: int = 15) -> list[str]:
-    """Fallback backend (googlesearch-python; often rate-limited/blocked)."""
-    from googlesearch import search
+def abola_search(query: str) -> list[tuple[date, str]]:
+    """Query abola.pt/pesquisar; return [(article_date, url)] (date-sorted)."""
     try:
-        return list(search(query, num_results=num_results, lang="pt"))
+        r = requests.get(SEARCH_URL + urllib.parse.quote(query),
+                         headers=HEADERS, timeout=30)
+        r.raise_for_status()
     except Exception as err:  # noqa: BLE001
-        print(f"  ! Google search failed for {query!r}: {err}", file=sys.stderr)
+        print(f"  ! search failed for {query!r}: {err}", file=sys.stderr)
         return []
+    out, seen = [], set()
+    for h in ARTICLE_RE.findall(r.text):
+        u = h if h.startswith("http") else "https://www.abola.pt" + h
+        if u in seen:
+            continue
+        seen.add(u)
+        d = url_date(u)
+        if d:
+            out.append((d, u))
+    return out
 
 
-# Default to DuckDuckGo. Override with your own f(query, num_results) -> [url]
-# (e.g. a SerpAPI / Google Custom Search backend) if you prefer.
-SEARCH = _ddg_search
+# Pluggable: override SEARCH with f(query) -> [(date, url)] if needed.
+SEARCH = abola_search
 
 
 # ----------------------------------------------------------------------------
@@ -147,30 +142,48 @@ def fetch(url: str, *, retries: int = 3, delay: float = 1.0) -> str:
 # ----------------------------------------------------------------------------
 
 
-def find_article(query: str, game_date: date, *, require: list[str] | None = None,
-                 num_results: int = 30) -> str | None:
-    """Search, keep abola.pt article results whose (URL) date is in
-    [game_date, game_date + MAX_DATE_LAG_DAYS], closest first. Prefer URLs that
-    contain ALL `require` substrings (e.g. ['notas','sporting']); fall back to
-    the closest dated article if none match."""
-    require = [r.lower() for r in (require or [])]
-    dated = []
-    for url in SEARCH(query, num_results):
-        if "abola.pt" not in url or url.rstrip("/").endswith("comments"):
+def _team_token(team: str) -> str:
+    """Last significant word, accent-stripped (for matching team in a URL)."""
+    words = [w for w in re.split(r"\s+", team.strip()) if w]
+    return _norm(words[-1]) if words else _norm(team)
+
+
+def _in_window(d: date, game_date: date) -> bool:
+    return 0 <= (d - game_date).days <= MAX_DATE_LAG_DAYS
+
+
+def find_team_notas(team: str, game_date: date) -> str | None:
+    """Find the 'as notas do <team>' page for a match on/just after game_date.
+    Reliable for teams A Bola rates individually (big three, European teams,
+    and opponents of the big three)."""
+    token = _team_token(team)
+    cands = [(d, u) for d, u in SEARCH(f"as notas do {team}")
+             if _in_window(d, game_date) and "notas" in u and token in u.lower()]
+    cands.sort()
+    return cands[0][1] if cands else None
+
+
+def find_cronica(home: str, away: str, game_date: date) -> str | None:
+    """Find the single 'crónica' page (non-big-three). Crónica titles rarely
+    contain team names, so we collect recent crónicas near the date and OPEN
+    each to confirm it covers both teams."""
+    cands = {}
+    for q in (f"{home} {away} crónica", f"{away} {home} crónica", "crónica"):
+        for d, u in SEARCH(q):
+            if "cronica" in u and _in_window(d, game_date):
+                cands[u] = d
+    ht, at = _team_token(home), _team_token(away)
+    for u in sorted(cands, key=lambda x: cands[x]):
+        try:
+            page = parse_page(fetch(u))
+        except Exception:  # noqa: BLE001
             continue
-        d = url_date(url)
-        if d is None:
-            continue
-        lag = (d - game_date).days
-        if 0 <= lag <= MAX_DATE_LAG_DAYS:
-            dated.append((lag, url))
-    dated.sort()
-    if require:
-        # Hard filter: only return an article that really is the notas/crónica
-        # page (never fall back to an unrelated same-day article).
-        strict = [u for _, u in dated if all(r in u.lower() for r in require)]
-        return strict[0] if strict else None
-    return dated[0][1] if dated else None
+        names = {_norm(t) for t in page["teams"]}
+        blob = " ".join(names)
+        if any(ht in n for n in names) and any(at in n for n in names) \
+                or (ht in blob and at in blob):
+            return u
+    return None
 
 
 # ----------------------------------------------------------------------------
@@ -259,13 +272,18 @@ def _layout_b_player(p, strong) -> dict | None:
     if not a:
         return None
     bold = strong.get_text(" ", strip=True)
-    sm = re.match(r"\s*(-?\d+)\b", bold)
-    score = int(sm.group(1)) if sm else None
-    # name = bold minus leading score and trailing dash
-    name = bold
-    if sm:
-        name = name[sm.end():]
-    # strip leading/trailing dashes (hyphen, en-dash, em-dash) and spaces
+    # Two score positions seen across A Bola pages:
+    #   leading:       "7 Rui Silva —"
+    #   parenthetical: "Trubin (8)" / "Tomás Araújo (6)" / "Name (-)"
+    name, score = bold, None
+    lead = re.match(r"\s*(-?\d+)\b", bold)
+    paren = re.search(r"\(\s*([\d\-–]+)\s*\)", bold)
+    if lead:
+        score = int(lead.group(1))
+        name = bold[lead.end():]
+    elif paren:
+        score = _score(paren.group(1))
+        name = bold[:paren.start()] + bold[paren.end():]
     name = re.sub(r"^[\s–—-]+|[\s–—-]+$", "", name)
     # description = everything in <p> after the <strong>
     desc_parts, seen = [], False
@@ -387,14 +405,11 @@ def scrape_match(match: dict, *, single_url: str | None = None,
     }
 
     if big3:
-        # Include the opponent so the search pins the *specific* match's notes.
         if home_url is None and single_url is None:
-            home_url = find_article(f'site:abola.pt "as notas do {home}" {away}',
-                                    gdate, require=["notas", _slug(home)])
-            time.sleep(delay)  # space out searches (DDG rate-limits bursts)
+            home_url = find_team_notas(home, gdate)
+            time.sleep(delay)
         if away_url is None and single_url is None:
-            away_url = find_article(f'site:abola.pt "as notas do {away}" {home}',
-                                    gdate, require=["notas", _slug(away)])
+            away_url = find_team_notas(away, gdate)
         if home_url:
             out["urls_used"].append(home_url)
             page = parse_page(fetch(home_url), default_team=home)
@@ -408,8 +423,7 @@ def scrape_match(match: dict, *, single_url: str | None = None,
                 next(iter(page["teams"].values()), [])
     else:
         if single_url is None:
-            single_url = find_article(f'site:abola.pt "{home} {away} crónica"',
-                                      gdate, require=["cronica"])
+            single_url = find_cronica(home, away, gdate)
         if single_url:
             out["urls_used"].append(single_url)
             page = parse_page(fetch(single_url))
