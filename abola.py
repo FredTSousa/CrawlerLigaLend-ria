@@ -522,44 +522,85 @@ def _rating_rows(el) -> list[dict]:
     return _inline_entries(text, id_map) if n >= 2 else _deepdive_entry(el, id_map)
 
 
+def _score_name_from_text(text: str) -> tuple:
+    """(name, score, desc) from a player line in any rating spelling:
+    'score - Name — desc', 'score Name — desc', '(score) Name', 'Name (score)'."""
+    text = text.strip()
+    m = re.match(r"(10|\d)(?!\d)\s*[–—-]*\s*(.+)", text)           # leading score
+    if m:
+        rest = re.split(r"\s[–—-]\s", m.group(2), maxsplit=1)
+        name = _player_name(rest[0])
+        if name and name[:1].isupper():
+            return name, int(m.group(1)), (rest[1].strip() or None) if len(rest) > 1 else None
+    m = re.match(r"\(\s*(" + _RATING + r")\s*\)\s*(.+)", text)      # (score) Name
+    if m:
+        rest = re.split(r"\s[–—-]\s", m.group(2), maxsplit=1)
+        name = _player_name(rest[0])
+        if name:
+            return name, _score(m.group(1)), (rest[1].strip() or None) if len(rest) > 1 else None
+    m = ENTRY_RE.search(text)                                       # Name (score)
+    if m:
+        name = _player_name(m.group(1))
+        if name:
+            return name, _score(m.group(2)), None
+    return None, None, None
+
+
+def _mvp_narrative(node, title: str) -> str | None:
+    anc = node.parent
+    for _ in range(5):
+        if anc is None:
+            return None
+        full = anc.get_text(" ", strip=True)
+        if len(full) > len(title) + 5 and title in full:
+            return full.split(title, 1)[1].strip() or None
+        anc = anc.parent
+    return None
+
+
 def _mvp_boxes(soup) -> list[dict]:
     """Find 'O melhor em campo' / 'A figura' boxes -> name, score, team, text.
-    Two layouts: label-first ("O melhor em campo: Name (7)") and label-last
-    ("Prestianni (7) — o melhor em campo")."""
+    Three layouts: label-first ("O melhor em campo: Name (7)"), label-last
+    ("Prestianni (7) — o melhor em campo"), and the visual "square" where the
+    label and the player line ("7 - Francisco Trincão — …") sit in separate
+    spans of one box."""
     boxes, seen = [], set()
     for node in soup.find_all(string=re.compile(r"melhor em campo|a figura", re.I)):
+        lbl = re.search(r"(?:o\s+)?melhor em campo|a figura", node, re.I)
+        name = score = team = narrative = None
         m = MVP_RE.search(node)
         if m:
-            kind_src, team_title, name_src, paren = \
-                m.group(1), m.group(2), m.group(3), m.group(4)
-        else:
-            m = MVP_SUFFIX_RE.search(node)
-            if not m:
-                continue
-            kind_src, team_title, name_src, paren = \
-                m.group(3), None, m.group(1), m.group(2)
-        name = _clean_name(name_src)
+            name, paren = _clean_name(m.group(3)), m.group(4).strip()
+            if re.fullmatch(r"(?:nota\s*)?[\d\-–—]+", paren, re.I):
+                score, team = _score(paren), (m.group(2) or "").strip() or None
+            else:  # the parenthesis is the team, not a score
+                score, team = None, (m.group(2) or paren).strip() or None
+            narrative = _mvp_narrative(node, m.group(0))
+        elif (m := MVP_SUFFIX_RE.search(node)):
+            name, score = _clean_name(m.group(1)), _score(m.group(2))
+            narrative = _mvp_narrative(node, m.group(0))
+        elif re.match(r"\s*(?:(?:o\s+)?melhor em campo|a figura)\b", node, re.I):
+            # "square": label here, player line in a sibling span of the box.
+            box = node.parent
+            for _ in range(4):
+                if box is None:
+                    break
+                after = re.split(r"(?i)(?:o\s+)?melhor em campo|a figura",
+                                 box.get_text(" ", strip=True), maxsplit=1)
+                if len(after) > 1:
+                    name, score, narrative = \
+                        _score_name_from_text(after[1].lstrip(" :—–-"))
+                    if name:
+                        break
+                box = box.parent
+        if not name:
+            continue
         key = _norm(name)
-        if not key or key in seen:
+        if key in seen:
             continue
         seen.add(key)
-        paren = paren.strip()
-        if re.fullmatch(r"(?:nota\s*)?[\d\-–—]+", paren, re.I):
-            score, team = _score(paren), (team_title or "").strip() or None
-        else:  # the parenthesis is the team, not a score
-            score, team = None, (team_title or paren).strip() or None
-        title = m.group(0)
-        narrative, anc = None, node.parent
-        for _ in range(5):
-            if anc is None:
-                break
-            full = anc.get_text(" ", strip=True)
-            if len(full) > len(title) + 5 and title in full:
-                narrative = full.split(title, 1)[1].strip() or None
-                break
-            anc = anc.parent
         boxes.append({
-            "kind": "melhor" if "melhor" in kind_src.lower() else "figura",
+            "kind": "melhor" if (lbl and "melhor" in lbl.group(0).lower()) else "figura",
             "team": team, "name": name, "score": score, "description": narrative,
         })
     return boxes
