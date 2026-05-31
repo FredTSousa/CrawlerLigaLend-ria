@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 
 import abola
@@ -40,6 +41,31 @@ def _fetch_match(sb: sync.Supabase, match_id: str) -> dict | None:
     return rows[0] if rows else None
 
 
+def _last(name: str) -> str:
+    parts = [w for w in re.split(r"\s+", name.strip()) if w]
+    return abola._norm(parts[-1]) if parts else abola._norm(name)
+
+
+def _match_player(name, zz):
+    """Match an A Bola name (often a surname, e.g. 'VAGIANNIDIS') to a zerozero
+    full name ('Georgios Vagiannidis'). Returns player_id or None."""
+    na = abola._norm(name)
+    if not na:
+        return None
+    for pid, pn in zz:                       # exact
+        if abola._norm(pn) == na:
+            return pid
+    for pid, pn in zz:                       # surname inside full name
+        npn = abola._norm(pn)
+        if na in npn or npn in na:
+            return pid
+    la = _last(name)
+    for pid, pn in zz:                       # last-token (surname) match
+        if _last(pn) == la:
+            return pid
+    return None
+
+
 def _link_scores(sb, match_id, team_id, ratings):
     """Best-effort: attach reporter scores to zerozero match_players by name."""
     if not team_id:
@@ -49,12 +75,13 @@ def _link_scores(sb, match_id, team_id, ratings):
         f"match_player_details?match_id=eq.{match_id}&team_id=eq.{team_id}"
         "&select=player_id,player_name",
     ).json()
-    by_norm = {abola._norm(p["player_name"]): p["player_id"] for p in players}
-    linked = 0
+    zz = [(p["player_id"], p["player_name"]) for p in players]
+    used, linked = set(), 0
     for r in ratings:
-        pid = by_norm.get(abola._norm(r["player_name"]))
+        pid = _match_player(r["player_name"], [z for z in zz if z[0] not in used])
         if not pid:
             continue
+        used.add(pid)
         sb.update("match_players", f"match_id=eq.{match_id}&player_id=eq.{pid}",
                   {"reporter_score": r["score"],
                    "reporter_is_mvp": bool(r["is_mvp"])})
