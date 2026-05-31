@@ -56,24 +56,42 @@ ARTICLE_RE = re.compile(
     r'href="((?:https://www\.abola\.pt)?/(?:futebol/)?noticias/[a-z0-9\-]+-\d{12,})"')
 
 
-def abola_search(query: str) -> list[tuple[date, str]]:
-    """Query abola.pt/pesquisar; return [(article_date, url)] (date-sorted)."""
-    try:
-        r = requests.get(SEARCH_URL + urllib.parse.quote(query),
-                         headers=HEADERS, timeout=30)
-        r.raise_for_status()
-    except Exception as err:  # noqa: BLE001
-        print(f"  ! search failed for {query!r}: {err}", file=sys.stderr)
-        return []
+def abola_search(query: str, pages: int = 1,
+                 until_date: date | None = None) -> list[tuple[date, str]]:
+    """Query abola.pt/pesquisar; return [(article_date, url)] (date-sorted).
+    Fetches up to `pages` pages. Results come newest-first, so if `until_date`
+    is given, stop paging once a page's newest article predates it (deeper
+    pages are only older still) -- lets callers walk back exactly to a match's
+    date without a fixed page count."""
     out, seen = [], set()
-    for h in ARTICLE_RE.findall(r.text):
-        u = h if h.startswith("http") else "https://www.abola.pt" + h
-        if u in seen:
-            continue
-        seen.add(u)
-        d = url_date(u)
-        if d:
-            out.append((d, u))
+    for page in range(1, pages + 1):
+        url = SEARCH_URL + urllib.parse.quote(query)
+        if page > 1:
+            url += f"&page={page}"
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=30)
+            r.raise_for_status()
+        except Exception as err:  # noqa: BLE001
+            # A short result set 404s on later pages -- that's "no more pages",
+            # not a real failure; only surface an error on the very first page.
+            if page == 1:
+                print(f"  ! search failed for {query!r}: {err}", file=sys.stderr)
+            break
+        found, newest = 0, None
+        for h in ARTICLE_RE.findall(r.text):
+            u = h if h.startswith("http") else "https://www.abola.pt" + h
+            if u in seen:
+                continue
+            seen.add(u)
+            d = url_date(u)
+            if d:
+                out.append((d, u))
+                found += 1
+                newest = d if newest is None else max(newest, d)
+        if found == 0 and page > 1:
+            break  # no more pages
+        if until_date and newest is not None and newest < until_date:
+            break  # paged back past the window of interest
     return out
 
 
@@ -142,10 +160,26 @@ def fetch(url: str, *, retries: int = 3, delay: float = 1.0) -> str:
 # ----------------------------------------------------------------------------
 
 
-def _team_token(team: str) -> str:
-    """Last significant word, accent-stripped (for matching team in a URL)."""
-    words = [w for w in re.split(r"\s+", team.strip()) if w]
-    return _norm(words[-1]) if words else _norm(team)
+# Club-type abbreviations to ignore when picking a team's distinctive token.
+CLUB_ABBR = {"fc", "sc", "ac", "cd", "sl", "ad", "gd", "cf", "sad", "avs",
+             "ud", "cs", "sg", "praia"}
+
+
+def _team_tokens(team: str) -> set[str]:
+    """Distinctive name tokens for matching a team in a URL / page. A Bola uses
+    short forms ('Estoril Praia' -> 'estoril', 'Vitória SC' -> 'vitoria',
+    'SC Braga' -> 'braga'), so drop club-type words and keep the rest."""
+    toks = {_norm(w) for w in re.split(r"\s+", team.strip()) if w}
+    sig = {t for t in toks if t and len(t) >= 3 and t not in CLUB_ABBR}
+    return sig or {_norm(team)}
+
+
+def _clean_team(team: str) -> str:
+    """Team name without club-type words, matching A Bola's short form
+    ('Estoril Praia' -> 'Estoril', 'Vitória SC' -> 'Vitória')."""
+    words = [w for w in re.split(r"\s+", team.strip())
+             if _norm(w) not in CLUB_ABBR]
+    return " ".join(words) or team
 
 
 def _in_window(d: date, game_date: date) -> bool:
@@ -153,35 +187,37 @@ def _in_window(d: date, game_date: date) -> bool:
 
 
 def find_team_notas(team: str, game_date: date) -> str | None:
-    """Find the 'as notas do <team>' page for a match on/just after game_date.
-    Reliable for teams A Bola rates individually (big three, European teams,
-    and opponents of the big three)."""
-    token = _team_token(team)
-    cands = [(d, u) for d, u in SEARCH(f"as notas do {team}")
-             if _in_window(d, game_date) and "notas" in u and token in u.lower()]
-    cands.sort()
-    return cands[0][1] if cands else None
+    """Find the 'as notas do <team>' page for a match on/just after game_date."""
+    tokens = _team_tokens(team)
+    clean = _clean_team(team)
+    for q in (f"as notas do {clean}", f"notas {clean}", f"as notas do {team}"):
+        cands = [(d, u) for d, u in abola_search(q, pages=2)
+                 if _in_window(d, game_date) and "notas" in u
+                 and any(t in u.lower() for t in tokens)]
+        cands.sort()
+        if cands:
+            return cands[0][1]
+    return None
 
 
 def find_cronica(home: str, away: str, game_date: date) -> str | None:
     """Find the single 'crónica' page (non-big-three). Crónica titles rarely
-    contain team names, so we collect recent crónicas near the date and OPEN
-    each to confirm it covers both teams."""
-    cands = {}
-    for q in (f"{home} {away} crónica", f"{away} {home} crónica", "crónica"):
-        for d, u in SEARCH(q):
-            if "cronica" in u and _in_window(d, game_date):
-                cands[u] = d
-    ht, at = _team_token(home), _team_token(away)
+    name the teams (and 'Nacional' literally means 'national', so title/slug
+    matching gives false hits), so we DON'T filter by title: list every crónica
+    in the date window and OPEN each, confirming the parsed teams cover both
+    sides. Paging walks back exactly to the game date via `until_date`."""
+    ht, at = _team_tokens(home), _team_tokens(away)
+    cands: dict[str, date] = {}
+    for d, u in abola_search("crónica", pages=15, until_date=game_date):
+        if "cronica" in u and _in_window(d, game_date):
+            cands[u] = d
     for u in sorted(cands, key=lambda x: cands[x]):
         try:
             page = parse_page(fetch(u))
         except Exception:  # noqa: BLE001
             continue
-        names = {_norm(t) for t in page["teams"]}
-        blob = " ".join(names)
-        if any(ht in n for n in names) and any(at in n for n in names) \
-                or (ht in blob and at in blob):
+        names = " ".join(_norm(t) for t in page["teams"])
+        if any(t in names for t in ht) and any(t in names for t in at):
             return u
     return None
 
@@ -241,7 +277,12 @@ def _team_of_header(strong) -> str | None:
     tl = strong.find("a", attrs={"data-resource-type": "team"})
     if tl:
         return tl.get_text(strip=True)
-    m = re.search(r"as notas d\w*\s+(?:jogadores\s+d\w*\s+)?(.+?)\s*:",
+    # No team autolink (common for the second team's header): parse the name
+    # from the header text. The ":" and the "(formation)" suffix often live
+    # OUTSIDE the <strong> ("...do Vitória de Guimarães (4x2x3x1)" : Charles…),
+    # so stop at the first of "(", ":" or end-of-string -- requiring a trailing
+    # colon here would silently drop the team and dump its players elsewhere.
+    m = re.search(r"as notas d\w*\s+(?:jogadores\s+d\w*\s+)?(.+?)\s*(?:\(|:|$)",
                   strong.get_text(" ", strip=True), re.I)
     return m.group(1).strip() if m else None
 
@@ -304,6 +345,62 @@ def _layout_b_player(p, strong) -> dict | None:
     }
 
 
+# Leading "O melhor em campo" / "A figura" -- those <p>s are handled by the MVP
+# box pass, not as rating rows.
+MVP_LEAD_RE = re.compile(r"^\s*(o melhor em campo|a figura)\b", re.I)
+
+
+def _immediate_rating(a) -> tuple[bool, int | None]:
+    """(has_rating_token, score) for the bare '(..)' right after a player link:
+    '(6)' -> (True, 6), '(-)' -> (True, None), prose like '(35 anos)' or a plain
+    mention -> (False, None). The token -- not a numeric score -- is what marks a
+    ratings entry, so unrated subs written '(-)' are still counted."""
+    nxt = a.next_sibling
+    s = nxt if isinstance(nxt, str) else (nxt.get_text() if nxt else "")
+    m = re.match(r"\s*\(\s*([\d\-–]+)\s*\)", s or "")
+    return (True, _score(m.group(1))) if m else (False, None)
+
+
+def _deepdive_player(p, a) -> dict:
+    """Header-less deep dive: '<a>Name</a> (5) — narrative...' (one per <p>)."""
+    full = p.get_text(" ", strip=True)
+    parts = re.split(r"\s[–—-]\s", full, maxsplit=1)
+    return {
+        "player_name": a.get_text(strip=True),
+        "player_id": _player_id(a),
+        "score": _immediate_rating(a)[1],
+        "is_mvp": False,
+        "description": (parts[1].strip() if len(parts) > 1 else None) or None,
+    }
+
+
+def _headerless_players(p, current: str) -> list[dict]:
+    """Players from a <p> with no notas <strong> header. Two big-three shapes:
+      * inline ratings list (opponent page): 'A (6); B (4), C (4) ...' -- most
+        links carry an immediate score  -> one entry per link.
+      * per-player deep dive (big-three page): '<a>Trubin</a> (5) — text', where
+        the rated player is the FIRST link and the rest are narrative mentions.
+    Returns [] for ordinary prose (no link carries an immediate rating)."""
+    if MVP_LEAD_RE.search(p.get_text(" ", strip=True)):
+        return []  # MVP box -> handled by _mvp_boxes
+    links = p.find_all("a", attrs={"data-resource-type": "player"})
+    if not links:
+        return []
+    rated = [_immediate_rating(a) for a in links]
+    n_rated = sum(has for has, _ in rated)
+    if n_rated >= 2 and n_rated >= len(links) * 0.6:
+        return [{
+            "player_name": a.get_text(strip=True), "player_id": _player_id(a),
+            "score": sc, "is_mvp": False, "description": None,
+        } for a, (_, sc) in zip(links, rated)]
+    # Deep dive: the rated player is the first link carrying a rating token --
+    # not necessarily links[0], which is sometimes an empty/icon anchor.
+    for a, (has, _) in zip(links, rated):
+        if has:
+            return [_deepdive_player(p, a)]
+    return []
+
+
 def parse_page(html: str, default_team: str | None = None) -> dict:
     """Return {teams: {team_name: [players]}, has_melhor, mvp_names: {...}}."""
     soup = BeautifulSoup(html, "lxml")
@@ -311,6 +408,14 @@ def parse_page(html: str, default_team: str | None = None) -> dict:
     current = default_team
     if current:
         teams.setdefault(current, [])
+
+    # Crónica/inline pages carry "as notas d<team>" inside a <p><strong> header;
+    # big-three "as notas" pages put that header in an <h1>/<h2> and the ratings
+    # in header-less <p>s. Detect which, so header-less parsing only runs where
+    # there's no <p><strong> header to misread.
+    has_strong_header = any(
+        (s := p.find("strong")) and NOTAS_RE.search(s.get_text(" ", strip=True))
+        for p in soup.find_all("p"))
 
     for p in soup.find_all("p"):
         strong = p.find("strong")
@@ -327,6 +432,12 @@ def parse_page(html: str, default_team: str | None = None) -> dict:
             if player and current:
                 teams.setdefault(current, [])
                 teams[current].append(player)
+            continue
+        if not has_strong_header and current:
+            extra = _headerless_players(p, current)
+            if extra:
+                teams.setdefault(current, [])
+                teams[current].extend(extra)
 
     # MVP boxes. "A figura" counts as MVP only when there's no "O melhor em
     # campo" on the page; "O melhor em campo" always wins.
@@ -368,7 +479,10 @@ def parse_page(html: str, default_team: str | None = None) -> dict:
 
 
 def _pick_team(teams: dict, want: str) -> list:
-    """Best-effort match of a parsed team bucket to the wanted team name."""
+    """Best-effort match of a parsed team bucket to the wanted team name.
+    A Bola's name often differs from zerozero's ('Vitória SC' vs 'Vitória de
+    Guimarães', 'Sporting' vs 'Sporting CP'), so after exact/substring checks
+    fall back to distinctive-token overlap and take the best-matching bucket."""
     wn = _norm(want)
     for name, players in teams.items():
         if _norm(name) == wn:
@@ -376,7 +490,14 @@ def _pick_team(teams: dict, want: str) -> list:
     for name, players in teams.items():
         if wn and (wn in _norm(name) or _norm(name) in wn):
             return players
-    return []
+    want_tokens = _team_tokens(want)
+    best, best_score = [], 0
+    for name, players in teams.items():
+        nn = _norm(name)
+        score = sum(1 for t in want_tokens if t in nn)
+        if score > best_score:
+            best, best_score = players, score
+    return best
 
 
 # ----------------------------------------------------------------------------
