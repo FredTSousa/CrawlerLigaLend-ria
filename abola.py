@@ -287,8 +287,10 @@ def find_cronica(home: str, away: str, game_date: date) -> str | None:
 
 # Header phrase. A Bola writes it as "As notas dos jogadores do X", "NOTAS DOS
 # JOGADORES DO X" (no leading "As"), or "os destaques do X" -- so "as"/"os" are
-# optional and "notas"/"destaques" both count.
-_HDR = r"(?:(?:as\s+)?notas|(?:os\s+)?destaques)"
+# optional and "notas"/"destaques" both count. Crónicas instead head each team's
+# inline ratings with the starting eleven, "Onze do X (4x3x3): Name (6); ...",
+# so "(o) onze" counts as a header too.
+_HDR = r"(?:(?:as\s+)?notas|(?:os\s+)?destaques|(?:o\s+)?onze)"
 NOTAS_RE = re.compile(_HDR + r"\s+d", re.I)
 # A bare rating token. A Bola rates 0-10, so cap it there: this rejects not just
 # formations "(4x2x3x1)" / "(35 anos)" but stray stats in prose like "(43)" that
