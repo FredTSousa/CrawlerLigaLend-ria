@@ -244,11 +244,14 @@ def find_cronica(home: str, away: str, game_date: date) -> str | None:
 # Parsing
 # ----------------------------------------------------------------------------
 
-NOTAS_RE = re.compile(r"as notas d", re.I)
+# Header phrase. A Bola writes it both "As notas dos jogadores do X" and
+# "NOTAS DOS JOGADORES DO X" (no leading "As"), so make "as" optional.
+NOTAS_RE = re.compile(r"(?:as\s+)?notas d", re.I)
 # A bare rating token. A Bola rates 0-10, so cap it there: this rejects not just
 # formations "(4x2x3x1)" / "(35 anos)" but stray stats in prose like "(43)" that
-# would otherwise look like a rating and pull narrative into the list.
-_RATING = r"(?:10|\d|[-–])"
+# would otherwise look like a rating and pull narrative into the list. An unrated
+# player is "(-)" / "(–)" / "(—)" (hyphen, en-dash or em-dash) -> score None.
+_RATING = r"(?:10|\d|[-–—])"
 TOKEN_RE = re.compile(r"\(\s*" + _RATING + r"\s*\)")
 # One inline ratings entry: a capitalised name immediately followed by "(score)".
 ENTRY_RE = re.compile(r"([A-ZÀ-Ÿ][^()]*?)\s*\(\s*(" + _RATING + r")\s*\)")
@@ -279,7 +282,7 @@ def _team_of_header(el) -> str | None:
     # Guimarães (4x2x3x1) : Charles…"), and on big-three pages the phrase sits in
     # the headline ("...(as notas do Benfica)"), so stop at the first "(", ":" or
     # end-of-string -- requiring a trailing colon would silently drop the team.
-    m = re.search(r"as notas d\w*\s+(?:jogadores\s+d\w*\s+)?(.+?)\s*(?:\(|:|$)",
+    m = re.search(r"(?:as\s+)?notas d\w*\s+(?:jogadores\s+d\w*\s+)?(.+?)\s*(?:\(|:|$)",
                   el.get_text(" ", strip=True), re.I)
     return re.sub(r"^[(\s]+|[)\s]+$", "", m.group(1)) or None if m else None
 
@@ -294,7 +297,7 @@ def _is_notas_header(el) -> bool:
         return False
     if el.name in ("h1", "h2", "h3", "h4", "h5", "h6"):
         return True
-    if text[:12].lower().startswith("as notas"):
+    if re.match(r"\s*(?:as\s+)?notas\b", text, re.I):
         return True
     s = el.find("strong")
     return bool(s and NOTAS_RE.search(s.get_text(" ", strip=True)))
@@ -303,7 +306,7 @@ def _is_notas_header(el) -> bool:
 def _strip_header_prefix(text: str) -> str:
     """Drop a leading 'As notas d<team> (formation) :' so only the ratings list
     that may follow it in the same element remains."""
-    return re.sub(r"(?i)^.*?as notas d.*?:\s*", "", text, count=1)
+    return re.sub(r"(?i)^.*?(?:as\s+)?notas d.*?:\s*", "", text, count=1)
 
 
 def _link_id_map(el) -> dict:
