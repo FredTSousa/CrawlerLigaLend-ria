@@ -284,7 +284,9 @@ _RATING = r"(?:10|\d|[-–—])"
 _CLOSE = r"[);,]"
 TOKEN_RE = re.compile(r"\(\s*" + _RATING + r"\s*" + _CLOSE)
 # One inline ratings entry: a capitalised name immediately followed by "(score)".
-ENTRY_RE = re.compile(r"([A-ZÀ-Ÿ][^()]*?)\s*\(\s*(" + _RATING + r")\s*" + _CLOSE)
+# A name never contains ":", so excluding it drops in-list labels like
+# "Suplentes :" that would otherwise glue onto the first substitute's name.
+ENTRY_RE = re.compile(r"([A-ZÀ-Ÿ][^():]*?)\s*\(\s*(" + _RATING + r")\s*" + _CLOSE)
 # MVP box. The parenthesis holds EITHER a score ("Richard Ríos (7)") OR the team
 # ("Larrazabal (Casa Pia)") -- both forms appear, so capture it raw and classify.
 MVP_RE = re.compile(
@@ -302,19 +304,42 @@ def _player_id(a) -> str | None:
     return m.group(1) if m else None
 
 
+def _header_strong(el):
+    """The <strong> holding the 'as notas d…' phrase, if the header uses one."""
+    s = el.find("strong")
+    return s if s and NOTAS_RE.search(s.get_text(" ", strip=True)) else None
+
+
 def _team_of_header(el) -> str | None:
     """Team named in an 'as notas d<team>' header (h1/h2/p/strong)."""
     tl = el.find("a", attrs={"data-resource-type": "team"})
     if tl and NOTAS_RE.search(el.get_text(" ", strip=True)):
         return tl.get_text(strip=True)
-    # No usable team autolink: parse the name from the header text. The ":" and
-    # the "(formation)" suffix often live outside the bold ("...do Vitória de
-    # Guimarães (4x2x3x1) : Charles…"), and on big-three pages the phrase sits in
-    # the headline ("...(as notas do Benfica)"), so stop at the first "(", ":" or
-    # end-of-string -- requiring a trailing colon would silently drop the team.
+    # Read the name from the header text. When a <strong> holds the phrase, read
+    # only IT -- otherwise, with no colon ("NOTAS DO AVES SAD Adriel Ramos (8)"),
+    # we'd swallow the first player into the team name. The ":" / "(formation)"
+    # suffix often live outside the bold, and on big-three pages the phrase is in
+    # the headline ("...(as notas do Benfica)"), so stop at "(", ":" or end.
+    src = _header_strong(el) or el
     m = re.search(r"(?:as\s+)?notas d\w*\s+(?:jogadores\s+d\w*\s+)?(.+?)\s*(?:\(|:|$)",
-                  el.get_text(" ", strip=True), re.I)
+                  src.get_text(" ", strip=True), re.I)
     return re.sub(r"^[(\s]+|[)\s]+$", "", m.group(1)) or None if m else None
+
+
+def _after_header(el) -> str:
+    """The inline ratings text that follows the header on the same line. When a
+    <strong> holds the phrase, take the siblings AFTER it (robust even with no
+    colon); otherwise strip the 'as notas d…:' prefix by regex."""
+    strong = _header_strong(el)
+    if strong:
+        parts, seen = [], False
+        for ch in el.children:
+            if ch is strong:
+                seen = True
+            elif seen:
+                parts.append(ch if isinstance(ch, str) else ch.get_text())
+        return re.sub(r"\s+", " ", "".join(parts)).strip()
+    return _strip_header_prefix(el.get_text(" ", strip=True))
 
 
 def _is_notas_header(el) -> bool:
@@ -470,15 +495,23 @@ def _mvp_boxes(soup) -> list[dict]:
     return boxes
 
 
-def _canonical_team(teams: dict, name: str) -> str:
+def _canonical_team(teams: dict, name: str, default_team: str | None = None) -> str:
     """Reuse an existing bucket when `name` is the same club under a variant
-    spelling ('Estoril' header vs default 'Estoril Praia'), so a single page
-    never splits one team across two buckets."""
+    spelling, so a single page never splits one team across two buckets.
+    First by exact/substring ('Estoril' header vs default 'Estoril Praia'); then,
+    ONLY against the page's default team, by alias tokens -- a big-three notas
+    page is titled with A Bola's name ('Aves SAD') while we seeded the bucket
+    with zerozero's ('AFS'), and those share no substring but are the same club.
+    The alias step is limited to the default team so two genuinely different
+    sides in a crónica never merge."""
     n = _norm(name)
     for tn in teams:
         t = _norm(tn)
         if t == n or (min(len(t), len(n)) >= 4 and (t in n or n in t)):
             return tn
+    if default_team and default_team in teams \
+            and _team_tokens(name) & _team_tokens(default_team):
+        return default_team
     return name
 
 
@@ -560,10 +593,10 @@ def parse_page(html: str, default_team: str | None = None) -> dict:
     for el in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p"]):
         if _is_notas_header(el):
             team = _team_of_header(el)
-            current = _canonical_team(teams, team) if team else current
+            current = _canonical_team(teams, team, default_team) if team else current
             if current:
                 teams.setdefault(current, [])
-                rest = _strip_header_prefix(el.get_text(" ", strip=True))
+                rest = _after_header(el)
                 if TOKEN_RE.search(rest):  # inline list on the same line
                     add(_inline_entries(rest, _link_id_map(el)))
             continue
