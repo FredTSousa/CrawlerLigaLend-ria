@@ -100,13 +100,16 @@ class Supabase:
         self._rest("PATCH", f"{table}?{match}", prefer="return=minimal",
                    json=patch)
 
-    def match_statuses(self, ids: list[str]) -> dict[str, str]:
-        """Current status of the given match ids (for forward-only updates)."""
+    def match_existing(self, ids: list[str]) -> dict[str, dict]:
+        """Current status + competition_id of the given match ids, so a crawl can
+        keep status moving forward only and never null out an already-known
+        league (live/single-match crawls don't carry a competition)."""
         if not ids:
             return {}
         inlist = ",".join(ids)
-        resp = self._rest("GET", f"matches?id=in.({inlist})&select=id,status")
-        return {r["id"]: r.get("status") for r in resp.json()}
+        resp = self._rest("GET",
+                          f"matches?id=in.({inlist})&select=id,status,competition_id")
+        return {r["id"]: r for r in resp.json()}
 
     def watch_list(self) -> list[dict]:
         """Matches flagged for live watching that aren't finished yet."""
@@ -244,13 +247,18 @@ def write_games(sb: Supabase, games: list[dict], *,
                   for g in games]
 
     # Status moves forward only (scheduled -> live -> final): a stale crawl
-    # must never revert a finished match back to live/scheduled.
+    # must never revert a finished match back to live/scheduled. Likewise, a
+    # live/single-match crawl carries no competition (competition_id is None) --
+    # preserve the league already on the row so subscription routing survives.
     rank = {"scheduled": 0, "live": 1, "final": 2, "postponed": 1}
-    existing = sb.match_statuses([r["id"] for r in match_rows])
+    existing = sb.match_existing([r["id"] for r in match_rows])
     for r in match_rows:
-        cur = existing.get(r["id"])
+        prev = existing.get(r["id"]) or {}
+        cur = prev.get("status")
         if cur and rank.get(cur, 0) > rank.get(r["status"], 0):
             r["status"] = cur
+        if r.get("competition_id") is None and prev.get("competition_id"):
+            r["competition_id"] = prev["competition_id"]
 
     sb.upsert("matches", match_rows, "id")
 
