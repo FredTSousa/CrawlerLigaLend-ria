@@ -288,6 +288,37 @@ def _finish_run(sb: Supabase, run_id: int | None, *, status: str,
     })
 
 
+def _maybe_fetch_reporter(game: dict, *, github_run_id: str | None,
+                          delay: float) -> None:
+    """After a finished single-match crawl, fetch A Bola reporter ratings too.
+    A direct match crawl can't tell live from final (the static page doesn't
+    say), so 'finished' is taken as a complete final score. Failures are logged,
+    never fatal -- the match sync already succeeded and the reporter fetch
+    records its own crawl_runs row."""
+    result = game.get("result") or {}
+    if result.get("home") is None or result.get("away") is None:
+        return  # no final score yet -> nothing for A Bola to have rated
+    try:
+        import reporter_sync  # lazy: reporter_sync imports sync (circular)
+        reporter_sync.run(game["game_id"], run_id=None,
+                          github_run_id=github_run_id, delay=delay)
+    except Exception as err:  # noqa: BLE001
+        print(f"  ! reporter auto-fetch failed: {err}", file=sys.stderr)
+
+
+def _maybe_fetch_round_reporters(games: list[dict], *, round_no: int | None,
+                                 github_run_id: str | None, delay: float) -> None:
+    """After a round crawl, batch-fetch A Bola reporter ratings for the finished
+    games (one collect_cronicas pass). Non-fatal; records its own reporter run.
+    run_round() filters to finished games, so passing the whole round is fine."""
+    try:
+        import reporter_sync  # lazy: reporter_sync imports sync (circular)
+        reporter_sync.run_round(games, round_no=round_no, run_id=None,
+                                github_run_id=github_run_id, delay=delay)
+    except Exception as err:  # noqa: BLE001
+        print(f"  ! reporter round auto-fetch failed: {err}", file=sys.stderr)
+
+
 def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
         trigger: str, github_run_id: str | None, delay: float) -> dict:
     sb = Supabase()
@@ -318,6 +349,19 @@ def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
         _finish_run(sb, run_id, status="success", games_count=len(games))
         print(f"Synced {len(games)} game(s). crawl_run #{run_id}",
               file=sys.stderr)
+
+        # Chain the A Bola reporter fetch onto manual (dashboard) crawls, for the
+        # finished games. Its own crawl_runs row(s); never fails the stats sync.
+        # Only on manual: scheduled crawls run often and ratings appear hours
+        # post-match. The live watcher uses write_games directly, so it's exempt.
+        if trigger == "manual":
+            if match_url:
+                _maybe_fetch_reporter(games[0], github_run_id=github_run_id,
+                                      delay=delay)
+            else:
+                _maybe_fetch_round_reporters(games, round_no=round_no,
+                                             github_run_id=github_run_id,
+                                             delay=delay)
         return {"run_id": run_id, "games": len(games)}
     except Exception as err:  # noqa: BLE001
         _finish_run(sb, run_id, status="error", error=str(err)[:2000])

@@ -132,6 +132,24 @@ def _link_scores(sb, match_id, team_id, ratings):
     return linked
 
 
+def _store_and_link(sb, match_id, home_team_id, away_team_id, data) -> tuple[int, int]:
+    """Persist one match's scraped reporter data + link it to zerozero players.
+    Returns (linked, total_ratings). Links first so each rating is annotated
+    with its zz_player_id before we store it."""
+    linked = _link_scores(sb, match_id, home_team_id, data["home_team_ratings"])
+    linked += _link_scores(sb, match_id, away_team_id, data["away_team_ratings"])
+    sb.upsert("matches_reporter_link", [{
+        "match_id": match_id,
+        "format_detected": data["format_detected"],
+        "urls": data["urls_used"],
+        "home_ratings": data["home_team_ratings"],
+        "away_ratings": data["away_team_ratings"],
+        "fetched_at": sync._now(),
+    }], "match_id")
+    total = len(data["home_team_ratings"]) + len(data["away_team_ratings"])
+    return linked, total
+
+
 def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
         delay: float) -> dict:
     sync._load_dotenv()
@@ -152,22 +170,8 @@ def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
                  "game_date": m["played_on"],
                  "is_big_three_match": _is_big_three(home, away)}
         data = abola.scrape_match(match, delay=delay)
-
-        # Link first: this annotates each rating with its zz_player_id, which we
-        # then persist so the UI can show which entry mapped to which player.
-        linked = _link_scores(sb, match_id, m["home_team_id"], data["home_team_ratings"])
-        linked += _link_scores(sb, match_id, m["away_team_id"], data["away_team_ratings"])
-
-        sb.upsert("matches_reporter_link", [{
-            "match_id": match_id,
-            "format_detected": data["format_detected"],
-            "urls": data["urls_used"],
-            "home_ratings": data["home_team_ratings"],
-            "away_ratings": data["away_team_ratings"],
-            "fetched_at": sync._now(),
-        }], "match_id")
-
-        total = len(data["home_team_ratings"]) + len(data["away_team_ratings"])
+        linked, total = _store_and_link(sb, match_id, m["home_team_id"],
+                                        m["away_team_id"], data)
         sync._finish_run(sb, run_id, status="success", games_count=total)
         print(f"Reporter: {total} ratings ({linked} linked) from "
               f"{len(data['urls_used'])} url(s). crawl_run #{run_id}",
@@ -176,6 +180,52 @@ def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
     except Exception as err:  # noqa: BLE001
         sync._finish_run(sb, run_id, status="error", error=str(err)[:2000])
         print(f"ERROR reporter crawl_run #{run_id}: {err}", file=sys.stderr)
+        raise
+
+
+def run_round(games: list[dict], *, round_no: int | None = None,
+              run_id: int | None = None, github_run_id: str | None = None,
+              delay: float = 1.5) -> list[dict]:
+    """Batch reporter fetch for a freshly-crawled round. Takes the crawler's
+    game dicts (game_id, home_team/away_team {id,name}, result, date), scrapes
+    A Bola for the FINISHED ones in a single pass (abola.scrape_matches collects
+    each crónica once), then stores + links each. One reporter crawl_runs row."""
+    sync._load_dotenv()
+    sb = sync.Supabase()
+    run_id = sync._begin_run(
+        sb, run_id=run_id, trigger="manual", kind="reporter",
+        target=(str(round_no) if round_no is not None else "round"),
+        github_run_id=github_run_id, source="abola")
+    try:
+        matches, meta = [], []
+        for g in games:
+            res = g.get("result") or {}
+            home = (g.get("home_team") or {}).get("name")
+            away = (g.get("away_team") or {}).get("name")
+            if res.get("home") is None or res.get("away") is None \
+                    or not g.get("date") or not home or not away:
+                continue  # only finished games with teams + a date
+            matches.append({"home_team": home, "away_team": away,
+                            "game_date": g["date"],
+                            "is_big_three_match": _is_big_three(home, away)})
+            meta.append((g["game_id"], (g.get("home_team") or {}).get("id"),
+                         (g.get("away_team") or {}).get("id")))
+
+        results = abola.scrape_matches(matches, delay=delay) if matches else []
+        total = 0
+        for (gid, hid, aid), data in zip(meta, results):
+            if data.get("error"):
+                print(f"  ! reporter {gid}: {data['error']}", file=sys.stderr)
+                continue
+            _, n = _store_and_link(sb, gid, hid, aid, data)
+            total += n
+        sync._finish_run(sb, run_id, status="success", games_count=len(matches))
+        print(f"Reporter (round): {total} ratings across {len(matches)} "
+              f"finished game(s). crawl_run #{run_id}", file=sys.stderr)
+        return results
+    except Exception as err:  # noqa: BLE001
+        sync._finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        print(f"ERROR reporter round crawl_run #{run_id}: {err}", file=sys.stderr)
         raise
 
 
