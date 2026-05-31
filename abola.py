@@ -459,15 +459,44 @@ def _deepdive_entry(el, id_map: dict) -> list[dict]:
     }] if name else []
 
 
+def _leading_score_row(el) -> list[dict]:
+    """Deep dive with the score BEFORE the name: '<strong>7 Rui Silva —</strong>
+    narrative' (Sporting/Porto own-team pages). The full name is in the text
+    (the autolink is often just the surname, e.g. 'Maxi' for 'Maxi Araújo'), so
+    take the name from the text and the id from the first player link."""
+    strong = el.find("strong")
+    if not strong:
+        return []
+    m = re.match(r"\s*(10|\d)(?!\d)", strong.get_text(" ", strip=True))
+    if not m:
+        return []
+    a = el.find("a", attrs={"data-resource-type": "player"})
+    if not a:                                # a real rating row links the player
+        return []
+    full = el.get_text(" ", strip=True)
+    parts = re.split(r"\s[–—-]\s", full, maxsplit=1)
+    if len(parts) < 2:                       # require the narrative separator
+        return []
+    name = _player_name(re.sub(r"^\s*\d+\s*", "", parts[0]))
+    if not name or not name[:1].isupper():   # not a listicle ("5 Coisas — …")
+        return []
+    return [{
+        "player_name": name, "player_id": _player_id(a),
+        "score": int(m.group(1)), "is_mvp": False,
+        "description": parts[1].strip() or None,
+    }]
+
+
 def _rating_rows(el) -> list[dict]:
-    """Ratings from a NON-header block. Many tokens -> an inline list; exactly
-    one -> a deep-dive paragraph; none -> prose (ignored)."""
+    """Ratings from a NON-header block. Many '(score)' tokens -> an inline list;
+    one -> a parenthetical deep-dive paragraph; none -> maybe a leading-score
+    deep dive ('7 Rui Silva — …'), else prose (ignored)."""
     text = el.get_text(" ", strip=True)
     if not text or MVP_LEAD_RE.search(text):
         return []
     n = len(TOKEN_RE.findall(text))
     if n == 0:
-        return []
+        return _leading_score_row(el)
     id_map = _link_id_map(el)
     return _inline_entries(text, id_map) if n >= 2 else _deepdive_entry(el, id_map)
 
