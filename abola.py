@@ -246,16 +246,27 @@ def find_team_notas(team: str, game_date: date) -> str | None:
 
 
 def find_cronica(home: str, away: str, game_date: date) -> str | None:
-    """Find the single 'crónica' page (non-big-three). Crónica titles rarely
-    name the teams (and 'Nacional' literally means 'national', so title/slug
-    matching gives false hits), so we DON'T filter by title: list every crónica
-    in the date window and OPEN each, confirming the parsed teams cover both
-    sides. Paging walks back exactly to the game date via `until_date`."""
+    """Find the single 'crónica' page (non-big-three). A Bola's /pesquisar is
+    TITLE-only (body text isn't indexed) and result cards carry no 'crónica'
+    marker, so there's no content signal to query/filter by. We therefore cast a
+    wide net from the two title-based signals A Bola exposes and CONFIRM by
+    opening:
+      * the word 'crónica' (catches crónica-titled reports), and
+      * the team names (many reports title the teams even without 'crónica',
+        e.g. 'Concerto europeu de SC Braga e Famalicão...').
+    Candidates in the date window are opened and accepted only if the parsed
+    page carries both teams' ratings -- which filters out title false hits like
+    'Nacional' (= national)."""
     ht, at = _team_tokens(home), _team_tokens(away)
+    ch, ca = _clean_team(home), _clean_team(away)
     cands: dict[str, date] = {}
     for d, u in abola_search("crónica", pages=15, until_date=game_date):
         if "cronica" in u and _in_window(d, game_date):
             cands[u] = d
+    for q in (f"{ch} {ca}", f"{ca} {ch}"):
+        for d, u in abola_search(q, pages=2):
+            if _in_window(d, game_date):
+                cands[u] = d
     for u in sorted(cands, key=lambda x: cands[x]):
         try:
             page = parse_page(fetch(u))
