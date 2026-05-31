@@ -161,17 +161,35 @@ def fetch(url: str, *, retries: int = 3, delay: float = 1.0) -> str:
 
 
 # Club-type abbreviations to ignore when picking a team's distinctive token.
-CLUB_ABBR = {"fc", "sc", "ac", "cd", "sl", "ad", "gd", "cf", "sad", "avs",
+CLUB_ABBR = {"fc", "sc", "ac", "cd", "sl", "ad", "gd", "cf", "sad",
              "ud", "cs", "sg", "praia"}
+
+# Interchangeable names for the same club -- zerozero and A Bola don't always
+# agree, and some are renames that share no letters (AVS = the old Desportivo
+# das Aves, written "AFS"/"AVS"/"Aves SAD"). Each set is one club; any token in
+# a set matches the whole set. Add groups here as new mismatches surface.
+TEAM_ALIASES = [
+    {"avs", "afs", "aves"},
+]
+
+
+def _expand_aliases(tokens: set[str]) -> set[str]:
+    out = set(tokens)
+    for t in tokens:
+        for grp in TEAM_ALIASES:
+            if t in grp:
+                out |= grp
+    return out
 
 
 def _team_tokens(team: str) -> set[str]:
     """Distinctive name tokens for matching a team in a URL / page. A Bola uses
     short forms ('Estoril Praia' -> 'estoril', 'Vitória SC' -> 'vitoria',
-    'SC Braga' -> 'braga'), so drop club-type words and keep the rest."""
+    'SC Braga' -> 'braga'), so drop club-type words and keep the rest, then add
+    known aliases so e.g. 'AFS' still matches A Bola's 'Aves SAD'."""
     toks = {_norm(w) for w in re.split(r"\s+", team.strip()) if w}
     sig = {t for t in toks if t and len(t) >= 3 and t not in CLUB_ABBR}
-    return sig or {_norm(team)}
+    return _expand_aliases(sig or {_norm(team)})
 
 
 def _clean_team(team: str) -> str:
@@ -227,10 +245,162 @@ def find_cronica(home: str, away: str, game_date: date) -> str | None:
 # ----------------------------------------------------------------------------
 
 NOTAS_RE = re.compile(r"as notas d", re.I)
-# "O melhor em campo: Name (7)" or "A figura [do Team]: Name (nota 6)"
+# A bare rating token. A Bola rates 0-10, so cap it there: this rejects not just
+# formations "(4x2x3x1)" / "(35 anos)" but stray stats in prose like "(43)" that
+# would otherwise look like a rating and pull narrative into the list.
+_RATING = r"(?:10|\d|[-–])"
+TOKEN_RE = re.compile(r"\(\s*" + _RATING + r"\s*\)")
+# One inline ratings entry: a capitalised name immediately followed by "(score)".
+ENTRY_RE = re.compile(r"([A-ZÀ-Ÿ][^()]*?)\s*\(\s*(" + _RATING + r")\s*\)")
+# MVP box. The parenthesis holds EITHER a score ("Richard Ríos (7)") OR the team
+# ("Larrazabal (Casa Pia)") -- both forms appear, so capture it raw and classify.
 MVP_RE = re.compile(
-    r"(o melhor em campo|a figura(?:\s+d[oae]\s+([^:<\n]+?))?)\s*:\s*"
-    r"([^()<\n]+?)\s*\(\s*(?:nota\s*)?([\d\-–]+)\s*\)", re.I)
+    r"((?:o\s+)?melhor em campo|a figura)(?:\s+d[oae]\s+([^:<\n]+?))?\s*:\s*"
+    r"([^()<\n]+?)\s*\(\s*([^)<\n]+?)\s*\)", re.I)
+# Leading "O melhor em campo" / "A figura" -- handled by the MVP box pass, never
+# as a rating row.
+MVP_LEAD_RE = re.compile(r"^\s*(o melhor em campo|a figura)\b", re.I)
+
+
+def _player_id(a) -> str | None:
+    if a.has_attr("data-resource-id"):
+        return a["data-resource-id"]
+    m = re.search(r"/jogador/[^/]*?-(\d+)\b", a.get("href", ""))
+    return m.group(1) if m else None
+
+
+def _team_of_header(el) -> str | None:
+    """Team named in an 'as notas d<team>' header (h1/h2/p/strong)."""
+    tl = el.find("a", attrs={"data-resource-type": "team"})
+    if tl and NOTAS_RE.search(el.get_text(" ", strip=True)):
+        return tl.get_text(strip=True)
+    # No usable team autolink: parse the name from the header text. The ":" and
+    # the "(formation)" suffix often live outside the bold ("...do Vitória de
+    # Guimarães (4x2x3x1) : Charles…"), and on big-three pages the phrase sits in
+    # the headline ("...(as notas do Benfica)"), so stop at the first "(", ":" or
+    # end-of-string -- requiring a trailing colon would silently drop the team.
+    m = re.search(r"as notas d\w*\s+(?:jogadores\s+d\w*\s+)?(.+?)\s*(?:\(|:|$)",
+                  el.get_text(" ", strip=True), re.I)
+    return re.sub(r"^[(\s]+|[)\s]+$", "", m.group(1)) or None if m else None
+
+
+def _is_notas_header(el) -> bool:
+    """True if `el` introduces a team's ratings. Ratings rows ('Name (6); ...')
+    never contain 'as notas', so the phrase reliably marks a header -- but only
+    in a heading, a <strong>, or at the very start of a paragraph (not buried in
+    prose)."""
+    text = el.get_text(" ", strip=True)
+    if not NOTAS_RE.search(text):
+        return False
+    if el.name in ("h1", "h2", "h3", "h4", "h5", "h6"):
+        return True
+    if text[:12].lower().startswith("as notas"):
+        return True
+    s = el.find("strong")
+    return bool(s and NOTAS_RE.search(s.get_text(" ", strip=True)))
+
+
+def _strip_header_prefix(text: str) -> str:
+    """Drop a leading 'As notas d<team> (formation) :' so only the ratings list
+    that may follow it in the same element remains."""
+    return re.sub(r"(?i)^.*?as notas d.*?:\s*", "", text, count=1)
+
+
+def _link_id_map(el) -> dict:
+    """{normalised player name -> id} for every player autolink in `el`."""
+    out = {}
+    for a in el.find_all("a", attrs={"data-resource-type": "player"}):
+        key = _norm(a.get_text(strip=True))
+        if key:
+            out.setdefault(key, _player_id(a))
+    return out
+
+
+def _attach_id(name: str, id_map: dict) -> str | None:
+    """Map a parsed name to an autolink id: exact, else longest name that is a
+    substring (handles a player linked across two anchors, e.g. 'Miguel Maga')."""
+    n = _norm(name)
+    if n in id_map:
+        return id_map[n]
+    best, best_len = None, 0
+    for k, v in id_map.items():
+        if k and (k in n or n in k) and len(k) > best_len:
+            best, best_len = v, len(k)
+    return best
+
+
+def _clean_name(s: str) -> str:
+    return re.sub(r"\s+", " ", s).strip(" –—-")
+
+
+def _player_name(s: str) -> str:
+    """Cleaned name, or '' if it doesn't look like one (too long => a sentence
+    captured by mistake). Player names are short; narratives are not."""
+    name = _clean_name(s)
+    return name if 0 < len(name) <= 35 else ""
+
+
+def _inline_entries(text: str, id_map: dict) -> list[dict]:
+    """Parse 'Name (6); Name (4), ...' from TEXT (so players A Bola didn't
+    autolink are still captured), attaching ids where a link exists."""
+    out = []
+    for m in ENTRY_RE.finditer(text):
+        name = _player_name(m.group(1))
+        if name:
+            out.append({
+                "player_name": name, "player_id": _attach_id(name, id_map),
+                "score": _score(m.group(2)), "is_mvp": False, "description": None,
+            })
+    return out
+
+
+def _immediate_rating(a) -> tuple[bool, int | None]:
+    """(has_rating_token, score) for the bare '(..)' right after a player link:
+    '(6)' -> (True, 6), '(-)' -> (True, None), prose like '(35 anos)' or a plain
+    mention -> (False, None)."""
+    nxt = a.next_sibling
+    s = nxt if isinstance(nxt, str) else (nxt.get_text() if nxt else "")
+    m = re.match(r"\s*\(\s*(" + _RATING + r")\s*\)", s or "")
+    return (True, _score(m.group(1))) if m else (False, None)
+
+
+def _deepdive_entry(el, id_map: dict) -> list[dict]:
+    """One '<Name> (5) — narrative...' rating row (the big-three deep-dive
+    shape). Prefer the first autolink that carries a rating (keeps the id);
+    fall back to text when the player isn't linked."""
+    full = el.get_text(" ", strip=True)
+    desc = None
+    parts = re.split(r"\s[–—-]\s", full, maxsplit=1)
+    if len(parts) > 1:
+        desc = parts[1].strip() or None
+    for a in el.find_all("a", attrs={"data-resource-type": "player"}):
+        has, sc = _immediate_rating(a)
+        if has:
+            return [{
+                "player_name": a.get_text(strip=True), "player_id": _player_id(a),
+                "score": sc, "is_mvp": False, "description": desc,
+            }]
+    m = ENTRY_RE.search(full)
+    if not m:
+        return []
+    name = _player_name(m.group(1))
+    return [{
+        "player_name": name, "player_id": _attach_id(name, id_map),
+        "score": _score(m.group(2)), "is_mvp": False, "description": desc,
+    }] if name else []
+
+
+def _rating_rows(el) -> list[dict]:
+    """Ratings from a NON-header block. Many tokens -> an inline list; exactly
+    one -> a deep-dive paragraph; none -> prose (ignored)."""
+    text = el.get_text(" ", strip=True)
+    if not text or MVP_LEAD_RE.search(text):
+        return []
+    n = len(TOKEN_RE.findall(text))
+    if n == 0:
+        return []
+    id_map = _link_id_map(el)
+    return _inline_entries(text, id_map) if n >= 2 else _deepdive_entry(el, id_map)
 
 
 def _mvp_boxes(soup) -> list[dict]:
@@ -240,13 +410,17 @@ def _mvp_boxes(soup) -> list[dict]:
         m = MVP_RE.search(node)
         if not m:
             continue
-        title = m.group(0)
-        name = m.group(3).strip()
+        name = _clean_name(m.group(3))
         key = _norm(name)
-        if key in seen:
+        if not key or key in seen:
             continue
         seen.add(key)
-        # narrative: nearest ancestor whose text extends past the title
+        paren = m.group(4).strip()
+        if re.fullmatch(r"(?:nota\s*)?[\d\-–]+", paren, re.I):
+            score, team = _score(paren), (m.group(2) or "").strip() or None
+        else:  # the parenthesis is the team, not a score
+            score, team = None, (m.group(2) or paren).strip() or None
+        title = m.group(0)
         narrative, anc = None, node.parent
         for _ in range(5):
             if anc is None:
@@ -258,216 +432,66 @@ def _mvp_boxes(soup) -> list[dict]:
             anc = anc.parent
         boxes.append({
             "kind": "melhor" if "melhor" in m.group(1).lower() else "figura",
-            "team": (m.group(2) or "").strip() or None,
-            "name": name,
-            "score": _score(m.group(4)),
-            "description": narrative,
+            "team": team, "name": name, "score": score, "description": narrative,
         })
     return boxes
 
 
-def _player_id(a) -> str | None:
-    if a.has_attr("data-resource-id"):
-        return a["data-resource-id"]
-    m = re.search(r"/jogador/[^/]*?-(\d+)\b", a.get("href", ""))
-    return m.group(1) if m else None
+def _canonical_team(teams: dict, name: str) -> str:
+    """Reuse an existing bucket when `name` is the same club under a variant
+    spelling ('Estoril' header vs default 'Estoril Praia'), so a single page
+    never splits one team across two buckets."""
+    n = _norm(name)
+    for tn in teams:
+        t = _norm(tn)
+        if t == n or (min(len(t), len(n)) >= 4 and (t in n or n in t)):
+            return tn
+    return name
 
 
-def _team_of_header(strong) -> str | None:
-    tl = strong.find("a", attrs={"data-resource-type": "team"})
-    if tl:
-        return tl.get_text(strip=True)
-    # No team autolink (common for the second team's header): parse the name
-    # from the header text. The ":" and the "(formation)" suffix often live
-    # OUTSIDE the <strong> ("...do Vitória de Guimarães (4x2x3x1)" : Charles…),
-    # so stop at the first of "(", ":" or end-of-string -- requiring a trailing
-    # colon here would silently drop the team and dump its players elsewhere.
-    m = re.search(r"as notas d\w*\s+(?:jogadores\s+d\w*\s+)?(.+?)\s*(?:\(|:|$)",
-                  strong.get_text(" ", strip=True), re.I)
-    return m.group(1).strip() if m else None
+def _names_match(a: str, b: str) -> bool:
+    """Same player by name: exact, or one a substring of the other when the
+    shorter is long enough to be unambiguous ('Ríos' ~ 'Richard Ríos')."""
+    na, nb = _norm(a), _norm(b)
+    if not na or not nb:
+        return False
+    if na == nb:
+        return True
+    short = na if len(na) <= len(nb) else nb
+    return len(short) >= 4 and (na in nb or nb in na)
 
 
-def _layout_a_players(p, strong) -> list[dict]:
-    """Inline list: <a player>Name</a> (score), ... after the header strong."""
-    players = []
-    for a in p.find_all("a", attrs={"data-resource-type": "player"}):
-        # gather the text right after this link up to the next link
-        txt, sib = "", a.next_sibling
-        while sib is not None and getattr(sib, "name", None) != "a":
-            txt += sib if isinstance(sib, str) else sib.get_text()
-            sib = sib.next_sibling
-        sm = re.search(r"\(\s*([\d\-–]+)\s*\)", txt)
-        players.append({
-            "player_name": a.get_text(strip=True),
-            "player_id": _player_id(a),
-            "score": _score(sm.group(1) if sm else None),
-            "is_mvp": False,
-            "description": None,
-        })
-    return players
+def _target_team(teams: dict, hint: str | None) -> str | None:
+    """Pick the team bucket an MVP box belongs to from its team hint."""
+    if hint:
+        h, htok = _norm(hint), _team_tokens(hint)
+        for tn in teams:
+            n = _norm(tn)
+            if n == h or h in n or n in h or any(t in n for t in htok):
+                return tn
+    return next(iter(teams)) if len(teams) == 1 else None
 
 
-def _layout_b_player(p, strong) -> dict | None:
-    """Deep dive: <strong>{score} {Name} —</strong> narrative..."""
-    a = strong.find("a", attrs={"data-resource-type": "player"})
-    if not a:
-        return None
-    bold = strong.get_text(" ", strip=True)
-    # Two score positions seen across A Bola pages:
-    #   leading:       "7 Rui Silva —"
-    #   parenthetical: "Trubin (8)" / "Tomás Araújo (6)" / "Name (-)"
-    name, score = bold, None
-    lead = re.match(r"\s*(-?\d+)\b", bold)
-    paren = re.search(r"\(\s*([\d\-–]+)\s*\)", bold)
-    if lead:
-        score = int(lead.group(1))
-        name = bold[lead.end():]
-    elif paren:
-        score = _score(paren.group(1))
-        name = bold[:paren.start()] + bold[paren.end():]
-    name = re.sub(r"^[\s–—-]+|[\s–—-]+$", "", name)
-    # description = everything in <p> after the <strong>
-    desc_parts, seen = [], False
-    for child in p.children:
-        if child is strong:
-            seen = True
-            continue
-        if seen:
-            desc_parts.append(child if isinstance(child, str) else child.get_text())
-    desc = re.sub(r"\s+", " ", "".join(desc_parts)).strip()
-    desc = desc.lstrip("–-").strip() or None
-    return {
-        "player_name": name,
-        "player_id": _player_id(a),
-        "score": score,
-        "is_mvp": False,
-        "description": desc,
-    }
-
-
-# Leading "O melhor em campo" / "A figura" -- those <p>s are handled by the MVP
-# box pass, not as rating rows.
-MVP_LEAD_RE = re.compile(r"^\s*(o melhor em campo|a figura)\b", re.I)
-
-
-def _immediate_rating(a) -> tuple[bool, int | None]:
-    """(has_rating_token, score) for the bare '(..)' right after a player link:
-    '(6)' -> (True, 6), '(-)' -> (True, None), prose like '(35 anos)' or a plain
-    mention -> (False, None). The token -- not a numeric score -- is what marks a
-    ratings entry, so unrated subs written '(-)' are still counted."""
-    nxt = a.next_sibling
-    s = nxt if isinstance(nxt, str) else (nxt.get_text() if nxt else "")
-    m = re.match(r"\s*\(\s*([\d\-–]+)\s*\)", s or "")
-    return (True, _score(m.group(1))) if m else (False, None)
-
-
-def _deepdive_player(p, a) -> dict:
-    """Header-less deep dive: '<a>Name</a> (5) — narrative...' (one per <p>)."""
-    full = p.get_text(" ", strip=True)
-    parts = re.split(r"\s[–—-]\s", full, maxsplit=1)
-    return {
-        "player_name": a.get_text(strip=True),
-        "player_id": _player_id(a),
-        "score": _immediate_rating(a)[1],
-        "is_mvp": False,
-        "description": (parts[1].strip() if len(parts) > 1 else None) or None,
-    }
-
-
-def _headerless_players(p, current: str) -> list[dict]:
-    """Players from a <p> with no notas <strong> header. Two big-three shapes:
-      * inline ratings list (opponent page): 'A (6); B (4), C (4) ...' -- most
-        links carry an immediate score  -> one entry per link.
-      * per-player deep dive (big-three page): '<a>Trubin</a> (5) — text', where
-        the rated player is the FIRST link and the rest are narrative mentions.
-    Returns [] for ordinary prose (no link carries an immediate rating)."""
-    if MVP_LEAD_RE.search(p.get_text(" ", strip=True)):
-        return []  # MVP box -> handled by _mvp_boxes
-    links = p.find_all("a", attrs={"data-resource-type": "player"})
-    if not links:
-        return []
-    rated = [_immediate_rating(a) for a in links]
-    n_rated = sum(has for has, _ in rated)
-    if n_rated >= 2 and n_rated >= len(links) * 0.6:
-        return [{
-            "player_name": a.get_text(strip=True), "player_id": _player_id(a),
-            "score": sc, "is_mvp": False, "description": None,
-        } for a, (_, sc) in zip(links, rated)]
-    # Deep dive: the rated player is the first link carrying a rating token --
-    # not necessarily links[0], which is sometimes an empty/icon anchor.
-    for a, (has, _) in zip(links, rated):
-        if has:
-            return [_deepdive_player(p, a)]
-    return []
-
-
-def parse_page(html: str, default_team: str | None = None) -> dict:
-    """Return {teams: {team_name: [players]}, has_melhor, mvp_names: {...}}."""
-    soup = BeautifulSoup(html, "lxml")
-    teams: dict[str, list] = {}
-    current = default_team
-    if current:
-        teams.setdefault(current, [])
-
-    # Crónica/inline pages carry "as notas d<team>" inside a <p><strong> header;
-    # big-three "as notas" pages put that header in an <h1>/<h2> and the ratings
-    # in header-less <p>s. Detect which, so header-less parsing only runs where
-    # there's no <p><strong> header to misread.
-    has_strong_header = any(
-        (s := p.find("strong")) and NOTAS_RE.search(s.get_text(" ", strip=True))
-        for p in soup.find_all("p"))
-
-    for p in soup.find_all("p"):
-        strong = p.find("strong")
-        if strong and NOTAS_RE.search(strong.get_text(" ", strip=True)):
-            current = _team_of_header(strong) or current
-            if current:
-                teams.setdefault(current, [])
-                inline = _layout_a_players(p, strong)
-                if inline:
-                    teams[current].extend(inline)
-            continue
-        if strong and strong.find("a", attrs={"data-resource-type": "player"}):
-            player = _layout_b_player(p, strong)
-            if player and current:
-                teams.setdefault(current, [])
-                teams[current].append(player)
-            continue
-        if not has_strong_header and current:
-            extra = _headerless_players(p, current)
-            if extra:
-                teams.setdefault(current, [])
-                teams[current].extend(extra)
-
-    # MVP boxes. "A figura" counts as MVP only when there's no "O melhor em
-    # campo" on the page; "O melhor em campo" always wins.
-    boxes = _mvp_boxes(soup)
+def apply_mvp(teams: dict, boxes: list[dict]) -> None:
+    """Resolve MVP across a whole MATCH (both teams / both big-three pages):
+    'O melhor em campo' wins; 'A figura' is MVP only when no melhor exists
+    anywhere. Marks the matching player, or appends the box if not in the list."""
     has_melhor = any(b["kind"] == "melhor" for b in boxes)
-
-    def _target_team(team_hint):
-        if team_hint:
-            for tn in teams:
-                if _norm(tn) == _norm(team_hint) or _norm(team_hint) in _norm(tn) \
-                        or _norm(tn) in _norm(team_hint):
-                    return tn
-        if default_team and default_team in teams:
-            return default_team
-        if len(teams) == 1:
-            return next(iter(teams))
-        return None
-
     for b in boxes:
         is_mvp = b["kind"] == "melhor" or (b["kind"] == "figura" and not has_melhor)
         found = False
         for plist in teams.values():
             for pl in plist:
-                if _norm(pl["player_name"]) == _norm(b["name"]):
-                    pl["is_mvp"] = pl["is_mvp"] or is_mvp
+                if _names_match(pl["player_name"], b["name"]):
+                    if is_mvp:
+                        pl["is_mvp"] = True
                     if not pl.get("description") and b["description"]:
                         pl["description"] = b["description"]
+                    if pl.get("score") is None and b["score"] is not None:
+                        pl["score"] = b["score"]
                     found = True
-        if not found:
-            target = _target_team(b["team"])
+        if not found and teams:
+            target = _target_team(teams, b["team"])
             if target:
                 teams[target].append({
                     "player_name": b["name"], "player_id": None,
@@ -475,14 +499,57 @@ def parse_page(html: str, default_team: str | None = None) -> dict:
                     "description": b["description"],
                 })
 
-    return {"teams": teams, "has_melhor": has_melhor, "mvp_boxes": boxes}
+
+def parse_page(html: str, default_team: str | None = None) -> dict:
+    """Parse one A Bola ratings page into {teams, mvp_boxes}.
+
+    Walks headings + paragraphs in document order, tracking the 'current' team
+    from 'as notas d<team>' headers (which live in <h1>/<h2>/<p>/<strong>
+    depending on the article). Ratings are read from element TEXT so players
+    A Bola left unlinked are still captured. MVP is NOT applied here -- call
+    apply_mvp() once the whole match is assembled (it spans two pages for the
+    big three)."""
+    soup = BeautifulSoup(html, "lxml")
+    teams: dict[str, list] = {}
+    current = default_team
+    if current:
+        teams.setdefault(current, [])
+    seen: set[tuple] = set()  # (team, norm name) -> dedupe across nested blocks
+
+    def add(rows):
+        bucket = teams.setdefault(current, [])
+        for r in rows:
+            k = (current, _norm(r["player_name"]))
+            if r["player_name"] and k not in seen:
+                seen.add(k)
+                bucket.append(r)
+
+    for el in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p"]):
+        if _is_notas_header(el):
+            team = _team_of_header(el)
+            current = _canonical_team(teams, team) if team else current
+            if current:
+                teams.setdefault(current, [])
+                rest = _strip_header_prefix(el.get_text(" ", strip=True))
+                if TOKEN_RE.search(rest):  # inline list on the same line
+                    add(_inline_entries(rest, _link_id_map(el)))
+            continue
+        if current:
+            rows = _rating_rows(el)
+            if rows:
+                add(rows)
+
+    boxes = _mvp_boxes(soup)
+    for b in boxes:  # tag each box with its page so apply_mvp can place it
+        b["team"] = b["team"] or default_team
+    return {"teams": teams, "mvp_boxes": boxes}
 
 
 def _pick_team(teams: dict, want: str) -> list:
     """Best-effort match of a parsed team bucket to the wanted team name.
     A Bola's name often differs from zerozero's ('Vitória SC' vs 'Vitória de
-    Guimarães', 'Sporting' vs 'Sporting CP'), so after exact/substring checks
-    fall back to distinctive-token overlap and take the best-matching bucket."""
+    Guimarães', 'AFS' vs 'Aves SAD'), so after exact/substring checks fall back
+    to distinctive-token (alias-expanded) overlap and take the best bucket."""
     wn = _norm(want)
     for name, players in teams.items():
         if _norm(name) == wn:
@@ -505,12 +572,47 @@ def _pick_team(teams: dict, want: str) -> list:
 # ----------------------------------------------------------------------------
 
 
+def collect_cronicas(dates: list[date], *, pages: int = 25,
+                     delay: float = 1.0) -> list[dict]:
+    """Fetch & parse EVERY crónica falling in any match's date window, once.
+    Returns [{url, date, teams, mvp_boxes}] so several matches can be assigned
+    from one pass instead of each re-searching and re-opening the same pages."""
+    if not dates:
+        return []
+    index, earliest = [], min(dates)
+    for d, u in abola_search("crónica", pages=pages, until_date=earliest):
+        if "cronica" not in u or not any(_in_window(d, g) for g in dates):
+            continue
+        try:
+            page = parse_page(fetch(u))
+        except Exception:  # noqa: BLE001
+            continue
+        index.append({"url": u, "date": d, "teams": page["teams"],
+                      "mvp_boxes": page["mvp_boxes"]})
+        time.sleep(delay)
+    return index
+
+
+def _match_cronica(index: list[dict], home: str, away: str,
+                   gdate: date) -> dict | None:
+    """The crónica in `index` whose parsed teams cover both sides of a match."""
+    ht, at = _team_tokens(home), _team_tokens(away)
+    for e in sorted(index, key=lambda x: x["date"]):
+        if not _in_window(e["date"], gdate):
+            continue
+        names = " ".join(_norm(t) for t in e["teams"])
+        if any(t in names for t in ht) and any(t in names for t in at):
+            return e
+    return None
+
+
 def scrape_match(match: dict, *, single_url: str | None = None,
                  home_url: str | None = None, away_url: str | None = None,
-                 delay: float = 1.0) -> dict:
+                 cronica: dict | None = None, delay: float = 1.0) -> dict:
     """Scrape one match's A Bola ratings into the merged output structure.
 
-    URLs may be injected (skips Google search) for testing/resilience.
+    URLs may be injected (skips search) for testing/resilience; `cronica` is a
+    pre-parsed entry from collect_cronicas() for the non-big-three path.
     """
     home, away = match["home_team"], match["away_team"]
     gdate = _parse_date(match["game_date"])
@@ -526,41 +628,65 @@ def scrape_match(match: dict, *, single_url: str | None = None,
     }
 
     if big3:
+        # Two separate "as notas" pages; MVP ('melhor' beats 'figura') spans
+        # both, so combine their teams + boxes and resolve once.
         if home_url is None and single_url is None:
             home_url = find_team_notas(home, gdate)
             time.sleep(delay)
         if away_url is None and single_url is None:
             away_url = find_team_notas(away, gdate)
-        if home_url:
-            out["urls_used"].append(home_url)
-            page = parse_page(fetch(home_url), default_team=home)
-            out["home_team_ratings"] = _pick_team(page["teams"], home) or \
-                next(iter(page["teams"].values()), [])
+        teams: dict[str, list] = {}
+        boxes: list[dict] = []
+        for url, want in ((home_url, home), (away_url, away)):
+            if not url:
+                continue
+            out["urls_used"].append(url)
+            page = parse_page(fetch(url), default_team=want)
+            for name, plist in page["teams"].items():
+                teams.setdefault(name, []).extend(plist)
+            boxes.extend(page["mvp_boxes"])
             time.sleep(delay)
-        if away_url:
-            out["urls_used"].append(away_url)
-            page = parse_page(fetch(away_url), default_team=away)
-            out["away_team_ratings"] = _pick_team(page["teams"], away) or \
-                next(iter(page["teams"].values()), [])
+        apply_mvp(teams, boxes)
+        out["home_team_ratings"] = _pick_team(teams, home)
+        out["away_team_ratings"] = _pick_team(teams, away)
     else:
-        if single_url is None:
+        if cronica is None and single_url is None:
             single_url = find_cronica(home, away, gdate)
-        if single_url:
+        if cronica is not None:
+            out["urls_used"].append(cronica["url"])
+            teams, boxes = cronica["teams"], cronica["mvp_boxes"]
+        elif single_url:
             out["urls_used"].append(single_url)
             page = parse_page(fetch(single_url))
-            out["home_team_ratings"] = _pick_team(page["teams"], home)
-            out["away_team_ratings"] = _pick_team(page["teams"], away)
+            teams, boxes = page["teams"], page["mvp_boxes"]
+        else:
+            teams, boxes = {}, []
+        if teams:
+            apply_mvp(teams, boxes)
+            out["home_team_ratings"] = _pick_team(teams, home)
+            out["away_team_ratings"] = _pick_team(teams, away)
 
     return out
 
 
 def scrape_matches(matches: list[dict], *, delay: float = 1.0) -> list[dict]:
+    # Pre-collect crónicas covering the non-big-three matches' dates, so each is
+    # opened once and assigned by the teams found inside (per A Bola, crónica
+    # titles rarely name the teams).
+    cron_dates = [_parse_date(m["game_date"]) for m in matches
+                  if not m.get("is_big_three_match") and m.get("game_date")]
+    index = collect_cronicas(cron_dates, delay=delay) if cron_dates else []
+
     results = []
     for i, m in enumerate(matches, 1):
         print(f"[{i}/{len(matches)}] {m['home_team']} vs {m['away_team']}",
               file=sys.stderr)
         try:
-            results.append(scrape_match(m, delay=delay))
+            cron = None
+            if not m.get("is_big_three_match"):
+                cron = _match_cronica(index, m["home_team"], m["away_team"],
+                                      _parse_date(m["game_date"]))
+            results.append(scrape_match(m, cronica=cron, delay=delay))
         except Exception as err:  # noqa: BLE001
             print(f"  ! failed: {err}", file=sys.stderr)
             results.append({"match": f"{m['home_team']} vs {m['away_team']}",
