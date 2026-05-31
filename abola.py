@@ -235,9 +235,12 @@ def find_team_notas(team: str, game_date: date) -> str | None:
             seen.add(tok)
             terms.append(tok)
     for term in terms:
-        for q in (f"as notas do {term}", f"notas {term}"):
+        # A Bola titles the ratings page "as notas do X" or "os destaques do X".
+        for q in (f"as notas do {term}", f"notas {term}",
+                  f"os destaques do {term}", f"destaques {term}"):
             cands = [(d, u) for d, u in abola_search(q, pages=2)
-                     if _in_window(d, game_date) and "notas" in u
+                     if _in_window(d, game_date)
+                     and ("notas" in u or "destaques" in u)
                      and any(t in u.lower() for t in tokens)]
             cands.sort()
             if cands:
@@ -282,9 +285,11 @@ def find_cronica(home: str, away: str, game_date: date) -> str | None:
 # Parsing
 # ----------------------------------------------------------------------------
 
-# Header phrase. A Bola writes it both "As notas dos jogadores do X" and
-# "NOTAS DOS JOGADORES DO X" (no leading "As"), so make "as" optional.
-NOTAS_RE = re.compile(r"(?:as\s+)?notas d", re.I)
+# Header phrase. A Bola writes it as "As notas dos jogadores do X", "NOTAS DOS
+# JOGADORES DO X" (no leading "As"), or "os destaques do X" -- so "as"/"os" are
+# optional and "notas"/"destaques" both count.
+_HDR = r"(?:(?:as\s+)?notas|(?:os\s+)?destaques)"
+NOTAS_RE = re.compile(_HDR + r"\s+d", re.I)
 # A bare rating token. A Bola rates 0-10, so cap it there: this rejects not just
 # formations "(4x2x3x1)" / "(35 anos)" but stray stats in prose like "(43)" that
 # would otherwise look like a rating and pull narrative into the list. An unrated
@@ -303,6 +308,10 @@ ENTRY_RE = re.compile(r"([A-ZÀ-Ÿ][^():]*?)\s*\(\s*(" + _RATING + r")\s*" + _CL
 MVP_RE = re.compile(
     r"((?:o\s+)?melhor em campo|a figura)(?:\s+d[oae]\s+([^:<\n]+?))?\s*:\s*"
     r"([^()<\n]+?)\s*\(\s*([^)<\n]+?)\s*\)", re.I)
+# Suffix form: "Prestianni (7) — o melhor em campo" (name + score, label after).
+MVP_SUFFIX_RE = re.compile(
+    r"([^()<\n]+?)\s*\(\s*(" + _RATING + r")\s*\)\s*[—–-]\s*"
+    r"((?:o\s+)?melhor em campo|a figura)", re.I)
 # Leading "O melhor em campo" / "A figura" -- handled by the MVP box pass, never
 # as a rating row.
 MVP_LEAD_RE = re.compile(r"^\s*(o melhor em campo|a figura)\b", re.I)
@@ -332,7 +341,7 @@ def _team_of_header(el) -> str | None:
     # suffix often live outside the bold, and on big-three pages the phrase is in
     # the headline ("...(as notas do Benfica)"), so stop at "(", ":" or end.
     src = _header_strong(el) or el
-    m = re.search(r"(?:as\s+)?notas d\w*\s+(?:jogadores\s+d\w*\s+)?(.+?)\s*(?:\(|:|$)",
+    m = re.search(_HDR + r"\s+d\w*\s+(?:jogadores\s+d\w*\s+)?(.+?)\s*(?:\(|:|$)",
                   src.get_text(" ", strip=True), re.I)
     return re.sub(r"^[(\s]+|[)\s]+$", "", m.group(1)) or None if m else None
 
@@ -363,7 +372,7 @@ def _is_notas_header(el) -> bool:
         return False
     if el.name in ("h1", "h2", "h3", "h4", "h5", "h6"):
         return True
-    if re.match(r"\s*(?:as\s+)?notas\b", text, re.I):
+    if re.match(r"\s*" + _HDR + r"\b", text, re.I):
         return True
     s = el.find("strong")
     return bool(s and NOTAS_RE.search(s.get_text(" ", strip=True)))
@@ -372,7 +381,7 @@ def _is_notas_header(el) -> bool:
 def _strip_header_prefix(text: str) -> str:
     """Drop a leading 'As notas d<team> (formation) :' so only the ratings list
     that may follow it in the same element remains."""
-    return re.sub(r"(?i)^.*?(?:as\s+)?notas d.*?:\s*", "", text, count=1)
+    return re.sub(r"(?i)^.*?" + _HDR + r"\s+d.*?:\s*", "", text, count=1)
 
 
 def _link_id_map(el) -> dict:
@@ -514,22 +523,31 @@ def _rating_rows(el) -> list[dict]:
 
 
 def _mvp_boxes(soup) -> list[dict]:
-    """Find 'O melhor em campo' / 'A figura' boxes -> name, score, team, text."""
+    """Find 'O melhor em campo' / 'A figura' boxes -> name, score, team, text.
+    Two layouts: label-first ("O melhor em campo: Name (7)") and label-last
+    ("Prestianni (7) — o melhor em campo")."""
     boxes, seen = [], set()
-    for node in soup.find_all(string=re.compile(r"(melhor em campo|a figura)\s*:", re.I)):
+    for node in soup.find_all(string=re.compile(r"melhor em campo|a figura", re.I)):
         m = MVP_RE.search(node)
-        if not m:
-            continue
-        name = _clean_name(m.group(3))
+        if m:
+            kind_src, team_title, name_src, paren = \
+                m.group(1), m.group(2), m.group(3), m.group(4)
+        else:
+            m = MVP_SUFFIX_RE.search(node)
+            if not m:
+                continue
+            kind_src, team_title, name_src, paren = \
+                m.group(3), None, m.group(1), m.group(2)
+        name = _clean_name(name_src)
         key = _norm(name)
         if not key or key in seen:
             continue
         seen.add(key)
-        paren = m.group(4).strip()
-        if re.fullmatch(r"(?:nota\s*)?[\d\-–]+", paren, re.I):
-            score, team = _score(paren), (m.group(2) or "").strip() or None
+        paren = paren.strip()
+        if re.fullmatch(r"(?:nota\s*)?[\d\-–—]+", paren, re.I):
+            score, team = _score(paren), (team_title or "").strip() or None
         else:  # the parenthesis is the team, not a score
-            score, team = None, (m.group(2) or paren).strip() or None
+            score, team = None, (team_title or paren).strip() or None
         title = m.group(0)
         narrative, anc = None, node.parent
         for _ in range(5):
@@ -541,7 +559,7 @@ def _mvp_boxes(soup) -> list[dict]:
                 break
             anc = anc.parent
         boxes.append({
-            "kind": "melhor" if "melhor" in m.group(1).lower() else "figura",
+            "kind": "melhor" if "melhor" in kind_src.lower() else "figura",
             "team": team, "name": name, "score": score, "description": narrative,
         })
     return boxes
