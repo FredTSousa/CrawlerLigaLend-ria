@@ -46,18 +46,21 @@ def _last(name: str) -> str:
     return abola._norm(parts[-1]) if parts else abola._norm(name)
 
 
-def _resolve(rating, zz, aliases, abolaid_map, used):
+def _resolve(rating, zz, aliases, abolaid_map, used, ambiguous):
     """Resolve one A Bola rating to a zerozero player_id, in priority order:
     A Bola id -> learned alias -> exact name -> *unambiguous* surname/substring.
-    Returns None (leave for manual linking) rather than guessing when a loose
-    match is ambiguous -- a wrong silent link is worse than a visible gap.
-    `zz` is [(player_id, name)]; `used` tracks already-claimed players."""
+    Returns None (leave for manual linking) rather than guessing when a match is
+    ambiguous -- a wrong silent link is worse than a visible gap.
+    `zz` is [(player_id, name)]; `used` tracks already-claimed players;
+    `ambiguous` is the set of normalized names shared by 2+ players on either
+    side (e.g. Gil Vicente's two 'Zé Carlos') -- those are never auto-linked,
+    because no rule can tell which is which, so they must be assigned by hand."""
+    na = abola._norm(rating["player_name"])
+    if not na or na in ambiguous:
+        return None
     aid = rating.get("player_id")
     if aid and abolaid_map.get(aid) and abolaid_map[aid] not in used:
         return abolaid_map[aid]
-    na = abola._norm(rating["player_name"])
-    if not na:
-        return None
     if aliases.get(na) and aliases[na] not in used:        # learned nickname
         return aliases[na]
     for pid, pn in zz:                                      # exact name
@@ -112,9 +115,20 @@ def _link_scores(sb, match_id, team_id, ratings):
             f"players?id=in.({ids})&abolaid=not.is.null&select=id,abolaid",
         ).json()}
 
+    # A name is ambiguous when it repeats WITHIN the roster or WITHIN the
+    # ratings (two players share it) -> never auto-link, assign by hand.
+    def _dups(names):
+        c: dict[str, int] = {}
+        for n in names:
+            c[n] = c.get(n, 0) + 1
+        return {n for n, k in c.items() if n and k > 1}
+
+    ambiguous = _dups([abola._norm(pn) for _, pn in zz]) \
+        | _dups([abola._norm(r["player_name"]) for r in ratings])
+
     used, linked = set(), 0
     for r in ratings:
-        pid = _resolve(r, zz, aliases, abolaid_map, used)
+        pid = _resolve(r, zz, aliases, abolaid_map, used, ambiguous)
         r["zz_player_id"] = pid
         if not pid:
             continue

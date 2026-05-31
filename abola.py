@@ -252,9 +252,12 @@ NOTAS_RE = re.compile(r"(?:as\s+)?notas d", re.I)
 # would otherwise look like a rating and pull narrative into the list. An unrated
 # player is "(-)" / "(–)" / "(—)" (hyphen, en-dash or em-dash) -> score None.
 _RATING = r"(?:10|\d|[-–—])"
-TOKEN_RE = re.compile(r"\(\s*" + _RATING + r"\s*\)")
+# Closing of a rating token. Normally ")", but A Bola sometimes typos it as ";"
+# or "," ("Ricardo Horta (5;") -- accept those so the player isn't dropped.
+_CLOSE = r"[);,]"
+TOKEN_RE = re.compile(r"\(\s*" + _RATING + r"\s*" + _CLOSE)
 # One inline ratings entry: a capitalised name immediately followed by "(score)".
-ENTRY_RE = re.compile(r"([A-ZÀ-Ÿ][^()]*?)\s*\(\s*(" + _RATING + r")\s*\)")
+ENTRY_RE = re.compile(r"([A-ZÀ-Ÿ][^()]*?)\s*\(\s*(" + _RATING + r")\s*" + _CLOSE)
 # MVP box. The parenthesis holds EITHER a score ("Richard Ríos (7)") OR the team
 # ("Larrazabal (Casa Pia)") -- both forms appear, so capture it raw and classify.
 MVP_RE = re.compile(
@@ -363,7 +366,7 @@ def _immediate_rating(a) -> tuple[bool, int | None]:
     mention -> (False, None)."""
     nxt = a.next_sibling
     s = nxt if isinstance(nxt, str) else (nxt.get_text() if nxt else "")
-    m = re.match(r"\s*\(\s*(" + _RATING + r")\s*\)", s or "")
+    m = re.match(r"\s*\(\s*(" + _RATING + r")\s*" + _CLOSE, s or "")
     return (True, _score(m.group(1))) if m else (False, None)
 
 
@@ -517,15 +520,15 @@ def parse_page(html: str, default_team: str | None = None) -> dict:
     current = default_team
     if current:
         teams.setdefault(current, [])
-    seen: set[tuple] = set()  # (team, norm name) -> dedupe across nested blocks
 
     def add(rows):
+        # Each ratings element is parsed once (we iterate <p>/<hN>, not their
+        # wrapper <div>s), so we DON'T dedupe by name -- a team can legitimately
+        # field two players with the same name (e.g. Gil Vicente's two "Zé
+        # Carlos"), and both must be kept (then linked manually, since the name
+        # is ambiguous).
         bucket = teams.setdefault(current, [])
-        for r in rows:
-            k = (current, _norm(r["player_name"]))
-            if r["player_name"] and k not in seen:
-                seen.add(k)
-                bucket.append(r)
+        bucket.extend(r for r in rows if r["player_name"])
 
     for el in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p"]):
         if _is_notas_header(el):
