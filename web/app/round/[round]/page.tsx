@@ -34,6 +34,14 @@ export default async function RoundPage({
     .select("*")
     .eq("round", round);
 
+  const { data: linkStatus } = await supabase
+    .from("reporter_link_status")
+    .select("*")
+    .eq("round", round);
+  const statusByMatch = new Map(
+    ((linkStatus ?? []) as any[]).map((s) => [s.match_id, s]),
+  );
+
   const games = (matches ?? []) as any[];
   const byMatch = new Map<string, any[]>();
   for (const p of (allPlayers ?? []) as any[]) {
@@ -73,6 +81,9 @@ export default async function RoundPage({
                 </span>
                 <span className="a">{g.away_team?.name}</span>
               </div>
+              <div style={{ textAlign: "center", marginTop: 6 }}>
+                <RepCoverage s={statusByMatch.get(g.id)} />
+              </div>
             </summary>
             <div className="game-body">
               <div className="game-actions">
@@ -98,5 +109,17 @@ export default async function RoundPage({
         <Link href="/">← Dashboard</Link>
       </p>
     </>
+  );
+}
+
+function RepCoverage({ s }: { s?: { players: number; linked: number; fetched: boolean } }) {
+  if (!s || !s.fetched) {
+    return <span className="cov none">– reporter not fetched</span>;
+  }
+  const missing = s.players - s.linked;
+  return missing > 0 ? (
+    <span className="cov warn">⚠ {missing} unlinked</span>
+  ) : (
+    <span className="cov ok">✓ reporter {s.linked}/{s.players}</span>
   );
 }

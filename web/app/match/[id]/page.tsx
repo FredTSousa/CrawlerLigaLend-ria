@@ -4,6 +4,7 @@ import CrawlButton from "@/components/CrawlButton";
 import Lineup from "@/components/Lineup";
 import LiveRefresh from "@/components/LiveRefresh";
 import StatusBadge from "@/components/StatusBadge";
+import ReporterLinker from "@/components/ReporterLinker";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,14 @@ export default async function MatchPage({
 
   const m = match as any;
   const rep = reporter as any;
+  const ps = (players ?? []) as any[];
+
+  const coverage = (teamId: string) => {
+    const t = ps.filter((p) => p.team_id === teamId);
+    return { linked: t.filter((p) => p.reporter_linked).length, total: t.length };
+  };
+  const homeCov = coverage(m?.home_team_id);
+  const awayCov = coverage(m?.away_team_id);
 
   if (!m) {
     return (
@@ -83,12 +92,37 @@ export default async function MatchPage({
         <Lineup
           home={{ id: m.home_team_id, name: m.home_team?.name }}
           away={{ id: m.away_team_id, name: m.away_team?.name }}
-          players={(players ?? []) as any[]}
+          players={ps}
+          reporterFetched={!!rep}
         />
       </div>
 
+      {rep && (
+        <div className="panel">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <h2 style={{ margin: 0 }}>Reporter linking — A Bola</h2>
+            <span className="row" style={{ gap: 6 }}>
+              <CovChip label={m.home_team?.name} c={homeCov} />
+              <CovChip label={m.away_team?.name} c={awayCov} />
+            </span>
+          </div>
+          <p className="muted" style={{ fontSize: 13, margin: "4px 0 12px" }}>
+            Every player who appeared should be linked. Fix nicknames / parsing
+            gaps below — name links are remembered for future games.
+          </p>
+          <ReporterLinker
+            matchId={m.id}
+            home={{ id: m.home_team_id, name: m.home_team?.name }}
+            away={{ id: m.away_team_id, name: m.away_team?.name }}
+            players={ps}
+            homeRatings={rep.home_ratings || []}
+            awayRatings={rep.away_ratings || []}
+          />
+        </div>
+      )}
+
       <div className="panel">
-        <h2>Reporter ratings — A Bola</h2>
+        <h2>Reporter ratings — A Bola (as scraped)</h2>
         {rep ? (
           <>
             <ReporterTable title={m.home_team?.name} rows={rep.home_ratings || []} />
@@ -121,6 +155,16 @@ export default async function MatchPage({
         )}
       </p>
     </>
+  );
+}
+
+function CovChip({ label, c }: { label?: string; c: { linked: number; total: number } }) {
+  if (!c.total) return null;
+  const ok = c.linked === c.total;
+  return (
+    <span className={`cov ${ok ? "ok" : "warn"}`} title={`${label ?? ""} linking`}>
+      {ok ? "✓" : "⚠"} {c.linked}/{c.total}
+    </span>
   );
 }
 

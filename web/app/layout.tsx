@@ -30,6 +30,7 @@ export default async function RootLayout({
                 <Link href="/">Dashboard</Link>
                 <Link href="/runs">Crawl runs</Link>
                 <Link href="/reporter-runs">Reporter runs</Link>
+                <Link href="/linking-issues">Linking issues</Link>
               </nav>
               <span className="spacer" />
               <span className="muted" style={{ fontSize: 13 }}>{user.email}</span>

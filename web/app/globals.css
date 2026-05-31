@@ -102,6 +102,33 @@ input, select {
 .chip.og { background: #3d1717; color: var(--red); padding: 1px 5px; border-radius: 4px; font-weight: 700; font-size: 11px; }
 .chip.pen { background: var(--panel-2); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
 
+/* Reporter (A Bola) rating chip shown before the player name */
+.repchip {
+  flex-shrink: 0; min-width: 22px; text-align: center; padding: 1px 5px;
+  border-radius: 5px; font-size: 12px; font-weight: 700;
+  font-variant-numeric: tabular-nums; background: var(--panel-2); color: var(--muted);
+}
+.repchip.hi   { background: #133a23; color: var(--green); }
+.repchip.mid  { background: #2a2f3a; color: var(--text); }
+.repchip.lo   { background: #3d1717; color: var(--red); }
+.repchip.none { background: var(--panel-2); color: var(--muted); }
+.repchip.mvp  { box-shadow: inset 0 0 0 1px var(--yellow); }
+.repchip.miss { background: transparent; color: var(--yellow); font-weight: 600; }
+
+/* Reporter linking coverage + worklist */
+.cov { font-size: 12px; padding: 1px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+.cov.ok    { background: #133a23; color: var(--green); }
+.cov.warn  { background: #3a2e10; color: var(--yellow); }
+.cov.none  { background: var(--panel-2); color: var(--muted); }
+.linkrow { display: flex; align-items: center; gap: 8px; padding: 6px 2px; border-bottom: 1px solid var(--border); font-size: 14px; flex-wrap: wrap; }
+.linkrow .pname { flex: 1; min-width: 120px; }
+.linkrow .st { font-size: 12px; }
+.linkrow .st.auto { color: var(--muted); }
+.linkrow .st.man  { color: var(--green); }
+.linkrow .st.miss { color: var(--yellow); }
+.linkrow select, .linkrow input { padding: 4px 8px; font-size: 13px; }
+.leftover { background: #221a10; border: 1px solid #3a2e10; border-radius: 6px; padding: 6px 10px; margin: 4px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
 /* Expandable game rows on the round page */
 details.game { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; background: var(--panel); }
 details.game > summary { cursor: pointer; padding: 12px 14px; list-style: none; }

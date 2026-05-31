@@ -46,48 +46,89 @@ def _last(name: str) -> str:
     return abola._norm(parts[-1]) if parts else abola._norm(name)
 
 
-def _match_player(name, zz):
-    """Match an A Bola name (often a surname, e.g. 'VAGIANNIDIS') to a zerozero
-    full name ('Georgios Vagiannidis'). Returns player_id or None."""
-    na = abola._norm(name)
+def _resolve(rating, zz, aliases, abolaid_map, used):
+    """Resolve one A Bola rating to a zerozero player_id, in priority order:
+    A Bola id -> learned alias -> exact name -> *unambiguous* surname/substring.
+    Returns None (leave for manual linking) rather than guessing when a loose
+    match is ambiguous -- a wrong silent link is worse than a visible gap.
+    `zz` is [(player_id, name)]; `used` tracks already-claimed players."""
+    aid = rating.get("player_id")
+    if aid and abolaid_map.get(aid) and abolaid_map[aid] not in used:
+        return abolaid_map[aid]
+    na = abola._norm(rating["player_name"])
     if not na:
         return None
-    for pid, pn in zz:                       # exact
-        if abola._norm(pn) == na:
+    if aliases.get(na) and aliases[na] not in used:        # learned nickname
+        return aliases[na]
+    for pid, pn in zz:                                      # exact name
+        if pid not in used and abola._norm(pn) == na:
             return pid
-    for pid, pn in zz:                       # surname inside full name
+    la = _last(rating["player_name"])                      # surname / substring
+    cands = []
+    for pid, pn in zz:
+        if pid in used:
+            continue
         npn = abola._norm(pn)
-        if na in npn or npn in na:
-            return pid
-    la = _last(name)
-    for pid, pn in zz:                       # last-token (surname) match
-        if _last(pn) == la:
-            return pid
-    return None
+        if (na in npn or npn in na) or _last(pn) == la:
+            cands.append(pid)
+    return cands[0] if len(cands) == 1 else None
 
 
 def _link_scores(sb, match_id, team_id, ratings):
-    """Best-effort: attach reporter scores to zerozero match_players by name."""
+    """Attach reporter scores to a team's zerozero match_players. Annotates each
+    rating in `ratings` with `zz_player_id` (matched id or None) and returns the
+    number matched. Idempotent and manual-safe: clears auto links first, never
+    overwrites rows a human edited (reporter_manual=true)."""
     if not team_id:
+        for r in ratings:
+            r["zz_player_id"] = None
         return 0
-    players = sb._rest(
+
+    roster = sb._rest(
         "GET",
         f"match_player_details?match_id=eq.{match_id}&team_id=eq.{team_id}"
-        "&select=player_id,player_name",
+        "&select=player_id,player_name,reporter_manual",
     ).json()
-    zz = [(p["player_id"], p["player_name"]) for p in players]
+    zz = [(p["player_id"], p["player_name"]) for p in roster]
+    manual = {p["player_id"] for p in roster if p.get("reporter_manual")}
+
+    # Reset prior auto links so dropped/renamed ratings don't leave stale state.
+    sb.update("match_players",
+              f"match_id=eq.{match_id}&team_id=eq.{team_id}"
+              "&reporter_manual=eq.false",
+              {"reporter_score": None, "reporter_is_mvp": False,
+               "reporter_linked": False})
+
+    aliases = {a["abola_norm"]: a["player_id"] for a in sb._rest(
+        "GET",
+        f"reporter_aliases?or=(team_id.eq.{team_id},team_id.is.null)"
+        "&select=abola_norm,player_id",
+    ).json()}
+    abolaid_map = {}
+    if zz:
+        ids = ",".join(p[0] for p in zz)
+        abolaid_map = {p["abolaid"]: p["id"] for p in sb._rest(
+            "GET",
+            f"players?id=in.({ids})&abolaid=not.is.null&select=id,abolaid",
+        ).json()}
+
     used, linked = set(), 0
     for r in ratings:
-        pid = _match_player(r["player_name"], [z for z in zz if z[0] not in used])
+        pid = _resolve(r, zz, aliases, abolaid_map, used)
+        r["zz_player_id"] = pid
         if not pid:
             continue
         used.add(pid)
-        sb.update("match_players", f"match_id=eq.{match_id}&player_id=eq.{pid}",
+        linked += 1
+        if pid in manual:
+            continue  # human-set: keep their score, just record the link
+        sb.update("match_players",
+                  f"match_id=eq.{match_id}&player_id=eq.{pid}",
                   {"reporter_score": r["score"],
-                   "reporter_is_mvp": bool(r["is_mvp"])})
+                   "reporter_is_mvp": bool(r["is_mvp"]),
+                   "reporter_linked": True})
         if r.get("player_id"):
             sb.update("players", f"id=eq.{pid}", {"abolaid": r["player_id"]})
-        linked += 1
     return linked
 
 
@@ -112,6 +153,11 @@ def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
                  "is_big_three_match": _is_big_three(home, away)}
         data = abola.scrape_match(match, delay=delay)
 
+        # Link first: this annotates each rating with its zz_player_id, which we
+        # then persist so the UI can show which entry mapped to which player.
+        linked = _link_scores(sb, match_id, m["home_team_id"], data["home_team_ratings"])
+        linked += _link_scores(sb, match_id, m["away_team_id"], data["away_team_ratings"])
+
         sb.upsert("matches_reporter_link", [{
             "match_id": match_id,
             "format_detected": data["format_detected"],
@@ -120,9 +166,6 @@ def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
             "away_ratings": data["away_team_ratings"],
             "fetched_at": sync._now(),
         }], "match_id")
-
-        linked = _link_scores(sb, match_id, m["home_team_id"], data["home_team_ratings"])
-        linked += _link_scores(sb, match_id, m["away_team_id"], data["away_team_ratings"])
 
         total = len(data["home_team_ratings"]) + len(data["away_team_ratings"])
         sync._finish_run(sb, run_id, status="success", games_count=total)

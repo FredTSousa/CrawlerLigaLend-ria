@@ -18,6 +18,9 @@ type Player = {
   penalties_scored: number;
   penalties_missed: number;
   penalties_defended: number;
+  reporter_score: number | null;
+  reporter_is_mvp: boolean;
+  reporter_linked: boolean;
 };
 
 type Team = { id: string; name: string };
@@ -61,10 +64,36 @@ function StatIcons({ p }: { p: Player }) {
   return <span className="icons">{chips}</span>;
 }
 
-function PlayerLine({ p }: { p: Player }) {
+// Reporter (A Bola) score shown in front of the name. Only rendered once a
+// reporter scrape has run for the match (`show`), so a missing rating reads as
+// a real gap (⚠) rather than "not fetched yet".
+function RepScore({ p, show }: { p: Player; show: boolean }) {
+  if (!show) return null;
+  if (!p.reporter_linked) {
+    return (
+      <span className="repchip miss" title="No reporter rating linked">
+        ⚠
+      </span>
+    );
+  }
+  const s = p.reporter_score;
+  const band = s == null ? "none" : s >= 7 ? "hi" : s <= 4 ? "lo" : "mid";
+  return (
+    <span
+      className={`repchip ${band}${p.reporter_is_mvp ? " mvp" : ""}`}
+      title={`Reporter rating${p.reporter_is_mvp ? " · MVP" : ""}`}
+    >
+      {p.reporter_is_mvp ? "★" : ""}
+      {s == null ? "–" : s}
+    </span>
+  );
+}
+
+function PlayerLine({ p, rep }: { p: Player; rep: boolean }) {
   return (
     <div className="pline">
       <span className="num">{p.shirt_number ?? ""}</span>
+      <RepScore p={p} show={rep} />
       <span className="pname">
         {p.player_name}
         {p.is_captain && <span className="badge">C</span>}
@@ -74,18 +103,18 @@ function PlayerLine({ p }: { p: Player }) {
   );
 }
 
-function TeamColumn({ name, rows }: { name: string; rows: Player[] }) {
+function TeamColumn({ name, rows, rep }: { name: string; rows: Player[]; rep: boolean }) {
   const starters = rows.filter((r) => r.is_starter);
   const subs = rows.filter((r) => !r.is_starter);
   return (
     <div className="team-col">
       <h3>{name}</h3>
       {starters.map((p) => (
-        <PlayerLine key={p.player_id} p={p} />
+        <PlayerLine key={p.player_id} p={p} rep={rep} />
       ))}
       {subs.length > 0 && <div className="subhead">Substitutes used</div>}
       {subs.map((p) => (
-        <PlayerLine key={p.player_id} p={p} />
+        <PlayerLine key={p.player_id} p={p} rep={rep} />
       ))}
     </div>
   );
@@ -95,10 +124,12 @@ export default function Lineup({
   home,
   away,
   players,
+  reporterFetched = false,
 }: {
   home: Team;
   away: Team;
   players: Player[];
+  reporterFetched?: boolean;
 }) {
   const col = (teamId: string) =>
     players.filter((p) => p.team_id === teamId).sort(orderCmp);
@@ -107,8 +138,8 @@ export default function Lineup({
   }
   return (
     <div className="lineup">
-      <TeamColumn name={home.name} rows={col(home.id)} />
-      <TeamColumn name={away.name} rows={col(away.id)} />
+      <TeamColumn name={home.name} rows={col(home.id)} rep={reporterFetched} />
+      <TeamColumn name={away.name} rows={col(away.id)} rep={reporterFetched} />
     </div>
   );
 }
