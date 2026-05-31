@@ -16,18 +16,26 @@ type Run = {
   finished_at: string | null;
 };
 
-export default function RunsPanel({ limit = 15 }: { limit?: number }) {
+export default function RunsPanel({
+  limit = 15,
+  source,
+}: {
+  limit?: number;
+  source?: string;
+}) {
   const [runs, setRuns] = useState<Run[]>([]);
 
   useEffect(() => {
     const supabase = createClient();
     let active = true;
     const load = async () => {
-      const { data } = await supabase
+      let q = supabase
         .from("crawl_runs")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(limit);
+      if (source) q = q.eq("source", source);
+      const { data } = await q;
       if (active && data) setRuns(data as Run[]);
     };
     load();
@@ -36,7 +44,7 @@ export default function RunsPanel({ limit = 15 }: { limit?: number }) {
       active = false;
       clearInterval(t);
     };
-  }, [limit]);
+  }, [limit, source]);
 
   if (!runs.length) return <p className="muted">No crawl runs yet.</p>;
 

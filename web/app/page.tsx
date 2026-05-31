@@ -152,7 +152,7 @@ export default async function Dashboard() {
 
       <div className="panel">
         <h2>Recent crawl runs</h2>
-        <RunsPanel limit={12} />
+        <RunsPanel limit={12} source="zerozero" />
       </div>
     </>
   );

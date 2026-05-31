@@ -30,7 +30,14 @@ export default async function MatchPage({
     .select("*")
     .eq("match_id", params.id);
 
+  const { data: reporter } = await supabase
+    .from("matches_reporter_link")
+    .select("*")
+    .eq("match_id", params.id)
+    .maybeSingle();
+
   const m = match as any;
+  const rep = reporter as any;
 
   if (!m) {
     return (
@@ -67,6 +74,7 @@ export default async function MatchPage({
               <CrawlButton kind="watch" target={m.url} label="Watch live" />
             )}
             <CrawlButton kind="match" target={m.url} label="Re-crawl match" />
+            <CrawlButton kind="reporter" target={m.id} label="Fetch reporter score" />
           </span>
         </div>
       </div>
@@ -79,6 +87,32 @@ export default async function MatchPage({
         />
       </div>
 
+      <div className="panel">
+        <h2>Reporter ratings — A Bola</h2>
+        {rep ? (
+          <>
+            <ReporterTable title={m.home_team?.name} rows={rep.home_ratings || []} />
+            <ReporterTable title={m.away_team?.name} rows={rep.away_ratings || []} />
+            <p className="muted" style={{ fontSize: 13, marginTop: 10 }}>
+              Source{(rep.urls || []).length > 1 ? "s" : ""}:{" "}
+              {(rep.urls || []).map((u: string, i: number) => (
+                <span key={u}>
+                  {i > 0 ? " · " : ""}
+                  <a href={u} target="_blank" rel="noreferrer">A Bola article {i + 1}</a>
+                </span>
+              ))}
+              {rep.fetched_at && (
+                <span> · fetched {new Date(rep.fetched_at).toLocaleString()}</span>
+              )}
+            </p>
+          </>
+        ) : (
+          <p className="muted">
+            No reporter ratings yet — press “Fetch reporter score”.
+          </p>
+        )}
+      </div>
+
       <p>
         {m.round ? (
           <Link href={`/round/${m.round}`}>← Round {m.round}</Link>
@@ -87,5 +121,32 @@ export default async function MatchPage({
         )}
       </p>
     </>
+  );
+}
+
+function ReporterTable({ title, rows }: { title: string; rows: any[] }) {
+  if (!rows?.length) return null;
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <h3 style={{ margin: "0 0 6px" }}>{title}</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th className="num">Score</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={r.player_id || r.player_name || i}>
+              <td>{r.player_name}</td>
+              <td className="num score">{r.score ?? "–"}</td>
+              <td>{r.is_mvp ? <span className="live-badge">MVP</span> : ""}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

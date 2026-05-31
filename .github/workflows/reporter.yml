@@ -1,0 +1,43 @@
+name: Fetch reporter ratings (A Bola)
+
+# Triggered by the website's "Fetch reporter score" button on a match page.
+# Runs reporter_sync.py on the self-hosted runner (residential IP).
+on:
+  workflow_dispatch:
+    inputs:
+      match_id:
+        description: "zerozero match id"
+        required: true
+        type: string
+      run_id:
+        description: "crawl_runs id to update (set by the website)"
+        required: false
+        type: string
+
+concurrency:
+  group: reporter-${{ github.event.inputs.match_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  reporter:
+    runs-on: self-hosted
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Fetch reporter ratings
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          IN_MATCH_ID: ${{ github.event.inputs.match_id }}
+          IN_RUN_ID: ${{ github.event.inputs.run_id }}
+        run: python reporter_sync.py
