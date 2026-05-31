@@ -262,6 +262,51 @@ grant execute on function public.build_match_event(text)   to service_role;
 grant execute on function public.claim_outbox_batch(int)    to service_role;
 
 -- ----------------------------------------------------------------------------
+-- 6b) Admin RPCs for the web app (no service key in the browser -> use these).
+--     SECURITY DEFINER + is_allowed(), like reporter_link().
+-- ----------------------------------------------------------------------------
+
+-- Retry one outbox row (e.g. a 'failed' delivery). If a newer pending event for
+-- the same match already supersedes it, mark this one delivered instead of
+-- tripping the one-pending-per-match unique index.
+create or replace function public.requeue_outbox(p_id bigint)
+returns void language plpgsql security definer set search_path = public as $$
+declare mid text;
+begin
+    if not public.is_allowed() then raise exception 'not allowed'; end if;
+    select match_id into mid from public.delivery_outbox where id = p_id;
+    if mid is null then return; end if;
+    if exists (select 1 from public.delivery_outbox
+               where match_id = mid and status = 'pending' and id <> p_id) then
+        update public.delivery_outbox
+           set status = 'delivered', updated_at = now() where id = p_id;
+        return;
+    end if;
+    update public.delivery_outbox
+       set status = 'pending', attempts = 0, next_attempt_at = now(),
+           last_error = null, delivered_at = null, updated_at = now()
+     where id = p_id;
+end $$;
+
+-- Enqueue a fresh snapshot for every match in a league (NULL = all leagues).
+-- Use this to backfill a newly-added subscriber. Returns rows enqueued.
+create or replace function public.replay_competition(p_competition_id text)
+returns int language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+    if not public.is_allowed() then raise exception 'not allowed'; end if;
+    insert into public.delivery_outbox (match_id, competition_id)
+    select m.id, m.competition_id from public.matches m
+     where p_competition_id is null or m.competition_id = p_competition_id
+    on conflict (match_id) where status = 'pending' do nothing;
+    get diagnostics n = row_count;
+    return n;
+end $$;
+
+grant execute on function public.requeue_outbox(bigint)      to authenticated;
+grant execute on function public.replay_competition(text)    to authenticated;
+
+-- ----------------------------------------------------------------------------
 -- 7) Wiring the dispatcher (run AFTER deploying the `dispatch` Edge Function)
 -- ----------------------------------------------------------------------------
 -- Replace <PROJECT_REF> and <SERVICE_ROLE_KEY> below. Requires the pg_net and
