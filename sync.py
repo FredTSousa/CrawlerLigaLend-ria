@@ -434,6 +434,15 @@ def run_backfill(*, competition_url: str, run_id: int | None, trigger: str,
               f"{len(todo)} to crawl, {len(all_rounds) - len(todo)} already final.",
               file=sys.stderr)
 
+        # Chain A Bola reporter ratings for finished games, just like a manual
+        # round crawl. A Bola only covers the Portuguese top flight, so skip the
+        # reporter pass for other leagues (it would only log empty runs).
+        fetch_reporters = comp.get("slug") == COMPETITION_SLUG
+        if not fetch_reporters and todo:
+            print(f"  (reporter ratings skipped: A Bola covers "
+                  f"'{COMPETITION_SLUG}', not '{comp.get('slug')}')",
+                  file=sys.stderr)
+
         total_games = 0
         crawled_rounds = 0
         for rd in todo:
@@ -449,6 +458,16 @@ def run_backfill(*, competition_url: str, run_id: int | None, trigger: str,
             total_games += len(games)
             crawled_rounds += 1
             print(f"  round {rd}: synced {len(games)} game(s).", file=sys.stderr)
+
+            # Only when there's a finished game to rate (skip future rounds).
+            if fetch_reporters and any(
+                (g.get("result") or {}).get("home") is not None
+                and (g.get("result") or {}).get("away") is not None
+                for g in games
+            ):
+                _maybe_fetch_round_reporters(games, round_no=data["round"],
+                                             github_run_id=github_run_id,
+                                             delay=delay)
 
         _finish_run(sb, run_id, status="success", games_count=total_games)
         print(f"Backfill done: {total_games} game(s) across {crawled_rounds} "

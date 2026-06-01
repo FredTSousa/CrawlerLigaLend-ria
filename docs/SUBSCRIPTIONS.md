@@ -86,8 +86,10 @@ without touching SQL. Recommended order:
    zerozero slug (e.g. `liga-portuguesa`) or full `/competicao/…` URL. This
    dispatches the `crawl.yml` workflow in `--backfill` mode: it discovers every
    round and crawls the ones that are missing or not yet final (tick **Force**
-   to re-crawl finished rounds too). Track progress on **Crawl runs**; when it
-   finishes the league appears in the dropdown.
+   to re-crawl finished rounds too). For the Portuguese top flight it also
+   chains the A Bola reporter ratings for each round's finished games (other
+   leagues skip that — A Bola doesn't cover them). Track progress on **Crawl
+   runs**; when it finishes the league appears in the dropdown.
 2. **Add the subscriber** — pick the league, paste the callback URL, generate a
    shared secret, and hand that same secret to the subscriber site.
 3. **Seed the backlog** — new events flow automatically once the subscriber
