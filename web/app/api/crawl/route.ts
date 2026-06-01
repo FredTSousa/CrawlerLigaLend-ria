@@ -13,14 +13,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  let body: { kind?: string; target?: string | number };
+  let body: { kind?: string; target?: string | number; force?: boolean };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 
-  const allowed = ["round", "match", "watch", "reporter"];
+  const allowed = ["round", "match", "watch", "reporter", "backfill"];
   const kind = allowed.includes(body.kind as string) ? (body.kind as string) : "round";
   const target = String(body.target ?? "").trim();
   if (!target) {
@@ -83,7 +83,13 @@ export async function POST(request: Request) {
   const inputs: Record<string, string> = { run_id: String(run.id) };
   if (kind === "reporter") inputs.match_id = target;
   else if (kind === "match" || kind === "watch") inputs.match = target;
-  else inputs.jornada = target;
+  else if (kind === "backfill") {
+    // target is the competition slug or landing-page URL; crawl every
+    // not-yet-complete round of that league.
+    inputs.competition = target;
+    inputs.backfill = "true";
+    if (body.force) inputs.force = "true";
+  } else inputs.jornada = target;
 
   const ghRes = await fetch(
     `https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`,

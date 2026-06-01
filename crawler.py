@@ -546,6 +546,12 @@ def _competition_name(html: str) -> str | None:
     return m.group(1).split(" - ")[0].strip() if m else None
 
 
+def _competition_slug(url: str) -> str | None:
+    """The zerozero slug from a competition URL (…/competicao/<slug>[?…])."""
+    m = re.search(r"/competicao/([a-z0-9-]+)", url)
+    return m.group(1) if m else None
+
+
 def get_competition(base_url: str = COMPETITION_URL, *,
                     session: requests.Session | None = None,
                     delay: float = 1.0) -> dict:
@@ -572,6 +578,7 @@ def get_competition(base_url: str = COMPETITION_URL, *,
     return {
         "name": _competition_name(html),
         "url": base_url,
+        "slug": _competition_slug(base_url),
         "id_edicao": edi_m.group(1) if edi_m else None,
         "fase": fase_m.group(1),
         "rounds": rounds,
@@ -596,8 +603,12 @@ def get_fixture(competition: dict | str | int, jornada: int | str, *,
                               home_team{name,id}, away_team{name,id}, result}]}
     """
     fase = competition["fase"] if isinstance(competition, dict) else competition
+    # Address the round on the competition's OWN landing page, so non-default
+    # leagues build the right URL (the bare-fase form falls back to liga).
+    base = (competition.get("url") if isinstance(competition, dict) else None) \
+        or COMPETITION_URL
     session = _session(session)
-    url = fixture_url(fase, jornada)
+    url = fixture_url(fase, jornada, base)
     html = fetch(session, url, delay=delay)
     games = parse_round_games(html)
     return {"round": int(jornada), "url": url, "games": games}

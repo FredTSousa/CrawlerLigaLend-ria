@@ -76,6 +76,49 @@ re-delivery is a no-op.
 Each event is the **full current snapshot** of the match (not a diff), so the
 subscriber just upserts the match and replaces its player rows.
 
+## Using it from the web app (Subscribers page)
+
+The **Subscribers** page (`/subscribers`, signed-in) manages the whole flow
+without touching SQL. Recommended order:
+
+1. **Make sure the league is crawled.** If it's already in the league dropdown,
+   it's in the database. For a brand-new league, use **Crawl a league** with its
+   zerozero slug (e.g. `liga-portuguesa`) or full `/competicao/…` URL. This
+   dispatches the `crawl.yml` workflow in `--backfill` mode: it discovers every
+   round and crawls the ones that are missing or not yet final (tick **Force**
+   to re-crawl finished rounds too). Track progress on **Crawl runs**; when it
+   finishes the league appears in the dropdown.
+2. **Add the subscriber** — pick the league, paste the callback URL, generate a
+   shared secret, and hand that same secret to the subscriber site.
+3. **Seed the backlog** — new events flow automatically once the subscriber
+   exists; press **re-send** on the row to (re)deliver every match *already
+   stored* for that league. Do this after a step-1 crawl so those fixtures reach
+   the subscriber (a backfill crawl that ran *before* the subscriber existed was
+   delivered to nobody — see the no-listeners note below).
+
+Per-row actions: **crawl** (re)fetches fixtures from zerozero for that
+subscriber's league; **re-send** re-enqueues stored matches (no crawl);
+**pause/resume** toggles `active`; **✕** deletes. The *All leagues* wildcard
+subscriber can't be crawled or re-sent per-league.
+
+> **Why crawl can't be "subscribe and it just appears":** the dispatcher marks
+> an outbox row delivered when a league has **no active subscribers** (so events
+> don't pile up). A backfill therefore only reaches a subscriber that already
+> exists — hence subscribe first, then **re-send**, or simply crawl while the
+> subscriber is already active so events deliver live.
+
+### CLI / workflow equivalents
+
+The page just dispatches the crawl workflow. The same backfill from a shell:
+
+```bash
+python sync.py --competition liga-portuguesa --backfill          # not-yet-final rounds
+python sync.py --competition https://www.zerozero.pt/competicao/la-liga --backfill --force
+```
+
+or via `workflow_dispatch` on **Crawl & sync** with the `competition` +
+`backfill` (+ `force`) inputs.
+
 ## Setup — crawler side (this repo's Supabase)
 
 1. Run `db/migration_subscriptions.sql` in the SQL editor.
@@ -115,10 +158,13 @@ subscriber just upserts the match and replaces its player rows.
 
 ## Operating notes
 
-- **Backfill / replay:** `update delivery_outbox set status='pending',
-  attempts=0, next_attempt_at=now() where match_id='...';` re-sends a match.
-  To seed a brand-new subscriber with a whole league, `insert ... select` one
-  pending outbox row per match in that competition.
+- **Crawl vs. re-send:** *crawling* fetches fixtures from zerozero into the DB
+  (`sync.py --backfill`, or the page's **Crawl a league**); *re-sending*
+  re-delivers matches already in the DB to subscribers (the `replay_competition`
+  RPC behind the page's **re-send**, or, for one match, `update delivery_outbox
+  set status='pending', attempts=0, next_attempt_at=now() where match_id='…';`).
+  Seed a brand-new subscriber with a whole league via **re-send** (it enqueues
+  one pending outbox row per stored match in that competition).
 - **Inspect:** `select status, count(*) from delivery_outbox group by 1;` and
   `select * from delivery_outbox where status='failed';` (the `last_error`
   column holds the subscriber's response).

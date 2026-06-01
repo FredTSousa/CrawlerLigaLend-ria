@@ -14,7 +14,7 @@ export default async function SubscribersPage() {
       .from("subscribers")
       .select("id,label,competition_id,callback_url,active,created_at")
       .order("created_at", { ascending: false }),
-    supabase.from("competitions").select("id,name").order("name"),
+    supabase.from("competitions").select("id,name,slug").order("name"),
     supabase
       .from("delivery_outbox")
       .select("id,match_id,competition_id,status,attempts,last_error,updated_at")

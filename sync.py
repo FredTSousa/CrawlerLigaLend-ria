@@ -15,6 +15,9 @@ Usage:
     python sync.py --jornada 31
     python sync.py --match https://www.zerozero.pt/jogo/.../11071716
     python sync.py --jornada 31 --run-id 42 --trigger manual --github-run-id 123
+    python sync.py --competition la-liga --jornada 5
+    python sync.py --competition la-liga --backfill        # all not-yet-final rounds
+    python sync.py --competition la-liga --backfill --force # every round
 
 If --run-id is given (the site pre-created a 'queued' row), that row is updated;
 otherwise a new crawl_runs row is created.
@@ -111,6 +114,22 @@ class Supabase:
                           f"matches?id=in.({inlist})&select=id,status,competition_id")
         return {r["id"]: r for r in resp.json()}
 
+    def competition_rounds_status(self, competition_id: str) -> dict[int, list[str]]:
+        """Map each crawled round of a competition to its games' statuses, so a
+        backfill can skip rounds that are already fully 'final' and (re)crawl
+        rounds that are missing or still have scheduled/live games."""
+        if not competition_id:
+            return {}
+        resp = self._rest(
+            "GET", f"matches?competition_id=eq.{competition_id}&select=round,status")
+        out: dict[int, list[str]] = {}
+        for r in resp.json():
+            rd = r.get("round")
+            if rd is None:
+                continue
+            out.setdefault(rd, []).append(r.get("status"))
+        return out
+
     def watch_list(self) -> list[dict]:
         """Matches flagged for live watching that aren't finished yet."""
         resp = self._rest(
@@ -130,7 +149,9 @@ def _competition_row(comp: dict) -> dict:
     return {
         "id": comp.get("id_edicao"),
         "name": comp.get("name"),
-        "slug": COMPETITION_SLUG,
+        # Derive the slug from the crawled competition; fall back to the Liga
+        # default for legacy single-match/round runs that don't carry one.
+        "slug": comp.get("slug") or COMPETITION_SLUG,
         "fase": comp.get("fase"),
         "updated_at": _now(),
     }
@@ -328,7 +349,8 @@ def _maybe_fetch_round_reporters(games: list[dict], *, round_no: int | None,
 
 
 def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
-        trigger: str, github_run_id: str | None, delay: float) -> dict:
+        trigger: str, github_run_id: str | None, delay: float,
+        competition_url: str | None = None) -> dict:
     sb = Supabase()
     kind = "match" if match_url else "round"
     target = match_url if match_url else str(jornada if jornada is not None else "current")
@@ -345,7 +367,8 @@ def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
             scraped_at = _now()
             competition = None
         else:
-            competition = crawler.get_competition(delay=delay)
+            competition = crawler.get_competition(
+                competition_url or crawler.COMPETITION_URL, delay=delay)
             data = crawler.crawl_round(jornada=jornada, competition=competition,
                                        delay=delay)
             games = data["games"]
@@ -377,6 +400,66 @@ def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
         raise
 
 
+def run_backfill(*, competition_url: str, run_id: int | None, trigger: str,
+                 github_run_id: str | None, delay: float,
+                 force: bool = False) -> dict:
+    """Crawl & sync every round of a competition that isn't already complete.
+
+    Reads the competition landing page once to discover all rounds, then crawls
+    each round that is missing from the DB or still has a non-'final' game,
+    skipping rounds whose games are all final (unless ``force``). This is the
+    entry point for backfilling a league when a subscriber first asks for it.
+    """
+    sb = Supabase()
+    comp = crawler.get_competition(competition_url, delay=delay)
+    comp_id = comp.get("id_edicao")
+    label = comp.get("slug") or comp.get("name") or competition_url
+
+    run_id = _begin_run(sb, run_id=run_id, trigger=trigger, kind="backfill",
+                        target=str(label), github_run_id=github_run_id)
+    try:
+        existing = sb.competition_rounds_status(comp_id) if comp_id else {}
+        all_rounds = comp.get("rounds") or []
+
+        def needs(rd: int) -> bool:
+            if force:
+                return True
+            statuses = existing.get(rd)
+            if not statuses:
+                return True  # never crawled -> capture the schedule
+            return any(s != "final" for s in statuses)  # still open -> refresh
+
+        todo = [rd for rd in all_rounds if needs(rd)]
+        print(f"Backfill '{label}' (edition {comp_id}): {len(all_rounds)} round(s), "
+              f"{len(todo)} to crawl, {len(all_rounds) - len(todo)} already final.",
+              file=sys.stderr)
+
+        total_games = 0
+        crawled_rounds = 0
+        for rd in todo:
+            try:
+                data = crawler.crawl_round(jornada=rd, competition=comp,
+                                           delay=delay)
+            except Exception as err:  # noqa: BLE001 - skip a bad round, keep going
+                print(f"  ! round {rd} failed: {err}", file=sys.stderr)
+                continue
+            games = data["games"]
+            write_games(sb, games, competition=comp, round_no=data["round"],
+                        scraped_at=data.get("scraped_at"))
+            total_games += len(games)
+            crawled_rounds += 1
+            print(f"  round {rd}: synced {len(games)} game(s).", file=sys.stderr)
+
+        _finish_run(sb, run_id, status="success", games_count=total_games)
+        print(f"Backfill done: {total_games} game(s) across {crawled_rounds} "
+              f"round(s). crawl_run #{run_id}", file=sys.stderr)
+        return {"run_id": run_id, "rounds": crawled_rounds, "games": total_games}
+    except Exception as err:  # noqa: BLE001
+        _finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        print(f"ERROR in backfill crawl_run #{run_id}: {err}", file=sys.stderr)
+        raise
+
+
 def _env(*names: str) -> str | None:
     """First non-empty environment variable among names."""
     for n in names:
@@ -386,6 +469,21 @@ def _env(*names: str) -> str | None:
     return None
 
 
+def _flag(v: str | None) -> bool:
+    """Truthy parse for env-var flags ('1'/'true'/'yes'/'on')."""
+    return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _competition_url(arg: str | None) -> str | None:
+    """Resolve a competition CLI/env value to a landing-page URL. Accepts a
+    full URL or a bare zerozero slug (e.g. 'liga-portuguesa')."""
+    if not arg:
+        return None
+    if arg.startswith("http"):
+        return arg
+    return f"{crawler.BASE}/competicao/{arg}"
+
+
 def main() -> int:
     _load_dotenv()
     ap = argparse.ArgumentParser(description=__doc__)
@@ -393,6 +491,15 @@ def main() -> int:
     mode.add_argument("--jornada", type=int,
                       help="Round to crawl & sync (defaults to current round).")
     mode.add_argument("--match", help="Single match URL to crawl & sync.")
+    ap.add_argument("--competition",
+                    help="Competition to crawl: a zerozero slug (e.g. "
+                         "'liga-portuguesa') or a full landing-page URL. "
+                         "Defaults to Liga Portugal.")
+    ap.add_argument("--backfill", action="store_true",
+                    help="Crawl every round of --competition that isn't already "
+                         "complete (missing or with non-final games).")
+    ap.add_argument("--force", action="store_true",
+                    help="With --backfill, re-crawl every round even if final.")
     ap.add_argument("--run-id", type=int,
                     help="Existing crawl_runs row to update (else a new one is created).")
     ap.add_argument("--trigger", default="manual", choices=["manual", "schedule"],
@@ -422,8 +529,20 @@ def main() -> int:
     if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
         trigger = "schedule"
 
+    competition_url = _competition_url(args.competition or _env("IN_COMPETITION"))
+    backfill = args.backfill or _flag(_env("IN_BACKFILL"))
+    force = args.force or _flag(_env("IN_FORCE"))
+
+    if backfill:
+        run_backfill(competition_url=competition_url or crawler.COMPETITION_URL,
+                     run_id=run_id, trigger=trigger,
+                     github_run_id=args.github_run_id, delay=args.delay,
+                     force=force)
+        return 0
+
     run(jornada=jornada, match_url=match_url, run_id=run_id,
-        trigger=trigger, github_run_id=args.github_run_id, delay=args.delay)
+        trigger=trigger, github_run_id=args.github_run_id, delay=args.delay,
+        competition_url=competition_url)
     return 0
 
 

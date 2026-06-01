@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-type Competition = { id: string; name: string | null };
+type Competition = { id: string; name: string | null; slug: string | null };
 type Subscriber = {
   id: number;
   label: string | null;
@@ -69,6 +69,24 @@ export default function Subscribers({
 
   const compName = (id: string | null) =>
     id == null ? "All leagues" : competitions.find((c) => c.id === id)?.name ?? id;
+  const compSlug = (id: string | null) =>
+    id == null ? null : competitions.find((c) => c.id === id)?.slug ?? null;
+
+  // Trigger a crawl via the server route (it dispatches the GitHub workflow).
+  async function postCrawl(payload: {
+    kind: string;
+    target: string;
+    force?: boolean;
+  }): Promise<number | null> {
+    const res = await fetch("/api/crawl", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || `crawl dispatch failed (${res.status})`);
+    return json.run_id ?? null;
+  }
 
   // ---- new subscriber form ----
   const [form, setForm] = useState({
@@ -83,6 +101,36 @@ export default function Subscribers({
     crypto.getRandomValues(a);
     const hex = [...a].map((b) => b.toString(16).padStart(2, "0")).join("");
     setForm((f) => ({ ...f, secret: hex }));
+  }
+
+  // ---- crawl a (new) league ----
+  const [crawl, setCrawl] = useState({ competition: "", force: false });
+
+  async function crawlNewLeague() {
+    const target = crawl.competition.trim();
+    if (!target) {
+      setErr("Enter a zerozero competition slug or URL to crawl.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    setNote(null);
+    try {
+      const runId = await postCrawl({
+        kind: "backfill",
+        target,
+        force: crawl.force,
+      });
+      setNote(
+        `Backfill crawl dispatched (run #${runId}). When it finishes, the ` +
+          `league appears in the dropdown above and you can add a subscriber.`,
+      );
+      setCrawl({ competition: "", force: false });
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function addSubscriber() {
@@ -127,10 +175,16 @@ export default function Subscribers({
     router.refresh();
   }
 
-  async function backfill(s: Subscriber) {
+  // Re-deliver matches ALREADY stored for this league (no crawl) — re-enqueues
+  // one outbox event per match so a freshly-added subscriber gets the backlog.
+  async function resend(s: Subscriber) {
+    if (s.competition_id == null) {
+      setErr("Re-send needs a specific league (not the all-leagues wildcard).");
+      return;
+    }
     if (
       !confirm(
-        `Re-send every match in "${compName(s.competition_id)}" to all` +
+        `Re-send every stored match in "${compName(s.competition_id)}" to all` +
           ` subscribers of that league?`,
       )
     )
@@ -144,6 +198,36 @@ export default function Subscribers({
     setBusy(false);
     if (error) return setErr(error.message);
     setNote(`Enqueued ${data ?? 0} match event(s) for re-delivery.`);
+  }
+
+  // Crawl zerozero for every not-yet-complete round of this subscriber's league.
+  async function crawlSubscriberLeague(s: Subscriber) {
+    const slug = compSlug(s.competition_id);
+    if (!slug) {
+      setErr(
+        "This league has no zerozero slug on record — crawl it from " +
+          "“Crawl a league” below using its slug or URL.",
+      );
+      return;
+    }
+    if (
+      !confirm(
+        `Crawl all fixtures for "${compName(s.competition_id)}" from zerozero?` +
+          ` Rounds already final are skipped.`,
+      )
+    )
+      return;
+    setBusy(true);
+    setErr(null);
+    setNote(null);
+    try {
+      const runId = await postCrawl({ kind: "backfill", target: slug });
+      setNote(`Backfill crawl dispatched (run #${runId}). Track it on Crawl runs.`);
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function retry(id: number) {
@@ -160,6 +244,59 @@ export default function Subscribers({
     <>
       {err && <p style={{ color: "var(--red)", marginTop: 0 }}>{err}</p>}
       {note && <p style={{ color: "var(--green)", marginTop: 0 }}>{note}</p>}
+
+      {/* ---- how to subscribe (on-page docs) ---- */}
+      <div className="panel">
+        <details>
+          <summary style={{ cursor: "pointer", fontWeight: 600 }}>
+            How to subscribe a site to a league
+          </summary>
+          <div style={{ marginTop: 12 }}>
+            <p className="muted" style={{ marginTop: 0 }}>
+              A subscriber is any URL that receives a signed{" "}
+              <code>POST</code> every time a match in its league changes (score,
+              status, player stats, reporter ratings). Each event is the full
+              current snapshot of the match. Recommended order:
+            </p>
+            <ol style={{ lineHeight: 1.7, paddingLeft: 20 }}>
+              <li>
+                <strong>Make sure the league is crawled.</strong> If it&apos;s
+                already in the league dropdown, it&apos;s in the database. For a
+                brand-new league, use <strong>Crawl a league</strong> below with
+                its zerozero slug (e.g. <code>liga-portuguesa</code>) or full{" "}
+                <code>/competicao/…</code> URL. The crawl fetches every
+                not-yet-final round and creates the league; track it on{" "}
+                <a href="/runs">Crawl runs</a>. Once done, refresh this page and
+                the league shows in the dropdown.
+              </li>
+              <li>
+                <strong>Add the subscriber</strong> (form below): pick the
+                league, paste the subscriber&apos;s callback URL, and generate a
+                shared HMAC secret. Give that same secret to the subscriber site
+                (its <code>CRAWLER_WEBHOOK_SECRET</code>) so it can verify the{" "}
+                <code>X-Signature</code> header.
+              </li>
+              <li>
+                <strong>Seed the backlog.</strong> New events flow
+                automatically from here on. To push the matches that already
+                existed <em>before</em> you added the subscriber, hit{" "}
+                <strong>re-send</strong> on the subscriber row — it re-delivers
+                every stored match in that league (ingest is idempotent, so
+                re-sends are safe). If you crawled in step 1, do this after
+                subscribing so those fixtures land too.
+              </li>
+            </ol>
+            <p className="muted" style={{ marginBottom: 0 }}>
+              <strong>crawl</strong> (re)fetches fixtures from zerozero;{" "}
+              <strong>re-send</strong> re-delivers what&apos;s already stored —
+              no crawl. A subscriber with <em>All leagues</em> receives every
+              league and can&apos;t be crawled/re-sent per-league. Full design
+              and the subscriber-side setup live in{" "}
+              <code>docs/SUBSCRIPTIONS.md</code>.
+            </p>
+          </div>
+        </details>
+      </div>
 
       {/* ---- subscribers list ---- */}
       <div className="panel">
@@ -210,11 +347,19 @@ export default function Subscribers({
                       </button>
                       <button
                         className="btn secondary"
-                        disabled={busy}
-                        onClick={() => backfill(s)}
-                        title="Re-send every match in this league"
+                        disabled={busy || s.competition_id == null}
+                        onClick={() => crawlSubscriberLeague(s)}
+                        title="Crawl zerozero for every fixture of this league"
                       >
-                        backfill
+                        crawl
+                      </button>
+                      <button
+                        className="btn secondary"
+                        disabled={busy || s.competition_id == null}
+                        onClick={() => resend(s)}
+                        title="Re-deliver matches already stored for this league"
+                      >
+                        re-send
                       </button>
                       <button
                         className="btn secondary"
@@ -286,6 +431,45 @@ export default function Subscribers({
           <div>
             <button className="btn" disabled={busy} onClick={addSubscriber}>
               Add subscriber
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ---- crawl a (new) league ---- */}
+      <div className="panel">
+        <h2>Crawl a league</h2>
+        <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+          Fetch every fixture of a zerozero competition (all rounds). Rounds
+          already complete are skipped unless you force a full re-crawl. Use
+          this to add a league that isn&apos;t in the dropdown yet, or to
+          refresh a league&apos;s schedule.
+        </p>
+        <div style={{ display: "grid", gap: 10, maxWidth: 560 }}>
+          <input
+            placeholder="zerozero slug or URL (e.g. liga-portuguesa)"
+            value={crawl.competition}
+            disabled={busy}
+            onChange={(e) =>
+              setCrawl((c) => ({ ...c, competition: e.target.value }))
+            }
+          />
+          <label className="row" style={{ gap: 8, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={crawl.force}
+              disabled={busy}
+              onChange={(e) =>
+                setCrawl((c) => ({ ...c, force: e.target.checked }))
+              }
+            />
+            <span className="muted" style={{ fontSize: 13 }}>
+              Force: re-crawl every round, even ones already final
+            </span>
+          </label>
+          <div>
+            <button className="btn" disabled={busy} onClick={crawlNewLeague}>
+              Crawl fixtures
             </button>
           </div>
         </div>

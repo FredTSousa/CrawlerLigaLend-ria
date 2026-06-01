@@ -16,6 +16,20 @@ on:
         description: "Single match URL (overrides jornada)"
         required: false
         type: string
+      competition:
+        description: "Competition slug or URL (blank = Liga Portugal)"
+        required: false
+        type: string
+      backfill:
+        description: "Crawl every not-yet-complete round of the competition"
+        required: false
+        type: boolean
+        default: false
+      force:
+        description: "With backfill, re-crawl rounds even if already final"
+        required: false
+        type: boolean
+        default: false
       run_id:
         description: "Existing crawl_runs id to update (set by the website)"
         required: false
@@ -54,5 +68,8 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           IN_JORNADA: ${{ github.event.inputs.jornada }}
           IN_MATCH: ${{ github.event.inputs.match }}
+          IN_COMPETITION: ${{ github.event.inputs.competition }}
+          IN_BACKFILL: ${{ github.event.inputs.backfill }}
+          IN_FORCE: ${{ github.event.inputs.force }}
           IN_RUN_ID: ${{ github.event.inputs.run_id }}
         run: python sync.py
