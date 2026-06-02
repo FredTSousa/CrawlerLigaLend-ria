@@ -231,38 +231,83 @@ def _in_window(d: date, game_date: date) -> bool:
 MAX_FEED_PAGES = 60
 FEED_PAGE_DELAY = 0.3
 MIN_FEED_RATINGS = 8
-_TEAM_PAGE_RE = re.compile(r"/futebol/[a-z0-9-]+-\d+$")
+# A Bola team-page URLs come in two shapes -- "/futebol/<slug>-<id>" and the
+# slug-less "/futebol/<id>" -- so the slug is optional. Anchored at the end so a
+# news URL ("/futebol/competicao/...") never matches.
+_TEAM_PAGE_RE = re.compile(r"^/futebol/(?:[a-z0-9-]+-)?\d+$")
+# Youth / women's / B sides share a club's tokens ("Gil Vicente Sub-23"); their
+# slugs carry a marker, so exclude them -- we want the senior team's feed.
+_TEAM_VARIANT_RE = re.compile(
+    r"sub-?\d|\bfeminin|\bjunior|juvenil|\bsub23\b|-b-\d", re.I)
 
 
 def _abs(href: str) -> str:
-    return href if href.startswith("http") else "https://www.abola.pt" + href
+    """Normalise an A Bola href to a https://www.abola.pt absolute URL (some
+    autolinks use bare 'http://abola.pt' without the www)."""
+    if href.startswith("/"):
+        return "https://www.abola.pt" + href
+    return re.sub(r"^https?://(?:www\.)?abola\.pt", "https://www.abola.pt", href)
+
+
+def _search_terms(team: str) -> list[str]:
+    """Query strings to look a team up by, most specific first: its own/alias
+    names, their club-type-stripped short forms ('Casa Pia AC' -> 'Casa Pia',
+    which A Bola indexes when the full name returns nothing), then distinctive
+    tokens ('amadora' finds 'Estrela da Amadora' when 'Est. Amadora' doesn't)."""
+    terms, seen = [], set()
+    for nm in _alias_names(team):
+        for t in (nm, _clean_team(nm)):
+            t = t.strip()
+            if t and t.lower() not in seen:
+                seen.add(t.lower())
+                terms.append(t)
+    for tok in _team_tokens(team):
+        if tok not in seen:
+            seen.add(tok)
+            terms.append(tok)
+    return terms
+
+
+def _team_page_score(text: str, team: str) -> int:
+    """How well a team autolink's text matches `team`: 3 exact, 2 cleaned-name
+    equal, 1 token overlap, 0 none. Lets the senior side win over a youth side
+    that merely shares tokens."""
+    nt, na = _norm(text), _norm(team)
+    if nt == na:
+        return 3
+    if nt == _norm(_clean_team(team)):
+        return 2
+    return 1 if _team_tokens(text) & _team_tokens(team) else 0
 
 
 def find_team_page(team: str) -> str | None:
-    """A team's A Bola page URL (/futebol/<slug>-<id>), read from a team autolink
-    on a recent article tagged with it. Cached per team."""
+    """A team's A Bola page URL, read from a team autolink on a recent article
+    tagged with it. Opens several search hits and keeps the best-matching senior
+    team link (exact name beats token overlap; youth/women's sides excluded), so
+    'Gil Vicente' resolves to the senior page, not 'Gil Vicente Sub-23'. Cached."""
     if team in _TEAM_PAGE_CACHE:
         return _TEAM_PAGE_CACHE[team]
-    tok = _team_tokens(team)
-    result = None
-    for nm in _alias_names(team):
+    best, best_score = None, 0
+    for nm in _search_terms(team):
         for _d, u in abola_search(nm, pages=2):
             try:
                 soup = BeautifulSoup(fetch(u), "lxml")
             except Exception:  # noqa: BLE001
                 continue
             for a in soup.find_all("a", attrs={"data-resource-type": "team"}):
-                href = a.get("href", "")
-                if _TEAM_PAGE_RE.search(href.split("?")[0]) \
-                        and _team_tokens(a.get_text(strip=True)) & tok:
-                    result = _abs(href)
-                    break
-            if result:
+                path = re.sub(r"^https?://(?:www\.)?abola\.pt", "",
+                              a.get("href", "")).split("?")[0]
+                if not _TEAM_PAGE_RE.match(path) or _TEAM_VARIANT_RE.search(path):
+                    continue
+                score = _team_page_score(a.get_text(strip=True), team)
+                if score > best_score:
+                    best, best_score = _abs(a["href"]), score
+            if best_score >= 3:           # exact name -- can't do better
                 break
-        if result:
+        if best_score >= 3:
             break
-    _TEAM_PAGE_CACHE[team] = result
-    return result
+    _TEAM_PAGE_CACHE[team] = best
+    return best
 
 
 _TEAM_PAGE_CACHE: dict[str, str | None] = {}
@@ -309,15 +354,23 @@ def walk_team_feed(team: str, game_date: date):
             break
 
 
+def _has_team_ratings(url: str, team: str, *, default_team: str | None = None) -> bool:
+    """True if `url` parses to a full ratings list for `team` (>= a near-XI). The
+    verification that separates a real notas/destaques page from a passing mention
+    -- and that stops a generic token (e.g. 'casa' in '...chaves-de-casa...') from
+    accepting an unrelated team's page."""
+    try:
+        page = parse_page(fetch(url), default_team=default_team)
+    except Exception:  # noqa: BLE001
+        return False
+    return len(_pick_team(page["teams"], team)) >= MIN_FEED_RATINGS
+
+
 def _team_ratings_page(team: str, game_date: date) -> str | None:
     """Open in-window feed candidates and return the first that parses to a full
     team-ratings list for `team` (a real notas/destaques page, not a mention)."""
     for u in walk_team_feed(team, game_date):
-        try:
-            page = parse_page(fetch(u), default_team=team)
-        except Exception:  # noqa: BLE001
-            continue
-        if len(_pick_team(page["teams"], team)) >= MIN_FEED_RATINGS:
+        if _has_team_ratings(u, team, default_team=team):
             return u
     return None
 
@@ -329,18 +382,7 @@ def find_team_notas(team: str, game_date: date) -> str | None:
     (the bug that hid AFS: the query asked for 'AFS', which A Bola doesn't index,
     while the page is 'as notas do Aves SAD')."""
     tokens = _team_tokens(team)
-    terms, seen = [], set()
-    for nm in _alias_names(team):                 # configured/own names first
-        for t in (nm, _clean_team(nm)):
-            t = t.strip()
-            if t and t.lower() not in seen:
-                seen.add(t.lower())
-                terms.append(t)
-    for tok in tokens:                            # built-in aliases, e.g. 'aves'
-        if tok not in seen:
-            seen.add(tok)
-            terms.append(tok)
-    for term in terms:
+    for term in _search_terms(team):
         # A Bola titles the ratings page "as notas do X" or "os destaques do X".
         for q in (f"as notas do {term}", f"notas {term}",
                   f"os destaques do {term}", f"destaques {term}"):
@@ -349,8 +391,12 @@ def find_team_notas(team: str, game_date: date) -> str | None:
                      and ("notas" in u or "destaques" in u)
                      and any(t in u.lower() for t in tokens)]
             cands.sort()
-            if cands:
-                return cands[0][1]
+            # Open-verify: a URL token can hit by accident ('casa' in
+            # '...chaves-de-casa...as-notas-do-benfica'), so confirm the page
+            # really carries this team's ratings before trusting it.
+            for _d, u in cands:
+                if _has_team_ratings(u, team):
+                    return u
     # Fallback: a creatively-titled ratings page (search can't see it) -- page the
     # team's own A Bola feed back to the match window and open-verify.
     return _team_ratings_page(team, game_date)
