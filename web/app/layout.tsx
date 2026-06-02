@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SignOut from "@/components/SignOut";
+import Nav from "@/components/Nav";
 
 export const metadata: Metadata = {
   title: "Crawler LLP",
@@ -26,15 +27,7 @@ export default async function RootLayout({
           <header className="site">
             <div className="inner">
               <Link href="/" className="brand">⚽ Crawler LLP</Link>
-              <nav>
-                <Link href="/">Dashboard</Link>
-                <Link href="/competitions">Competitions</Link>
-                <Link href="/runs">Crawl runs</Link>
-                <Link href="/reporter-runs">Reporter runs</Link>
-                <Link href="/linking-issues">Linking issues</Link>
-                <Link href="/team-aliases">Team aliases</Link>
-                <Link href="/subscribers">Subscribers</Link>
-              </nav>
+              <Nav />
               <span className="spacer" />
               <span className="muted" style={{ fontSize: 13 }}>{user.email}</span>
               <SignOut />
