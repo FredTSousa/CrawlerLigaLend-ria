@@ -224,9 +224,12 @@ def _in_window(d: date, game_date: date) -> bool:
 # (common for a big-three opponent, e.g. "Salão de Barbero abriu cedo...") is
 # unreachable by search. But A Bola TAGS every article to its teams, and a team's
 # page lists them newest-first at /futebol/<slug>-<id>?page=N, so we can page back
-# to the match window and confirm by opening. ~12 days/page => even August is ~25
-# pages; a ratings page is unmistakable (it parses to a whole XI).
-MAX_FEED_PAGES = 30
+# to the match window and confirm by opening. Feed density varies by club (~6-12
+# days/page), so reaching a season's start can take ~55 pages; cap generously
+# since the walk stops the moment it reaches the window. A ratings page is
+# unmistakable (it parses to a whole XI).
+MAX_FEED_PAGES = 60
+FEED_PAGE_DELAY = 0.3
 MIN_FEED_RATINGS = 8
 _TEAM_PAGE_RE = re.compile(r"/futebol/[a-z0-9-]+-\d+$")
 
@@ -287,6 +290,8 @@ def walk_team_feed(team: str, game_date: date):
         return
     yielded = set()
     for page in range(1, MAX_FEED_PAGES + 1):
+        if page > 1:
+            time.sleep(FEED_PAGE_DELAY)
         try:
             arts = _feed_articles(team_page, page)
         except Exception:  # noqa: BLE001
@@ -925,6 +930,24 @@ def _match_cronica(index: list[dict], home: str, away: str,
     return None
 
 
+def _parse_team_pages(pairs, urls_used: list, delay: float) -> tuple[dict, list]:
+    """Parse a list of (url, team) single-team notas pages into a merged
+    (teams, boxes), appending each fetched url to `urls_used`. Skips falsy or
+    already-used urls."""
+    teams: dict[str, list] = {}
+    boxes: list[dict] = []
+    for url, want in pairs:
+        if not url or url in urls_used:
+            continue
+        urls_used.append(url)
+        page = parse_page(fetch(url), default_team=want)
+        for name, plist in page["teams"].items():
+            teams.setdefault(name, []).extend(plist)
+        boxes.extend(page["mvp_boxes"])
+        time.sleep(delay)
+    return teams, boxes
+
+
 def scrape_match(match: dict, *, single_url: str | None = None,
                  home_url: str | None = None, away_url: str | None = None,
                  cronica: dict | None = None, delay: float = 1.0) -> dict:
@@ -954,17 +977,8 @@ def scrape_match(match: dict, *, single_url: str | None = None,
             time.sleep(delay)
         if away_url is None and single_url is None:
             away_url = find_team_notas(away, gdate)
-        teams: dict[str, list] = {}
-        boxes: list[dict] = []
-        for url, want in ((home_url, home), (away_url, away)):
-            if not url:
-                continue
-            out["urls_used"].append(url)
-            page = parse_page(fetch(url), default_team=want)
-            for name, plist in page["teams"].items():
-                teams.setdefault(name, []).extend(plist)
-            boxes.extend(page["mvp_boxes"])
-            time.sleep(delay)
+        teams, boxes = _parse_team_pages(
+            [(home_url, home), (away_url, away)], out["urls_used"], delay)
         apply_mvp(teams, boxes)
         out["home_team_ratings"] = _pick_team(teams, home)
         out["away_team_ratings"] = _pick_team(teams, away)
@@ -984,6 +998,26 @@ def scrape_match(match: dict, *, single_url: str | None = None,
             apply_mvp(teams, boxes)
             out["home_team_ratings"] = _pick_team(teams, home)
             out["away_team_ratings"] = _pick_team(teams, away)
+        # Not every non-big-three match gets a combined crónica: notable games
+        # (e.g. the Minho derby) use the big-three TWO-page format instead -- one
+        # "as notas do X" per team. So when a side is still missing, fill it from
+        # its own notas page (found via search/feed). Skipped when URLs/crónica
+        # were injected (batch/tests decide their own sources).
+        if cronica is None and single_url is None \
+                and (not out["home_team_ratings"] or not out["away_team_ratings"]):
+            pairs = []
+            if not out["home_team_ratings"]:
+                pairs.append((find_team_notas(home, gdate), home))
+                time.sleep(delay)
+            if not out["away_team_ratings"]:
+                pairs.append((find_team_notas(away, gdate), away))
+            teams2, boxes2 = _parse_team_pages(pairs, out["urls_used"], delay)
+            if teams2:
+                apply_mvp(teams2, boxes2)
+                if not out["home_team_ratings"]:
+                    out["home_team_ratings"] = _pick_team(teams2, home)
+                if not out["away_team_ratings"]:
+                    out["away_team_ratings"] = _pick_team(teams2, away)
 
     return out
 
