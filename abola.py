@@ -170,6 +170,9 @@ CLUB_ABBR = {"fc", "sc", "ac", "cd", "sl", "ad", "gd", "cf", "sad",
 # a set matches the whole set. Add groups here as new mismatches surface.
 TEAM_ALIASES = [
     {"avs", "afs", "aves"},
+    # A Bola names some clubs by their CITY, not the zerozero "SC/FC" form:
+    # 'Vitória SC' is written 'V. Guimarães' / 'Guimarães' (shares no token).
+    {"vitoria", "guimaraes"},
 ]
 
 # Per-team alternative NAMES A Bola may use, keyed by _norm(zerozero name) ->
@@ -216,6 +219,104 @@ def _in_window(d: date, game_date: date) -> bool:
     return 0 <= (d - game_date).days <= MAX_DATE_LAG_DAYS
 
 
+# Fallback discovery via a team's own A Bola news feed. /pesquisar is title-only,
+# so a ratings page with a creative title that names neither the team nor "notas"
+# (common for a big-three opponent, e.g. "Salão de Barbero abriu cedo...") is
+# unreachable by search. But A Bola TAGS every article to its teams, and a team's
+# page lists them newest-first at /futebol/<slug>-<id>?page=N, so we can page back
+# to the match window and confirm by opening. ~12 days/page => even August is ~25
+# pages; a ratings page is unmistakable (it parses to a whole XI).
+MAX_FEED_PAGES = 30
+MIN_FEED_RATINGS = 8
+_TEAM_PAGE_RE = re.compile(r"/futebol/[a-z0-9-]+-\d+$")
+
+
+def _abs(href: str) -> str:
+    return href if href.startswith("http") else "https://www.abola.pt" + href
+
+
+def find_team_page(team: str) -> str | None:
+    """A team's A Bola page URL (/futebol/<slug>-<id>), read from a team autolink
+    on a recent article tagged with it. Cached per team."""
+    if team in _TEAM_PAGE_CACHE:
+        return _TEAM_PAGE_CACHE[team]
+    tok = _team_tokens(team)
+    result = None
+    for nm in _alias_names(team):
+        for _d, u in abola_search(nm, pages=2):
+            try:
+                soup = BeautifulSoup(fetch(u), "lxml")
+            except Exception:  # noqa: BLE001
+                continue
+            for a in soup.find_all("a", attrs={"data-resource-type": "team"}):
+                href = a.get("href", "")
+                if _TEAM_PAGE_RE.search(href.split("?")[0]) \
+                        and _team_tokens(a.get_text(strip=True)) & tok:
+                    result = _abs(href)
+                    break
+            if result:
+                break
+        if result:
+            break
+    _TEAM_PAGE_CACHE[team] = result
+    return result
+
+
+_TEAM_PAGE_CACHE: dict[str, str | None] = {}
+
+
+def _feed_articles(team_page: str, page: int) -> list[tuple[date, str]]:
+    u = team_page + (f"?page={page}" if page > 1 else "")
+    soup = BeautifulSoup(fetch(u), "lxml")
+    seen, out = set(), []
+    for a in soup.find_all("a", href=True):
+        if ARTICLE_RE.search(f'href="{a["href"]}"'):
+            h = _abs(a["href"])
+            d = url_date(h)
+            if d and h not in seen:
+                seen.add(h)
+                out.append((d, h))
+    return out
+
+
+def walk_team_feed(team: str, game_date: date):
+    """Yield candidate article URLs in the match window from a team's news feed,
+    paging back (newest-first) until the page reaches past the match date."""
+    team_page = find_team_page(team)
+    if not team_page:
+        return
+    yielded = set()
+    for page in range(1, MAX_FEED_PAGES + 1):
+        try:
+            arts = _feed_articles(team_page, page)
+        except Exception:  # noqa: BLE001
+            break
+        if not arts:
+            break
+        for d, u in sorted(arts):
+            if _in_window(d, game_date) and u not in yielded:
+                yielded.add(u)
+                yield u
+        # A recurring "latest" widget keeps a few fresh links on every page, so
+        # judge depth by the OLDEST real article: once it predates the match, the
+        # window has been fully covered on this and earlier pages.
+        if min(d for d, _ in arts) < game_date:
+            break
+
+
+def _team_ratings_page(team: str, game_date: date) -> str | None:
+    """Open in-window feed candidates and return the first that parses to a full
+    team-ratings list for `team` (a real notas/destaques page, not a mention)."""
+    for u in walk_team_feed(team, game_date):
+        try:
+            page = parse_page(fetch(u), default_team=team)
+        except Exception:  # noqa: BLE001
+            continue
+        if len(_pick_team(page["teams"], team)) >= MIN_FEED_RATINGS:
+            return u
+    return None
+
+
 def find_team_notas(team: str, game_date: date) -> str | None:
     """Find the 'as notas do <team>' page for a match on/just after game_date.
     A Bola's name for a team may differ from zerozero's ('AFS' -> 'Aves SAD'),
@@ -245,7 +346,9 @@ def find_team_notas(team: str, game_date: date) -> str | None:
             cands.sort()
             if cands:
                 return cands[0][1]
-    return None
+    # Fallback: a creatively-titled ratings page (search can't see it) -- page the
+    # team's own A Bola feed back to the match window and open-verify.
+    return _team_ratings_page(team, game_date)
 
 
 def find_cronica(home: str, away: str, game_date: date) -> str | None:
@@ -271,6 +374,18 @@ def find_cronica(home: str, away: str, game_date: date) -> str | None:
             if _in_window(d, game_date):
                 cands[u] = d
     for u in sorted(cands, key=lambda x: cands[x]):
+        try:
+            page = parse_page(fetch(u))
+        except Exception:  # noqa: BLE001
+            continue
+        names = " ".join(_norm(t) for t in page["teams"])
+        if any(t in names for t in ht) and any(t in names for t in at):
+            return u
+    # Fallback: title names neither team -> page the home team's A Bola feed back
+    # to the match window and accept a page carrying BOTH teams' ratings.
+    for u in walk_team_feed(home, game_date):
+        if u in cands:
+            continue
         try:
             page = parse_page(fetch(u))
         except Exception:  # noqa: BLE001
