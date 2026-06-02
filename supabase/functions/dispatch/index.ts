@@ -1,22 +1,22 @@
-// dispatch — fan out match-change events to league subscribers.
+// dispatch — fan out match-change AND squad-change events to league subscribers.
 //
-// Invoked by a Database Webhook on delivery_outbox INSERT (low latency) and by
-// a pg_cron backstop every ~30s (retries). The request body is ignored: each
-// invocation drains whatever is currently claimable, so duplicate triggers are
-// harmless.
+// Invoked by a Database Webhook on delivery_outbox / entity_outbox INSERT (low
+// latency) and by a pg_cron backstop every ~30s (retries). The request body is
+// ignored: each invocation drains whatever is currently claimable from BOTH
+// outboxes, so duplicate triggers are harmless.
 //
-// For each claimed outbox row it:
-//   1. builds the full snapshot via build_match_event(match_id),
-//   2. finds active subscribers for that competition (NULL competition = all),
-//   3. POSTs the JSON body to each, signed with HMAC-SHA256 (X-Signature),
-//   4. marks the row delivered, or schedules a backed-off retry on failure.
+//   delivery_outbox  -> build_match_event(match_id)          -> match.update
+//   entity_outbox    -> build_competition_event(comp)        -> CompetitionUpdated
+//                    -> build_team_event(team, comp)         -> RosterUpdated
+//                    -> build_player_event(player, comp)     -> PlayerUpdated
+//                    -> build_comp_sync_event(comp)          -> CompetitionSyncCompleted
 //
-// Env (auto-provided to Supabase Edge Functions):
-//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+// For each claimed row it builds the current snapshot, finds active subscribers
+// for that competition (NULL competition = all), POSTs the JSON body signed with
+// HMAC-SHA256 (X-Signature), and marks delivered or schedules a backed-off retry.
 //
+// Env (auto-provided): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 // Deploy:  supabase functions deploy dispatch --no-verify-jwt
-// (--no-verify-jwt because pg_net/pg_cron call it with the service-role key in
-//  the Authorization header, not an end-user JWT.)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -31,9 +31,17 @@ const db = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { persistSession: false },
 });
 
-type Outbox = {
+type MatchOutbox = {
   id: number;
   match_id: string;
+  competition_id: string | null;
+  attempts: number;
+};
+
+type EntityOutbox = {
+  id: number;
+  entity_type: "competition" | "team" | "player" | "comp_sync";
+  entity_id: string;
   competition_id: string | null;
   attempts: number;
 };
@@ -67,7 +75,8 @@ function backoffSeconds(attempts: number): number {
 
 async function postSigned(
   sub: Subscriber,
-  matchId: string,
+  eventType: string,
+  refId: string,
   body: string,
 ): Promise<void> {
   const signature = await hmacHex(sub.secret, body);
@@ -80,8 +89,8 @@ async function postSigned(
       headers: {
         "Content-Type": "application/json",
         "X-Signature": `sha256=${signature}`,
-        "X-Event-Type": "match.update",
-        "X-Match-Id": matchId,
+        "X-Event-Type": eventType,
+        "X-Entity-Id": refId,
       },
       body,
     });
@@ -96,88 +105,197 @@ async function postSigned(
   }
 }
 
-async function deliver(row: Outbox): Promise<void> {
-  // 1) Build the current snapshot for this match.
-  const { data: payload, error: buildErr } = await db.rpc("build_match_event", {
-    p_match_id: row.match_id,
-  });
-  if (buildErr) throw new Error(`build_match_event: ${buildErr.message}`);
-  if (!payload) {
-    // Match vanished (deleted). Nothing to send — consider it done.
-    await markDelivered(row.id);
-    return;
-  }
-
-  // 2) Subscribers for this league (or wildcard NULL = every league).
+// Active subscribers for a competition (or wildcard NULL = every league).
+async function subscribersFor(
+  competitionId: string | null,
+): Promise<Subscriber[]> {
   let q = db.from("subscribers").select("id,callback_url,secret,competition_id")
     .eq("active", true);
-  q = row.competition_id
-    ? q.or(`competition_id.eq.${row.competition_id},competition_id.is.null`)
+  q = competitionId
+    ? q.or(`competition_id.eq.${competitionId},competition_id.is.null`)
     : q.is("competition_id", null);
-  const { data: subs, error: subErr } = await q;
-  if (subErr) throw new Error(`subscribers: ${subErr.message}`);
+  const { data, error } = await q;
+  if (error) throw new Error(`subscribers: ${error.message}`);
+  return (data ?? []) as Subscriber[];
+}
 
-  if (!subs || subs.length === 0) {
-    await markDelivered(row.id); // no listeners; don't pile up
-    return;
-  }
-
-  // 3) Sign + POST to each. One signature per subscriber (distinct secrets).
+// Sign + POST a built payload to all matching subscribers. Throws if any failed
+// (idempotent ingest makes re-sending to the ones that succeeded harmless).
+async function fanout(
+  payload: unknown,
+  competitionId: string | null,
+  eventType: string,
+  refId: string,
+): Promise<"no-listeners" | "ok"> {
+  const subs = await subscribersFor(competitionId);
+  if (subs.length === 0) return "no-listeners";
   const body = JSON.stringify(payload);
   const results = await Promise.allSettled(
-    (subs as Subscriber[]).map((s) => postSigned(s, row.match_id, body)),
+    subs.map((s) => postSigned(s, eventType, refId, body)),
   );
   const failures = results.filter((r) => r.status === "rejected") as
     PromiseRejectedResult[];
-
-  if (failures.length === 0) {
-    await markDelivered(row.id);
-  } else {
-    // Idempotent ingest means re-sending to the ones that already succeeded is
-    // safe, so we retry the whole row.
+  if (failures.length > 0) {
     throw new Error(failures.map((f) => String(f.reason)).join(" | "));
   }
+  return "ok";
 }
 
-async function markDelivered(id: number): Promise<void> {
-  await db.from("delivery_outbox").update({
+async function mark(
+  table: string,
+  id: number,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  await db.from(table).update({ ...fields, updated_at: new Date().toISOString() })
+    .eq("id", id);
+}
+
+async function markDelivered(table: string, id: number): Promise<void> {
+  await mark(table, id, {
     status: "delivered",
     delivered_at: new Date().toISOString(),
     last_error: null,
-    updated_at: new Date().toISOString(),
-  }).eq("id", id);
+  });
 }
 
-async function markRetry(row: Outbox, error: string): Promise<void> {
-  const dead = row.attempts >= MAX_ATTEMPTS;
-  const next = new Date(Date.now() + backoffSeconds(row.attempts) * 1000);
-  await db.from("delivery_outbox").update({
+async function markRetry(
+  table: string,
+  id: number,
+  attempts: number,
+  error: string,
+): Promise<void> {
+  const dead = attempts >= MAX_ATTEMPTS;
+  const next = new Date(Date.now() + backoffSeconds(attempts) * 1000);
+  await mark(table, id, {
     status: dead ? "failed" : "pending",
     last_error: error.slice(0, 2000),
     next_attempt_at: next.toISOString(),
-    updated_at: new Date().toISOString(),
-  }).eq("id", row.id);
+  });
 }
 
+// ---- match outbox -----------------------------------------------------------
+
+async function deliverMatch(row: MatchOutbox): Promise<void> {
+  const { data: payload, error } = await db.rpc("build_match_event", {
+    p_match_id: row.match_id,
+  });
+  if (error) throw new Error(`build_match_event: ${error.message}`);
+  if (!payload) return markDelivered("delivery_outbox", row.id); // match deleted
+  const r = await fanout(
+    payload,
+    row.competition_id,
+    "match.update",
+    row.match_id,
+  );
+  await markDelivered("delivery_outbox", row.id);
+  if (r === "no-listeners") {/* nothing to do; don't pile up */}
+}
+
+// ---- entity outbox ----------------------------------------------------------
+
+const ENTITY_EVENT: Record<EntityOutbox["entity_type"], string> = {
+  competition: "CompetitionUpdated",
+  team: "RosterUpdated",
+  player: "PlayerUpdated",
+  comp_sync: "CompetitionSyncCompleted",
+};
+
+async function buildEntity(row: EntityOutbox): Promise<unknown> {
+  switch (row.entity_type) {
+    case "competition": {
+      const { data, error } = await db.rpc("build_competition_event", {
+        p_competition_id: row.entity_id,
+      });
+      if (error) throw new Error(error.message);
+      return data;
+    }
+    case "team": {
+      const { data, error } = await db.rpc("build_team_event", {
+        p_team_id: row.entity_id,
+        p_competition_id: row.competition_id,
+      });
+      if (error) throw new Error(error.message);
+      return data;
+    }
+    case "player": {
+      const { data, error } = await db.rpc("build_player_event", {
+        p_player_id: row.entity_id,
+        p_competition_id: row.competition_id,
+      });
+      if (error) throw new Error(error.message);
+      return data;
+    }
+    case "comp_sync": {
+      const { data, error } = await db.rpc("build_comp_sync_event", {
+        p_competition_id: row.entity_id,
+      });
+      if (error) throw new Error(error.message);
+      return data;
+    }
+  }
+}
+
+async function deliverEntity(row: EntityOutbox): Promise<void> {
+  const payload = await buildEntity(row);
+  if (!payload) return markDelivered("entity_outbox", row.id); // entity gone
+  await fanout(
+    payload,
+    row.competition_id,
+    ENTITY_EVENT[row.entity_type],
+    row.entity_id,
+  );
+  await markDelivered("entity_outbox", row.id);
+}
+
+// ---- drain both -------------------------------------------------------------
+
 Deno.serve(async () => {
-  const { data: claimed, error } = await db.rpc("claim_outbox_batch", {
+  let delivered = 0, retried = 0, claimed = 0;
+
+  // Matches.
+  const { data: mClaimed, error: mErr } = await db.rpc("claim_outbox_batch", {
     p_limit: BATCH,
   });
-  if (error) {
-    return new Response(`claim error: ${error.message}`, { status: 500 });
-  }
-  const rows = (claimed ?? []) as Outbox[];
-
-  let delivered = 0, retried = 0;
-  for (const row of rows) {
+  if (mErr) return new Response(`claim error: ${mErr.message}`, { status: 500 });
+  for (const row of (mClaimed ?? []) as MatchOutbox[]) {
+    claimed++;
     try {
-      await deliver(row);
+      await deliverMatch(row);
       delivered++;
     } catch (err) {
       retried++;
-      await markRetry(row, String((err as Error)?.message ?? err));
+      await markRetry(
+        "delivery_outbox",
+        row.id,
+        row.attempts,
+        String((err as Error)?.message ?? err),
+      );
     }
   }
 
-  return Response.json({ claimed: rows.length, delivered, retried });
+  // Entities.
+  const { data: eClaimed, error: eErr } = await db.rpc(
+    "claim_entity_outbox_batch",
+    { p_limit: BATCH },
+  );
+  if (eErr) {
+    return new Response(`entity claim error: ${eErr.message}`, { status: 500 });
+  }
+  for (const row of (eClaimed ?? []) as EntityOutbox[]) {
+    claimed++;
+    try {
+      await deliverEntity(row);
+      delivered++;
+    } catch (err) {
+      retried++;
+      await markRetry(
+        "entity_outbox",
+        row.id,
+        row.attempts,
+        String((err as Error)?.message ?? err),
+      );
+    }
+  }
+
+  return Response.json({ claimed, delivered, retried });
 });

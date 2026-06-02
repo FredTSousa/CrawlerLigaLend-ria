@@ -84,7 +84,15 @@ input, select {
   display: block; text-align: center; padding: 10px 0; border-radius: 8px;
   background: var(--panel-2); border: 1px solid var(--border); font-weight: 600;
 }
+.round-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .login-card { max-width: 380px; margin: 80px auto; }
+
+/* Form controls (competition Players-tab filters) */
+select, input[type="text"], input:not([type]) {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 9px; font-size: 14px;
+}
+select:focus, input:focus { outline: 1px solid var(--accent); }
 
 /* Side-by-side lineup (zerozero-style) */
 .lineup { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }

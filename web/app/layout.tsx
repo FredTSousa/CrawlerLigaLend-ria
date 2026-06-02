@@ -28,6 +28,7 @@ export default async function RootLayout({
               <Link href="/" className="brand">⚽ Crawler LLP</Link>
               <nav>
                 <Link href="/">Dashboard</Link>
+                <Link href="/competitions">Competitions</Link>
                 <Link href="/runs">Crawl runs</Link>
                 <Link href="/reporter-runs">Reporter runs</Link>
                 <Link href="/linking-issues">Linking issues</Link>

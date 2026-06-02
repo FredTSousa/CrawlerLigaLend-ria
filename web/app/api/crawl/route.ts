@@ -13,15 +13,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  let body: { kind?: string; target?: string | number; force?: boolean };
+  let body: {
+    kind?: string;
+    target?: string | number;
+    force?: boolean;
+    full?: boolean;
+    competition?: string;
+    team?: string;
+  };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 
-  const allowed = ["round", "match", "watch", "reporter", "backfill"];
+  // Squad kinds drive roster_sync.py via squads.yml; the rest drive sync.py.
+  const squadKinds = ["teams", "roster", "players", "comp_full"];
+  const allowed = [
+    "round", "match", "watch", "reporter", "backfill", ...squadKinds,
+  ];
   const kind = allowed.includes(body.kind as string) ? (body.kind as string) : "round";
+  const isSquad = squadKinds.includes(kind);
   const target = String(body.target ?? "").trim();
   if (!target) {
     return NextResponse.json({ error: "Missing target" }, { status: 400 });
@@ -65,7 +77,9 @@ export async function POST(request: Request) {
       ? process.env.GH_WATCH_WORKFLOW || "watch.yml"
       : kind === "reporter"
         ? process.env.GH_REPORTER_WORKFLOW || "reporter.yml"
-        : process.env.GH_WORKFLOW || "crawl.yml";
+        : isSquad
+          ? process.env.GH_SQUADS_WORKFLOW || "squads.yml"
+          : process.env.GH_WORKFLOW || "crawl.yml";
   const ref = process.env.GH_REF || "main";
   const token = process.env.GH_DISPATCH_TOKEN;
 
@@ -89,6 +103,19 @@ export async function POST(request: Request) {
     inputs.competition = target;
     inputs.backfill = "true";
     if (body.force) inputs.force = "true";
+  } else if (isSquad) {
+    // Squad syncs (squads.yml -> roster_sync.py).
+    //  teams:     fast sync of a whole competition (target = comp slug/URL)
+    //  comp_full: full sync incl. player detail pages (target = comp slug/URL)
+    //  roster:    one team's roster (target = comp; body.team = team id)
+    //  players:   enrich one player (target = player id)
+    if (kind === "players") inputs.player = target;
+    else {
+      inputs.competition = body.competition || target;
+      if (kind === "comp_full") inputs.full = "true";
+      if (kind === "roster" && body.team) inputs.team = body.team;
+      if (body.force) inputs.force = "true";
+    }
   } else inputs.jornada = target;
 
   const ghRes = await fetch(

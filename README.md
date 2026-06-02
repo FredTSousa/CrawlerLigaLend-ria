@@ -114,3 +114,47 @@ Without `--out` the JSON is printed to stdout; progress goes to stderr.
 > event type to stderr** (`? unmapped events in <game>: ...`). If you crawl a
 > round that has one and see such a log line, add the exact title to
 > `classify_events` in `crawler.py`.
+
+## Competition squads (Teams & Players)
+
+Beyond fixtures, a competition can own its **teams** and their **players**.
+`roster.py` is the squad-shaped twin of `crawler.py` (it reuses the same HTTP
+session, encoding handling and name cleaning); `roster_sync.py` is the twin of
+`sync.py`. See `docs/COMPETITION_BACKOFFICE_DESIGN.md` for the full design.
+
+```python
+import crawler, roster
+comp = roster.augment_competition(crawler.get_competition(URL))  # resolves epoca_id + season
+squad = roster.get_team_roster(comp["epoca_id"], {"id": "32"})    # squad grouped by position
+detail = roster.get_player_detail("547211")                       # detailed "Posição", age, club
+```
+
+What it extracts (verified against Liga Portugal, época 155):
+
+- **Squad** from `/equipa/<id>?epoca_id=<season>` — players under the four
+  `<div class="section">` groups (Guarda Redes / Defesa / Médio / Avançado),
+  each with shirt number and inline age.
+- **Detailed position** from `/jogador/<id>` — the `Posição` card value
+  (e.g. `Médio Centro`), normalized to an export code (`CM`) via
+  `roster.POSITION_CODES`. Unmapped positions log `? unmapped position: …` to
+  stderr (extend the map), exactly like the event-icon vocabulary above.
+
+Team discovery is **not** scraped from the competition page (it only lists one
+round + unrelated clubs); `roster_sync.team_ids_from_matches` derives the team
+set from the fixtures already in the DB, so crawl a league's rounds first.
+
+```bash
+# Fast sync: teams + rosters + position groups (no player pages). ~1+18 requests.
+python roster_sync.py --competition liga-portuguesa
+# Full sync: also opens each player page for detailed position/age/club.
+python roster_sync.py --competition liga-portuguesa --full
+# One team's roster, or one player's metadata:
+python roster_sync.py --competition liga-portuguesa --team 32
+python roster_sync.py --player 547211
+# Standalone parser test (no DB):
+python roster.py --team 32 --full
+```
+
+Apply `db/migration_competition_squads.sql` (schema) and, for export,
+`db/migration_entity_export.sql` before running. The backoffice lives at
+`/competitions` in the web app.

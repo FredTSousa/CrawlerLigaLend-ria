@@ -76,6 +76,27 @@ re-delivery is a no-op.
 Each event is the **full current snapshot** of the match (not a diff), so the
 subscriber just upserts the match and replaces its player rows.
 
+### Squad events (Teams & Players)
+
+Once `db/migration_entity_export.sql` is applied and the `dispatch` function
+redeployed, the **same** subscribers also receive squad-change events from a
+second outbox (`entity_outbox`), signed with the same HMAC and routed by the
+same `competition_id`. The `X-Event-Type` header distinguishes them:
+
+| `X-Event-Type` | When | Body builder |
+|----------------|------|--------------|
+| `CompetitionUpdated` | a competition's team list changed | `build_competition_event` |
+| `RosterUpdated` | a team's squad changed | `build_team_event` |
+| `PlayerUpdated` | a player's metadata changed | `build_player_event` |
+| `CompetitionSyncCompleted` | a squad sync finished (do one bulk pull) | `build_comp_sync_event` |
+
+Like match events, each is the full current snapshot of that entity (idempotent
+upsert on the subscriber). Volume stays low: the player trigger skips pure
+bookkeeping churn, and a full sync's burst coalesces per `(type, entity, league)`.
+Seed a new subscriber with `select replay_competition_entities('<comp_id>')`
+(the entity analog of `replay_competition`), or have an admin download
+`/api/competitions/{id}/export` (a single versioned snapshot package).
+
 ## Using it from the web app (Subscribers page)
 
 The **Subscribers** page (`/subscribers`, signed-in) manages the whole flow
