@@ -465,8 +465,10 @@ def _team_of_header(el) -> str | None:
 
 def _after_header(el) -> str:
     """The inline ratings text that follows the header on the same line. When a
-    <strong> holds the phrase, take the siblings AFTER it (robust even with no
-    colon); otherwise strip the 'as notas d…:' prefix by regex."""
+    <strong> holds ONLY the phrase, the ratings are its following siblings (robust
+    even with no colon). But some pages bold the WHOLE line ('Notas do Alverca:
+    Matheus Mendes (5); ...' all in one <strong>), so nothing follows it -- there,
+    fall back to stripping the 'as notas d…:' prefix off the full text."""
     strong = _header_strong(el)
     if strong:
         parts, seen = [], False
@@ -475,7 +477,9 @@ def _after_header(el) -> str:
                 seen = True
             elif seen:
                 parts.append(ch if isinstance(ch, str) else ch.get_text())
-        return re.sub(r"\s+", " ", "".join(parts)).strip()
+        after = re.sub(r"\s+", " ", "".join(parts)).strip()
+        if TOKEN_RE.search(after):  # ratings really are after the bold
+            return after
     return _strip_header_prefix(el.get_text(" ", strip=True))
 
 
