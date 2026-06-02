@@ -35,6 +35,7 @@ import argparse
 import html as htmllib
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -81,6 +82,39 @@ HEADERS = {
 # HTTP
 # ----------------------------------------------------------------------------
 
+# Global request throttle. zerozero classifies fast/bursty traffic as a bot and
+# answers with *poisoned* HTTP-200 pages (random teams, random scores) rather
+# than a 403 — so politeness is the only safe strategy. Every zerozero request
+# (match crawl AND roster crawl) goes through fetch(), so enforcing a minimum
+# gap here throttles the whole crawler from one place, regardless of caller.
+#
+# Tunable without code changes:
+#   ZEROZERO_MIN_INTERVAL  seconds between requests (floor; default 5.0)
+#   ZEROZERO_JITTER        extra random 0..N seconds per request (default 3.0)
+# Set ZEROZERO_MIN_INTERVAL=0 to disable (e.g. fast local parsing tests).
+MIN_REQUEST_INTERVAL = float(os.environ.get("ZEROZERO_MIN_INTERVAL", "5.0"))
+REQUEST_JITTER = float(os.environ.get("ZEROZERO_JITTER", "3.0"))
+
+# Wall-clock (monotonic) timestamp of the last request, shared process-wide so a
+# single crawl run paces all its requests together.
+_last_request_ts = 0.0
+
+
+def _throttle(min_interval: float) -> None:
+    """Block until at least `min_interval` (+ a little random jitter) seconds
+    have elapsed since the previous request. Jitter avoids a robotically exact
+    cadence, which is itself a bot signal."""
+    global _last_request_ts
+    interval = max(min_interval, 0.0)
+    if interval <= 0 and REQUEST_JITTER <= 0:
+        _last_request_ts = time.monotonic()
+        return
+    target = interval + (random.uniform(0, REQUEST_JITTER) if REQUEST_JITTER > 0 else 0)
+    wait = (_last_request_ts + target) - time.monotonic()
+    if wait > 0:
+        time.sleep(wait)
+    _last_request_ts = time.monotonic()
+
 
 def new_session():
     """Create a scraping session. Prefers curl_cffi (Chrome-impersonating TLS)
@@ -97,6 +131,9 @@ def fetch(session, url: str, *, retries: int = 3, delay: float = 1.0) -> str:
     """GET a URL with a polite delay and a few retries; return the HTML text."""
     last_err: Exception | None = None
     for attempt in range(1, retries + 1):
+        # Space every request (incl. retries) by at least the global minimum;
+        # an explicit larger `delay` raises the floor.
+        _throttle(max(delay, MIN_REQUEST_INTERVAL))
         try:
             if _CFFI_OK:
                 # Let the impersonated profile own the headers/ordering;
@@ -700,7 +737,7 @@ def crawl_round(jornada: int | str | None = None, *,
             games.append(get_match(g, session=session, delay=delay))
         except Exception as err:  # noqa: BLE001
             print(f"  ! skipped {g['url']}: {err}", file=sys.stderr)
-        time.sleep(delay)
+        # No explicit sleep: fetch() throttles every request globally.
 
     return {
         "competition": competition.get("name") if competition else None,

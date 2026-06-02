@@ -31,7 +31,6 @@ import argparse
 import json
 import re
 import sys
-import time
 
 import crawler  # reuse: new_session, fetch, clean_name, BASE
 
@@ -288,7 +287,6 @@ def crawl_competition_squads(comp: dict, teams: list[dict], *, full: bool = Fals
         t["players"] = squad["players"]
         t["source_url"] = squad["source_url"]
         out_teams.append(t)
-        time.sleep(delay)
 
         if full:
             for p in squad["players"]:
@@ -300,7 +298,7 @@ def crawl_competition_squads(comp: dict, teams: list[dict], *, full: bool = Fals
                 except Exception as err:  # noqa: BLE001
                     print(f"  ! enrich failed for {p.get('name')}: {err}",
                           file=sys.stderr)
-                time.sleep(delay)
+                # No explicit sleep: crawler.fetch() throttles globally.
 
     return {"competition": comp, "teams": out_teams,
             "enriched_players": enriched, "mode": "full" if full else "fast"}
