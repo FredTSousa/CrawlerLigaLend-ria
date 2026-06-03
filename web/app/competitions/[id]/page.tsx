@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SquadSyncButton from "@/components/SquadSyncButton";
+import TmSettings from "@/components/TmSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export default async function CompetitionDetails({
   const { data: comp } = await supabase
     .from("competitions")
     .select(
-      "id, name, full_name, slug, season, fase, epoca_id, teams_count, players_count, last_sync_at, source_url",
+      "id, name, full_name, slug, season, fase, epoca_id, teams_count, players_count, last_sync_at, source_url, tm_competition_code, tm_saison_id",
     )
     .eq("id", id)
     .maybeSingle();
@@ -100,6 +101,16 @@ export default async function CompetitionDetails({
           <Card label="Players" value={comp.players_count ?? rosterRows?.length ?? 0} />
           <Card label="Fixtures" value={fixtureCount ?? 0} />
           <Card label="Last sync" value={fmt(comp.last_sync_at)} small />
+        </div>
+
+        {/* Transfermarkt mapping — drives detailed positions on a Full sync. */}
+        <div style={{ marginTop: 12 }}>
+          <TmSettings
+            competitionId={comp.id}
+            code={comp.tm_competition_code ?? null}
+            saison={comp.tm_saison_id ?? null}
+            season={comp.season ?? null}
+          />
         </div>
       </div>
 

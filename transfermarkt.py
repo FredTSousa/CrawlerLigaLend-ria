@@ -51,9 +51,12 @@ import roster   # reuse: position_code (TM's Portuguese labels already match)
 
 TM_BASE = "https://www.transfermarkt.pt"
 
-# zerozero competition slug -> Transfermarkt "Wettbewerb" code.
-# Add leagues here as they're needed; an unmapped competition is skipped (the
-# fast zerozero roster still syncs, players just keep position_group only).
+# Transfermarkt "Wettbewerb" code per competition is configured in the DB
+# (competitions.tm_competition_code, set from the backoffice). This map is only a
+# built-in seed/fallback for leagues that have no DB value yet, keyed by zerozero
+# competition slug. A competition with neither a DB code nor a seed entry is
+# skipped for enrichment (the fast zerozero roster still syncs; players just keep
+# their position_group).
 COMP_CODES: dict[str, str] = {
     "liga-portuguesa": "PO1",
 }
@@ -117,7 +120,10 @@ def _fetch(session, url: str, *, retries: int = 3) -> str:
 
 
 def comp_code_for(comp: dict) -> str | None:
-    return COMP_CODES.get((comp.get("slug") or "").lower())
+    """The DB-configured code wins; the seed map is a fallback for leagues not
+    yet configured in the backoffice."""
+    return (comp.get("tm_competition_code")
+            or COMP_CODES.get((comp.get("slug") or "").lower()))
 
 
 def saison_id_from_season(season: str | None) -> str | None:
@@ -126,6 +132,11 @@ def saison_id_from_season(season: str | None) -> str | None:
         return None
     m = re.search(r"(20\d{2})", season)
     return m.group(1) if m else None
+
+
+def saison_id_for(comp: dict) -> str | None:
+    """The backoffice override wins; else derive from the season label."""
+    return comp.get("tm_saison_id") or saison_id_from_season(comp.get("season"))
 
 
 # ----------------------------------------------------------------------------
@@ -343,7 +354,7 @@ def enrich_competition(comp: dict, zz_teams: list[dict], *, session=None,
     """
     session = session or crawler.new_session()
     code = comp_code_for(comp)
-    saison = saison_id_from_season(comp.get("season"))
+    saison = saison_id_for(comp)
     if not code or not saison:
         print(f"  ! TM enrichment skipped: no mapping for slug "
               f"{comp.get('slug')!r} / season {comp.get('season')!r}.",

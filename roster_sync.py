@@ -57,6 +57,18 @@ def _team_aliases(sb: sync.Supabase, team_ids: list[str]) -> dict[str, list[str]
     return out
 
 
+def _load_tm_config(sb: sync.Supabase, comp: dict, comp_id: str) -> None:
+    """Merge the backoffice-set Transfermarkt mapping (competitions.
+    tm_competition_code / tm_saison_id) onto the scraped comp dict, in place."""
+    resp = sb._rest(
+        "GET",
+        f"competitions?id=eq.{comp_id}&select=tm_competition_code,tm_saison_id")
+    rows = resp.json()
+    if rows:
+        comp["tm_competition_code"] = rows[0].get("tm_competition_code")
+        comp["tm_saison_id"] = rows[0].get("tm_saison_id")
+
+
 def _persist_team_tm(sb: sync.Supabase, team_tm: dict[str, dict]) -> None:
     """Persist newly-resolved Transfermarkt ids on teams so later runs skip the
     name match (see teams.tm_verein_id / tm_slug)."""
@@ -283,6 +295,11 @@ def run(*, competition_url: str, full: bool, run_id: int | None, trigger: str,
         comp_id = comp.get("id_edicao")
         if not comp_id:
             raise RuntimeError("could not resolve competition id_edicao")
+
+        # Pull the backoffice-configured Transfermarkt mapping onto the (scraped)
+        # comp dict so enrichment knows which TM competition/season to read.
+        if full:
+            _load_tm_config(sb, comp, comp_id)
 
         # Team set: a single team, or all teams of the competition (from matches).
         if team_id:
