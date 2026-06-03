@@ -33,10 +33,7 @@ import sys
 import crawler
 import roster
 import sync  # reuse Supabase, _begin_run, _finish_run, _now, _load_dotenv, _env, _flag
-
-# Re-enrich a player only if their detail page hasn't been read in this many days
-# (a Full sync otherwise re-opens tens of thousands of pages every run).
-ENRICH_STALE_DAYS = 14
+import transfermarkt  # detailed positions WITHOUT per-player zerozero pages
 
 
 # ----------------------------------------------------------------------------
@@ -44,16 +41,28 @@ ENRICH_STALE_DAYS = 14
 # ----------------------------------------------------------------------------
 
 
-def _enriched_at(sb: sync.Supabase, player_ids: list[str]) -> dict[str, str | None]:
-    """Map player_id -> enriched_at for the given ids (for staleness filtering)."""
-    out: dict[str, str | None] = {}
-    for i in range(0, len(player_ids), 200):  # chunk to keep URLs short
-        chunk = player_ids[i:i + 200]
-        resp = sb._rest("GET",
-                        f"players?id=in.({','.join(chunk)})&select=id,enriched_at")
+def _team_aliases(sb: sync.Supabase, team_ids: list[str]) -> dict[str, list[str]]:
+    """Map team_id -> [alias, ...] from team_aliases, so Transfermarkt team
+    matching can fall back to the alternate club names the backoffice records."""
+    out: dict[str, list[str]] = {}
+    for i in range(0, len(team_ids), 200):  # chunk to keep URLs short
+        chunk = team_ids[i:i + 200]
+        if not chunk:
+            continue
+        resp = sb._rest(
+            "GET",
+            f"team_aliases?team_id=in.({','.join(chunk)})&select=team_id,alias")
         for r in resp.json():
-            out[r["id"]] = r.get("enriched_at")
+            out.setdefault(r["team_id"], []).append(r["alias"])
     return out
+
+
+def _persist_team_tm(sb: sync.Supabase, team_tm: dict[str, dict]) -> None:
+    """Persist newly-resolved Transfermarkt ids on teams so later runs skip the
+    name match (see teams.tm_verein_id / tm_slug)."""
+    rows = [{"id": tid, "tm_verein_id": v["verein_id"], "tm_slug": v["slug"],
+             "updated_at": sync._now()} for tid, v in team_tm.items()]
+    sb.upsert("teams", rows, "id")
 
 
 def _rpc(sb: sync.Supabase, fn: str, args: dict) -> None:
@@ -76,10 +85,15 @@ def team_ids_from_matches(sb: sync.Supabase, competition_id: str) -> list[dict]:
                 ids.add(m[k])
     if not ids:
         return []
-    names = sb._rest("GET", f"teams?id=in.({','.join(ids)})&select=id,name,slug")
+    names = sb._rest(
+        "GET",
+        f"teams?id=in.({','.join(ids)})&select=id,name,slug,tm_verein_id,tm_slug")
     by_id = {r["id"]: r for r in names.json()}
     return [{"id": tid, "name": by_id.get(tid, {}).get("name"),
-             "slug": by_id.get(tid, {}).get("slug")} for tid in sorted(ids)]
+             "slug": by_id.get(tid, {}).get("slug"),
+             "tm_verein_id": by_id.get(tid, {}).get("tm_verein_id"),
+             "tm_slug": by_id.get(tid, {}).get("tm_slug")}
+            for tid in sorted(ids)]
 
 
 # ----------------------------------------------------------------------------
@@ -254,28 +268,6 @@ def _deactivate_missing(sb: sync.Supabase, table: str, scope: str, key: str,
 # ----------------------------------------------------------------------------
 
 
-def _stale_enrich_filter(sb: sync.Supabase, teams: list[dict], *,
-                         force: bool):
-    """Return enrich_filter(player_id)->bool that skips freshly-enriched players
-    unless force. Pre-fetches enriched_at for all squad players in two queries."""
-    if force:
-        return lambda _pid: True
-    pids = [p["id"] for t in teams for p in t.get("players", []) if p.get("id")]
-    enriched_at = _enriched_at(sb, pids)
-    from datetime import datetime, timezone, timedelta
-    cutoff = datetime.now(timezone.utc) - timedelta(days=ENRICH_STALE_DAYS)
-
-    def fresh(ts: str | None) -> bool:
-        if not ts:
-            return False
-        try:
-            return datetime.fromisoformat(ts.replace("Z", "+00:00")) >= cutoff
-        except Exception:  # noqa: BLE001
-            return False
-
-    return lambda pid: not fresh(enriched_at.get(pid))
-
-
 def run(*, competition_url: str, full: bool, run_id: int | None, trigger: str,
         github_run_id: str | None, delay: float, force_enrich: bool = False,
         team_id: str | None = None) -> dict:
@@ -305,27 +297,27 @@ def run(*, competition_url: str, full: bool, run_id: int | None, trigger: str,
                     f"no teams found for competition {comp_id}; crawl its "
                     "fixtures first (sync.py --backfill) so the team set exists")
 
-        # Fast roster crawl (always). For a full sync, enrich only STALE players
-        # afterwards, so we never open a player page that's already fresh.
+        # Fast roster crawl (always): zerozero team pages give the player ids,
+        # groups, shirt numbers and ages — one page per team.
         data = roster.crawl_competition_squads(comp, teams, full=False,
                                                delay=delay)
         if full:
-            keep = _stale_enrich_filter(sb, data["teams"], force=force_enrich)
-            worklist = [p for t in data["teams"] for p in t.get("players", [])
-                        if p.get("id") and keep(p["id"])]
-            print(f"Enriching {len(worklist)} player(s) "
-                  f"({'forced' if force_enrich else 'stale only'}).",
-                  file=sys.stderr)
+            # Detailed positions come from Transfermarkt (one league page + one
+            # squad page per club), NOT from per-player zerozero pages. The whole
+            # team is refreshed each run, so `force_enrich` no longer applies.
+            aliases = _team_aliases(
+                sb, [t["id"] for t in data["teams"] if t.get("id")])
             session = crawler.new_session()
-            enriched: dict[str, dict] = {}
-            for p in worklist:
-                try:
-                    enriched[p["id"]] = roster.get_player_detail(
-                        p, session=session, delay=delay)
-                except Exception as err:  # noqa: BLE001
-                    print(f"  ! enrich failed for {p.get('name')}: {err}",
-                          file=sys.stderr)
-            data["enriched_players"] = enriched
+            res = transfermarkt.enrich_competition(
+                comp, data["teams"], session=session, aliases=aliases)
+            data["enriched_players"] = res["enriched"]
+            if res["team_tm"]:
+                _persist_team_tm(sb, res["team_tm"])
+            s = res["stats"]
+            print(f"Transfermarkt: {s['teams_matched']}/{s['teams_total']} teams, "
+                  f"{s['players_matched']}/{s['players_total']} players matched"
+                  + (f"; unmatched teams: {s['unmatched_teams']}"
+                     if s["unmatched_teams"] else ""), file=sys.stderr)
 
         summary = write_squads(sb, data)
         sync._finish_run(sb, run_id, status="success",
