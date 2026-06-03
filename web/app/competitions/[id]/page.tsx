@@ -14,7 +14,7 @@ type SearchParams = {
 };
 
 const TABS = ["teams", "players", "fixtures", "history"] as const;
-const SQUAD_KINDS = ["teams", "roster", "players", "comp_full"];
+const SQUAD_KINDS = ["teams", "roster", "players", "comp_full", "comp_players"];
 
 export default async function CompetitionDetails({
   params,
@@ -89,6 +89,7 @@ export default async function CompetitionDetails({
           </div>
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             <SquadSyncButton kind="teams" target={comp.slug || comp.id} label="Sync teams" />
+            <SquadSyncButton kind="comp_players" target={comp.slug || comp.id} label="Re-fetch players" variant="secondary" />
             <SquadSyncButton kind="comp_full" target={comp.slug || comp.id} label="Full sync" />
             <SquadSyncButton kind="comp_full" target={comp.slug || comp.id} force label="Full refresh" variant="secondary" />
             <a className="btn secondary" href={`/api/competitions/${id}/export`}>Export snapshot</a>

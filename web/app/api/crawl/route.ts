@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   }
 
   // Squad kinds drive roster_sync.py via squads.yml; the rest drive sync.py.
-  const squadKinds = ["teams", "roster", "players", "comp_full"];
+  const squadKinds = ["teams", "roster", "players", "comp_full", "comp_players"];
   const allowed = [
     "round", "match", "watch", "reporter", "backfill", ...squadKinds,
   ];
@@ -113,6 +113,8 @@ export async function POST(request: Request) {
     else {
       inputs.competition = body.competition || target;
       if (kind === "comp_full") inputs.full = "true";
+      // comp_players: refresh Transfermarkt positions over existing DB rosters.
+      if (kind === "comp_players") inputs.players_only = "true";
       if (kind === "roster" && body.team) inputs.team = body.team;
       if (body.force) inputs.force = "true";
     }

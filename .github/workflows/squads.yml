@@ -15,6 +15,11 @@ on:
         required: false
         type: boolean
         default: false
+      players_only:
+        description: "Re-fetch Transfermarkt positions over existing DB rosters (no zerozero squad crawl)"
+        required: false
+        type: boolean
+        default: false
       force:
         description: "With full, re-enrich even freshly-updated players"
         required: false
@@ -63,6 +68,7 @@ jobs:
           JOB_KIND: Squads
           IN_COMPETITION: ${{ github.event.inputs.competition }}
           IN_FULL: ${{ github.event.inputs.full }}
+          IN_PLAYERS_ONLY: ${{ github.event.inputs.players_only }}
           IN_FORCE: ${{ github.event.inputs.force }}
           IN_TEAM: ${{ github.event.inputs.team }}
           IN_PLAYER: ${{ github.event.inputs.player }}

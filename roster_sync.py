@@ -451,6 +451,123 @@ def run_player(player_id: str, *, delay: float) -> dict:
 
 
 # ----------------------------------------------------------------------------
+# Players-only refresh: re-enrich detailed positions from Transfermarkt over the
+# rosters ALREADY in the DB, without re-crawling zerozero squad pages.
+# ----------------------------------------------------------------------------
+
+
+def _db_teams_with_rosters(sb: sync.Supabase, comp_id: str) -> list[dict]:
+    """Rebuild the teams+players structure from the DB (active roster_memberships
+    + player names), so Transfermarkt enrichment can run with no zerozero roster
+    crawl. Shape matches roster.crawl_competition_squads output."""
+    teams = team_ids_from_matches(sb, comp_id)  # id,name,slug,tm_verein_id,tm_slug
+    by_id = {t["id"]: {**t, "players": []} for t in teams if t.get("id")}
+    rm = sb._rest(
+        "GET",
+        f"roster_memberships?competition_id=eq.{comp_id}&active=is.true"
+        "&select=team_id,player_id,shirt_number,age_at_sync,position_group").json()
+    pids = sorted({r["player_id"] for r in rm if r.get("player_id")})
+    pinfo: dict[str, dict] = {}
+    for i in range(0, len(pids), 200):
+        chunk = pids[i:i + 200]
+        for p in sb._rest("GET",
+                          f"players?id=in.({','.join(chunk)})&select=id,name,slug").json():
+            pinfo[p["id"]] = p
+    for r in rm:
+        t = by_id.get(r["team_id"])
+        if not t:
+            continue
+        info = pinfo.get(r["player_id"], {})
+        t["players"].append({
+            "id": r["player_id"], "name": info.get("name"), "slug": info.get("slug"),
+            "shirt_number": r.get("shirt_number"), "age": r.get("age_at_sync"),
+            "position_group": r.get("position_group"),
+        })
+    return list(by_id.values())
+
+
+def run_players(*, competition_url: str, run_id: int | None, trigger: str,
+                github_run_id: str | None, delay: float) -> dict:
+    """Re-fetch detailed positions from Transfermarkt for a competition's existing
+    DB rosters (no zerozero squad crawl). Writes player detail only; team and
+    roster membership are left untouched."""
+    sb = sync.Supabase()
+    comp = crawler.get_competition(competition_url, delay=delay)
+    comp_id = comp.get("id_edicao")
+    run_id = sync._begin_run(sb, run_id=run_id, trigger=trigger, kind="comp_players",
+                             target=str(comp.get("slug") or competition_url),
+                             github_run_id=github_run_id)
+    try:
+        if not comp_id:
+            raise RuntimeError("could not resolve competition id_edicao")
+        # Season + TM mapping from the DB (avoids a second zerozero request).
+        try:
+            meta = sb._rest("GET", f"competitions?id=eq.{comp_id}&select="
+                            "slug,season,tm_competition_code,tm_saison_id").json()
+        except Exception:  # noqa: BLE001
+            meta = []
+        if meta:
+            m = meta[0]
+            comp["season"] = comp.get("season") or m.get("season")
+            comp.setdefault("slug", m.get("slug"))
+            comp["tm_competition_code"] = m.get("tm_competition_code")
+            comp["tm_saison_id"] = m.get("tm_saison_id")
+
+        teams = _db_teams_with_rosters(sb, comp_id)
+        if not sum(len(t["players"]) for t in teams):
+            raise RuntimeError("no rosters in the DB for this competition; run a "
+                               "Full sync first to populate the squads")
+
+        jobstatus.report("Transfermarkt: detailed positions")
+        aliases = _team_aliases(sb, [t["id"] for t in teams if t.get("id")])
+        session = crawler.new_session()
+        res = transfermarkt.enrich_competition(comp, teams, session=session,
+                                               aliases=aliases)
+        if res["team_tm"]:
+            _persist_team_tm(sb, res["team_tm"])
+
+        base_name = {p["id"]: p.get("name") for t in teams
+                     for p in t["players"] if p.get("id")}
+        detail_rows = []
+        for r in _player_detail_rows(res["enriched"]):
+            nm = base_name.get(r["id"])
+            if nm:  # NOT NULL players.name must be present on the upsert row
+                detail_rows.append({**r, "name": nm})
+
+        jobstatus.report("Writing player positions to the database")
+        saved, failures = sb.upsert_partial("players", detail_rows, "id")
+        if failures:
+            print(f"  ! {len(failures)} player row(s) failed to save:",
+                  file=sys.stderr)
+            for row, err in failures[:50]:
+                print(f"      {row.get('id')} {row.get('name') or ''}: {err}"
+                      .rstrip(), file=sys.stderr)
+        try:
+            _rpc(sb, "refresh_competition_counts", {"p_competition_id": comp_id})
+        except Exception as err:  # noqa: BLE001
+            print(f"  (refresh_competition_counts skipped: {err})", file=sys.stderr)
+
+        s = res["stats"]
+        failed = len(failures)
+        msg = (f"Transfermarkt: {s['players_matched']}/{s['players_total']} "
+               f"matched; saved {saved} position(s).")
+        sync._finish_run(sb, run_id, status="success", games_count=saved,
+                         error=(f"{failed} row(s) failed (see log)"
+                                if failed else None))
+        jobstatus.done("error" if failed else "success",
+                       message=msg + (f" {failed} FAILED — see log."
+                                      if failed else ""))
+        print(msg + f" crawl_run #{run_id}", file=sys.stderr)
+        return {"run_id": run_id, "matched": s["players_matched"],
+                "saved": saved, "failed": failed}
+    except Exception as err:  # noqa: BLE001
+        sync._finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        jobstatus.done("error", message=str(err))
+        print(f"ERROR in players crawl_run #{run_id}: {err}", file=sys.stderr)
+        raise
+
+
+# ----------------------------------------------------------------------------
 # CLI
 # ----------------------------------------------------------------------------
 
@@ -466,6 +583,9 @@ def main() -> int:
                     help="With --full, re-enrich even freshly-updated players.")
     ap.add_argument("--team", help="Refresh only this team id's roster.")
     ap.add_argument("--player", help="Enrich one player id and exit.")
+    ap.add_argument("--players-only", action="store_true",
+                    help="Re-fetch detailed positions from Transfermarkt over the "
+                         "DB's existing rosters (no zerozero squad crawl).")
     ap.add_argument("--run-id", type=int)
     ap.add_argument("--trigger", default="manual", choices=["manual", "schedule"])
     ap.add_argument("--github-run-id", default=os.environ.get("GITHUB_RUN_ID"))
@@ -478,6 +598,7 @@ def main() -> int:
     force_enrich = args.force_enrich or sync._flag(sync._env("IN_FORCE"))
     team_id = args.team or sync._env("IN_TEAM")
     player_id = args.player or sync._env("IN_PLAYER")
+    players_only = args.players_only or sync._flag(sync._env("IN_PLAYERS_ONLY"))
     run_id = args.run_id
     if run_id is None:
         rid = sync._env("IN_RUN_ID")
@@ -491,6 +612,10 @@ def main() -> int:
         return 0
 
     url = sync._competition_url(competition) or crawler.COMPETITION_URL
+    if players_only:
+        run_players(competition_url=url, run_id=run_id, trigger=trigger,
+                    github_run_id=args.github_run_id, delay=args.delay)
+        return 0
     run(competition_url=url, full=full, run_id=run_id, trigger=trigger,
         github_run_id=args.github_run_id, delay=args.delay,
         force_enrich=force_enrich, team_id=team_id)
