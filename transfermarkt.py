@@ -47,6 +47,7 @@ import time
 import unicodedata
 
 import crawler  # reuse: new_session, clean_name, strip_tags
+import jobstatus  # best-effort progress heartbeat for the runner tray
 import roster   # reuse: position_code (TM's Portuguese labels already match)
 
 TM_BASE = "https://www.transfermarkt.pt"
@@ -372,7 +373,9 @@ def enrich_competition(comp: dict, zz_teams: list[dict], *, session=None,
     teams_matched = 0
 
     league_teams: list[dict] | None = None  # fetched lazily, only if needed
-    for zz in zz_teams:
+    for n, zz in enumerate(zz_teams, 1):
+        jobstatus.report(f"Transfermarkt: {zz.get('name') or zz['id']}",
+                         current=n, total=len(zz_teams))
         verein = zz.get("tm_verein_id")
         slug = zz.get("tm_slug")
         if not verein:

@@ -43,6 +43,8 @@ from datetime import datetime, timezone
 
 import requests
 
+import jobstatus  # best-effort progress heartbeat for the runner tray
+
 # zerozero.pt's anti-bot layer fingerprints the TLS handshake; the stdlib
 # `requests` fingerprint gets a 403 from flagged IPs. curl_cffi impersonates a
 # real Chrome handshake, which gets through. Fall back to plain requests if it
@@ -730,9 +732,12 @@ def crawl_round(jornada: int | str | None = None, *,
           file=sys.stderr)
 
     games: list[dict] = []
+    total = len(fixture["games"])
     for i, g in enumerate(fixture["games"], 1):
-        print(f"[{i}/{len(fixture['games'])}] {g.get('slug', g['url'])}",
-              file=sys.stderr)
+        label = g.get("slug", g["url"])
+        print(f"[{i}/{total}] {label}", file=sys.stderr)
+        jobstatus.report(f"Round {fixture['round']}: match {label}",
+                         current=i, total=total)
         try:
             games.append(get_match(g, session=session, delay=delay))
         except Exception as err:  # noqa: BLE001

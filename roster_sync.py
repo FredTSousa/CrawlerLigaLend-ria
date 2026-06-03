@@ -31,6 +31,7 @@ import os
 import sys
 
 import crawler
+import jobstatus  # best-effort progress heartbeat for the runner tray
 import roster
 import sync  # reuse Supabase, _begin_run, _finish_run, _now, _load_dotenv, _env, _flag
 import transfermarkt  # detailed positions WITHOUT per-player zerozero pages
@@ -60,9 +61,15 @@ def _team_aliases(sb: sync.Supabase, team_ids: list[str]) -> dict[str, list[str]
 def _load_tm_config(sb: sync.Supabase, comp: dict, comp_id: str) -> None:
     """Merge the backoffice-set Transfermarkt mapping (competitions.
     tm_competition_code / tm_saison_id) onto the scraped comp dict, in place."""
-    resp = sb._rest(
-        "GET",
-        f"competitions?id=eq.{comp_id}&select=tm_competition_code,tm_saison_id")
+    try:
+        resp = sb._rest(
+            "GET",
+            f"competitions?id=eq.{comp_id}&select=tm_competition_code,tm_saison_id")
+    except Exception as err:  # noqa: BLE001
+        print(f"  (Transfermarkt config unavailable: {err}; apply "
+              "db/migration_transfermarkt.sql to enable enrichment)",
+              file=sys.stderr)
+        return
     rows = resp.json()
     if rows:
         comp["tm_competition_code"] = rows[0].get("tm_competition_code")
@@ -74,7 +81,13 @@ def _persist_team_tm(sb: sync.Supabase, team_tm: dict[str, dict]) -> None:
     name match (see teams.tm_verein_id / tm_slug)."""
     rows = [{"id": tid, "tm_verein_id": v["verein_id"], "tm_slug": v["slug"],
              "updated_at": sync._now()} for tid, v in team_tm.items()]
-    sb.upsert("teams", rows, "id")
+    if not rows:
+        return
+    try:
+        sb.upsert("teams", rows, "id")
+    except Exception as err:  # noqa: BLE001
+        print(f"  (could not persist Transfermarkt ids: {err}; apply "
+              "db/migration_transfermarkt.sql)", file=sys.stderr)
 
 
 def _rpc(sb: sync.Supabase, fn: str, args: dict) -> None:
@@ -97,9 +110,16 @@ def team_ids_from_matches(sb: sync.Supabase, competition_id: str) -> list[dict]:
                 ids.add(m[k])
     if not ids:
         return []
-    names = sb._rest(
-        "GET",
-        f"teams?id=in.({','.join(ids)})&select=id,name,slug,tm_verein_id,tm_slug")
+    inlist = ",".join(ids)
+    try:
+        names = sb._rest(
+            "GET",
+            f"teams?id=in.({inlist})&select=id,name,slug,tm_verein_id,tm_slug")
+    except Exception:  # noqa: BLE001
+        # tm_verein_id / tm_slug exist only after migration_transfermarkt.sql.
+        # The fast teams/roster sync must still work before the migration is
+        # applied, so fall back to the columns that have always existed.
+        names = sb._rest("GET", f"teams?id=in.({inlist})&select=id,name,slug")
     by_id = {r["id"]: r for r in names.json()}
     return [{"id": tid, "name": by_id.get(tid, {}).get("name"),
              "slug": by_id.get(tid, {}).get("slug"),
@@ -322,6 +342,7 @@ def run(*, competition_url: str, full: bool, run_id: int | None, trigger: str,
             # Detailed positions come from Transfermarkt (one league page + one
             # squad page per club), NOT from per-player zerozero pages. The whole
             # team is refreshed each run, so `force_enrich` no longer applies.
+            jobstatus.report("Transfermarkt: detailed positions")
             aliases = _team_aliases(
                 sb, [t["id"] for t in data["teams"] if t.get("id")])
             session = crawler.new_session()
@@ -336,15 +357,20 @@ def run(*, competition_url: str, full: bool, run_id: int | None, trigger: str,
                   + (f"; unmatched teams: {s['unmatched_teams']}"
                      if s["unmatched_teams"] else ""), file=sys.stderr)
 
+        jobstatus.report("Writing squads to the database")
         summary = write_squads(sb, data)
         sync._finish_run(sb, run_id, status="success",
                          games_count=summary["players"])
+        jobstatus.done("success", message=f"Synced {summary['teams']} team(s), "
+                       f"{summary['players']} roster row(s), "
+                       f"{summary['enriched']} enriched.")
         print(f"Synced {summary['teams']} team(s), {summary['players']} roster "
               f"row(s), {summary['enriched']} enriched. crawl_run #{run_id}",
               file=sys.stderr)
         return {"run_id": run_id, **summary}
     except Exception as err:  # noqa: BLE001
         sync._finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        jobstatus.done("error", message=str(err))
         print(f"ERROR in squad crawl_run #{run_id}: {err}", file=sys.stderr)
         raise
 

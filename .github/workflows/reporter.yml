@@ -38,6 +38,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          JOB_KIND: Reporter ratings
           IN_MATCH_ID: ${{ github.event.inputs.match_id }}
           IN_RUN_ID: ${{ github.event.inputs.run_id }}
         run: python reporter_sync.py

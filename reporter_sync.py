@@ -21,6 +21,7 @@ import re
 import sys
 
 import abola
+import jobstatus  # best-effort progress heartbeat for the runner tray
 import sync
 
 BIG_THREE = ("benfica", "sporting", "porto")
@@ -189,6 +190,7 @@ def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
                              target=match_id, github_run_id=github_run_id,
                              source="abola")
     try:
+        jobstatus.report(f"Reporter ratings: match {match_id}")
         m = _fetch_match(sb, match_id)
         if not m:
             raise RuntimeError(f"match {match_id} not found")
@@ -204,12 +206,15 @@ def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
         linked, total = _store_and_link(sb, match_id, m["home_team_id"],
                                         m["away_team_id"], data)
         sync._finish_run(sb, run_id, status="success", games_count=total)
+        jobstatus.done("success",
+                       message=f"{total} ratings ({linked} linked).")
         print(f"Reporter: {total} ratings ({linked} linked) from "
               f"{len(data['urls_used'])} url(s). crawl_run #{run_id}",
               file=sys.stderr)
         return data
     except Exception as err:  # noqa: BLE001
         sync._finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        jobstatus.done("error", message=str(err))
         print(f"ERROR reporter crawl_run #{run_id}: {err}", file=sys.stderr)
         raise
 
@@ -243,6 +248,8 @@ def run_round(games: list[dict], *, round_no: int | None = None,
             meta.append((g["game_id"], (g.get("home_team") or {}).get("id"),
                          (g.get("away_team") or {}).get("id")))
 
+        jobstatus.report(f"Reporter ratings: round {round_no} "
+                         f"({len(matches)} game(s))")
         results = abola.scrape_matches(matches, delay=delay) if matches else []
         total = 0
         for (gid, hid, aid), data in zip(meta, results):
@@ -252,11 +259,14 @@ def run_round(games: list[dict], *, round_no: int | None = None,
             _, n = _store_and_link(sb, gid, hid, aid, data)
             total += n
         sync._finish_run(sb, run_id, status="success", games_count=len(matches))
+        jobstatus.done("success", message=f"{total} ratings across "
+                       f"{len(matches)} finished game(s).")
         print(f"Reporter (round): {total} ratings across {len(matches)} "
               f"finished game(s). crawl_run #{run_id}", file=sys.stderr)
         return results
     except Exception as err:  # noqa: BLE001
         sync._finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        jobstatus.done("error", message=str(err))
         print(f"ERROR reporter round crawl_run #{run_id}: {err}", file=sys.stderr)
         raise
 

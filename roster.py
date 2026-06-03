@@ -33,6 +33,7 @@ import re
 import sys
 
 import crawler  # reuse: new_session, fetch, clean_name, BASE
+import jobstatus  # best-effort progress heartbeat for the runner tray
 
 BASE = crawler.BASE
 
@@ -276,6 +277,8 @@ def crawl_competition_squads(comp: dict, teams: list[dict], *, full: bool = Fals
     enriched: dict[str, dict] = {}
     for i, t in enumerate(teams, 1):
         print(f"[{i}/{len(teams)}] roster: {t.get('name') or t['id']}", file=sys.stderr)
+        jobstatus.report(f"Fetching squad — {t.get('name') or t['id']}",
+                         current=i, total=len(teams))
         try:
             squad = get_team_roster(epoca, t, session=session, delay=delay)
         except Exception as err:  # noqa: BLE001 - skip a bad team, keep going

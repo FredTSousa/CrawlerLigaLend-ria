@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 import requests
 
 import crawler
+import jobstatus  # best-effort progress heartbeat for the runner tray
 
 COMPETITION_SLUG = "liga-portuguesa"
 
@@ -361,12 +362,14 @@ def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
         if match_url:
             # A single match may be any competition (not necessarily Liga
             # Portugal), so don't tag it with the Liga edition.
+            jobstatus.report(f"Crawling match {match_url}")
             game = crawler.get_match(match_url, delay=delay)
             games = [game]
             round_no = None
             scraped_at = _now()
             competition = None
         else:
+            jobstatus.report("Resolving competition")
             competition = crawler.get_competition(
                 competition_url or crawler.COMPETITION_URL, delay=delay)
             data = crawler.crawl_round(jornada=jornada, competition=competition,
@@ -375,9 +378,12 @@ def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
             round_no = data["round"]
             scraped_at = data.get("scraped_at")
 
+        jobstatus.report(f"Writing {len(games)} game(s) to the database")
         write_games(sb, games, competition=competition, round_no=round_no,
                     scraped_at=scraped_at)
         _finish_run(sb, run_id, status="success", games_count=len(games))
+        jobstatus.done("success",
+                       message=f"Synced {len(games)} game(s) (round {round_no}).")
         print(f"Synced {len(games)} game(s). crawl_run #{run_id}",
               file=sys.stderr)
 
@@ -396,6 +402,7 @@ def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
         return {"run_id": run_id, "games": len(games)}
     except Exception as err:  # noqa: BLE001
         _finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        jobstatus.done("error", message=str(err))
         print(f"ERROR in crawl_run #{run_id}: {err}", file=sys.stderr)
         raise
 
@@ -445,7 +452,9 @@ def run_backfill(*, competition_url: str, run_id: int | None, trigger: str,
 
         total_games = 0
         crawled_rounds = 0
-        for rd in todo:
+        for n, rd in enumerate(todo, 1):
+            jobstatus.report(f"Backfill {label}: round {rd}",
+                             current=n, total=len(todo))
             try:
                 data = crawler.crawl_round(jornada=rd, competition=comp,
                                            delay=delay)
@@ -470,11 +479,14 @@ def run_backfill(*, competition_url: str, run_id: int | None, trigger: str,
                                              delay=delay)
 
         _finish_run(sb, run_id, status="success", games_count=total_games)
+        jobstatus.done("success", message=f"Backfilled {crawled_rounds} round(s), "
+                       f"{total_games} game(s).")
         print(f"Backfill done: {total_games} game(s) across {crawled_rounds} "
               f"round(s). crawl_run #{run_id}", file=sys.stderr)
         return {"run_id": run_id, "rounds": crawled_rounds, "games": total_games}
     except Exception as err:  # noqa: BLE001
         _finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        jobstatus.done("error", message=str(err))
         print(f"ERROR in backfill crawl_run #{run_id}: {err}", file=sys.stderr)
         raise
 

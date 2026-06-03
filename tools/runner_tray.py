@@ -13,6 +13,7 @@ It manages the runner installed at  %USERPROFILE%\\actions-runner  (run.cmd).
 
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import re
@@ -28,6 +29,7 @@ RUNNER_DIR = os.path.join(os.environ.get("USERPROFILE", ""), "actions-runner")
 RUN_CMD = os.path.join(RUNNER_DIR, "run.cmd")
 LOG_FILE = os.path.join(RUNNER_DIR, "_tray_run.log")
 WATCH_STATUS = os.path.join(RUNNER_DIR, "_watch_status.json")
+JOB_STATUS = os.path.join(RUNNER_DIR, "_job_status.json")  # written by jobstatus.py
 LISTENER = "Runner.Listener.exe"
 WORKER = "Runner.Worker.exe"  # exists only while a job (e.g. a live watch) runs
 
@@ -37,6 +39,7 @@ _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 GREEN = (40, 180, 80, 255)
 BLUE = (60, 140, 240, 255)
 GREY = (120, 120, 120, 255)
+RED = (210, 60, 60, 255)
 
 _proc: subprocess.Popen | None = None
 
@@ -86,6 +89,48 @@ def _match_label(m: dict) -> str:
     return f"{slug} {m.get('minute') or ''}".strip()
 
 
+def _job_status() -> dict | None:
+    """The crawl/roster/reporter job heartbeat (written by jobstatus.py)."""
+    try:
+        with open(JOB_STATUS, encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return None
+
+
+def _fmt_age(seconds: float) -> str:
+    s = int(max(0, seconds))
+    if s < 90:
+        return f"{s}s ago"
+    if s < 3600:
+        return f"{s // 60}m ago"
+    return f"{s // 3600}h ago"
+
+
+def _progress(js: dict) -> str:
+    cur, total = js.get("current"), js.get("total")
+    return f" [{cur}/{total}]" if cur and total else ""
+
+
+def _last_error() -> str | None:
+    """Full text of the last job's error, if the last finished job failed."""
+    js = _job_status()
+    if js and js.get("phase") == "done" and js.get("result") == "error":
+        return js.get("message") or "(no detail recorded)"
+    return None
+
+
+def show_last_error(icon=None, item=None) -> None:
+    msg = _last_error()
+    if not msg:
+        return
+    try:  # MB_ICONERROR | MB_TOPMOST
+        ctypes.windll.user32.MessageBoxW(
+            0, msg, f"{APP_NAME} — last job error", 0x10 | 0x40000)
+    except Exception:
+        pass
+
+
 def stop_job(icon=None, item=None) -> None:
     """Cancel the current job (kills the worker) but keep the runner online."""
     subprocess.run(["taskkill", "/F", "/T", "/IM", WORKER],
@@ -125,10 +170,17 @@ def open_folder(icon=None, item=None) -> None:
 # ----------------------------------------------------------------------------
 
 
-def _make_icon(up: bool, busy: bool = False) -> Image.Image:
+def _make_icon(up: bool, busy: bool = False, error: bool = False) -> Image.Image:
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    fill = BLUE if (up and busy) else (GREEN if up else GREY)
+    if not up:
+        fill = GREY
+    elif busy:
+        fill = BLUE
+    elif error:
+        fill = RED      # idle, but the last job failed — draws attention
+    else:
+        fill = GREEN
     d.ellipse((6, 6, 58, 58), fill=fill,
               outline=(255, 255, 255, 255), width=3)
     # A small "C" so it reads as Crawler LLP at a glance.
@@ -142,7 +194,31 @@ def _state_label() -> str:
     watching = _watch_matches()
     if watching:
         return "Watching " + ", ".join(_match_label(m) for m in watching)
-    return "Working (job running)" if _job_running() else "Online (idle)"
+
+    js = _job_status()
+    age = (time.time() - float(js.get("updated", 0))) if js else None
+
+    if _job_running():
+        # A job is executing. If the heartbeat is live, show exactly what stage
+        # it's on + progress + how long since the last update (so you can see it
+        # moving, and spot a stall). Otherwise fall back to the generic label.
+        if js and js.get("phase") == "running":
+            return (f"{js.get('job', 'Job')}: {js.get('stage', '…')}"
+                    f"{_progress(js)} · {_fmt_age(age)}")
+        return "Working (job running)"
+
+    # No job running: report the outcome of the last one so a failure is visible.
+    if js and js.get("phase") == "done":
+        res = js.get("result", "done")
+        msg = js.get("message") or ""
+        when = _fmt_age(age) if age is not None else ""
+        tail = f" — {msg}" if msg else ""
+        return f"Last {js.get('job', 'job')}: {res}{tail} ({when})"
+    if js and js.get("phase") == "running":
+        # Heartbeat left mid-run but no worker alive -> the job was interrupted.
+        return (f"Last {js.get('job', 'job')}: interrupted at "
+                f"{js.get('stage', '?')} ({_fmt_age(age)})")
+    return "Online (idle)"
 
 
 def _active() -> bool:
@@ -163,10 +239,11 @@ def _monitor(icon: pystray.Icon) -> None:
     last = None
     while True:
         label = _state_label()
-        state = (_runner_up(), _active(), label)
+        failed = not _active() and _last_error() is not None
+        state = (_runner_up(), _active(), failed, label)
         if state != last:
-            up, active, _ = state
-            icon.icon = _make_icon(up, active)
+            up, active, err, _ = state
+            icon.icon = _make_icon(up, active, err)
             icon.title = f"{APP_NAME} — {label}"
             icon.update_menu()
             last = state
@@ -185,6 +262,8 @@ def main() -> None:
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Start runner", start_runner,
                          visible=lambda i: not _runner_up()),
+        pystray.MenuItem("Show last error…", show_last_error,
+                         visible=lambda i: _last_error() is not None),
         pystray.MenuItem("Stop current job", stop_job,
                          visible=lambda i: _job_running()),
         pystray.MenuItem("Stop runner", stop_runner,
