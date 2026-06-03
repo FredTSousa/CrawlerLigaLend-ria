@@ -124,11 +124,23 @@ def show_last_error(icon=None, item=None) -> None:
     msg = _last_error()
     if not msg:
         return
-    try:  # MB_ICONERROR | MB_TOPMOST
+    try:  # MB_OK | MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND
         ctypes.windll.user32.MessageBoxW(
-            0, msg, f"{APP_NAME} — last job error", 0x10 | 0x40000)
+            0, msg, f"{APP_NAME} — last job error", 0x10 | 0x40000 | 0x10000)
     except Exception:
         pass
+
+
+def dismiss_error(icon=None, item=None) -> None:
+    """Clear the last-error indicator (red icon + status). The next job will
+    write a fresh status anyway; this just acknowledges the current one."""
+    try:
+        if os.path.exists(JOB_STATUS):
+            os.remove(JOB_STATUS)
+    except Exception:
+        pass
+    if icon is not None:
+        icon.update_menu()
 
 
 def stop_job(icon=None, item=None) -> None:
@@ -263,6 +275,8 @@ def main() -> None:
         pystray.MenuItem("Start runner", start_runner,
                          visible=lambda i: not _runner_up()),
         pystray.MenuItem("Show last error…", show_last_error,
+                         visible=lambda i: _last_error() is not None),
+        pystray.MenuItem("Dismiss last error", dismiss_error,
                          visible=lambda i: _last_error() is not None),
         pystray.MenuItem("Stop current job", stop_job,
                          visible=lambda i: _job_running()),

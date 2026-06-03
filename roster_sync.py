@@ -173,36 +173,48 @@ def _competition_team_rows(comp_id: str, teams: list[dict]) -> list[dict]:
     } for t in teams if t.get("id")]
 
 
-def _player_rows_thin(teams: list[dict], enriched: dict[str, dict]) -> list[dict]:
-    """One row per distinct player. Enriched players carry detail; others are
-    thin (id/name/slug/group) so the FK exists for roster_memberships."""
+def _player_base_rows(teams: list[dict]) -> list[dict]:
+    """One row per distinct player with the columns the roster page provides.
+    EVERY row has the same keys — PostgREST rejects a bulk upsert whose objects
+    don't all share an identical key set (error PGRST102), so detail columns
+    that only some players have are written separately (see _player_detail_rows)."""
     now = sync._now()
     seen: dict[str, dict] = {}
     for t in teams:
         for p in t.get("players", []):
-            if not p.get("id") or p["id"] in seen:
+            pid = p.get("id")
+            if not pid or pid in seen:
                 continue
-            row = {"id": p["id"], "name": p["name"], "slug": p.get("slug"),
-                   "position_group": p.get("position_group"),
-                   "age": p.get("age"),  # roster page gives age inline
-                   "source_url": p.get("source_url"), "updated_at": now}
-            d = enriched.get(p["id"])
-            if d:
-                row.update({k: v for k, v in {
-                    "name": d.get("name") or p["name"],
-                    "position": d.get("position"),
-                    "position_code": d.get("position_code"),
-                    "age": d.get("age"),
-                    "birth_date": d.get("birth_date"),
-                    "club_name": d.get("club_name"),
-                    "nationality": d.get("nationality"),
-                    "enriched_at": now,
-                    "last_sync_at": now,
-                }.items() if v is not None})
-            else:
-                row["last_sync_at"] = now
-            seen[p["id"]] = row
+            seen[pid] = {
+                "id": pid,
+                "name": p.get("name"),
+                "slug": p.get("slug"),
+                "position_group": p.get("position_group"),
+                "age": p.get("age"),  # roster page gives age inline
+                "source_url": p.get("source_url"),
+                "last_sync_at": now,
+                "updated_at": now,
+            }
     return list(seen.values())
+
+
+def _player_detail_rows(enriched: dict[str, dict]) -> list[dict]:
+    """One row per ENRICHED player carrying the Transfermarkt detail. Uniform
+    keys across all rows (PGRST102); a None value writes NULL but never drops the
+    key. Columns not populated from Transfermarkt (name, club_name, ...) are left
+    to _player_base_rows so they're never overwritten here."""
+    now = sync._now()
+    return [{
+        "id": pid,
+        "position": d.get("position"),
+        "position_code": d.get("position_code"),
+        "age": d.get("age"),
+        "birth_date": d.get("birth_date"),
+        "nationality": d.get("nationality"),
+        "enriched_at": now,
+        "last_sync_at": now,
+        "updated_at": now,
+    } for pid, d in enriched.items()]
 
 
 def _roster_rows(comp_id: str, teams: list[dict]) -> list[dict]:
@@ -247,7 +259,10 @@ def write_squads(sb: sync.Supabase, data: dict) -> dict:
     sb.upsert("teams", _team_rows(teams), "id")
     sb.upsert("competition_teams", _competition_team_rows(comp_id, teams),
               "competition_id,team_id")
-    sb.upsert("players", _player_rows_thin(teams, enriched), "id")
+    # Two upserts with uniform key sets each (PostgREST PGRST102): every player
+    # gets a base row, then the enriched subset gets its detail columns.
+    sb.upsert("players", _player_base_rows(teams), "id")
+    sb.upsert("players", _player_detail_rows(enriched), "id")
     sb.upsert("roster_memberships", _roster_rows(comp_id, teams),
               "competition_id,team_id,player_id")
 
