@@ -1,20 +1,33 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 
 // Snapshot export (Option C): one self-contained JSON package for a competition
-// — metadata + teams + players + fixtures. Signed-in admins only (RLS applies to
-// every read below). Use it to seed/reconcile a subscriber, or for offline diffs.
+// — metadata + teams + players + fixtures + per-player match stats. Use it to
+// seed/reconcile a subscriber (one pull seeds the entire history), or for
+// offline diffs.
+//
+// Auth: either a signed-in admin (cookie, RLS-gated) OR a server-to-server
+// bearer token matching EXPORT_API_TOKEN (service-role, RLS bypassed). The
+// token path lets a subscriber site (e.g. Liga Lendária) pull without a user
+// session.
 // GET /api/competitions/{id}/export
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } },
 ) {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const token = process.env.EXPORT_API_TOKEN;
+  const auth = request.headers.get("authorization");
+  const tokenOk = !!token && auth === `Bearer ${token}`;
+
+  const supabase = tokenOk ? createServiceClient() : createClient();
+  if (!tokenOk) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
   }
 
   const id = params.id;
@@ -62,8 +75,25 @@ export async function GET(
     source_url: r.source_url ?? r.team?.source_url,
   }));
 
+  // Per-player match stats (schema_version 2). match_player_details has no
+  // competition_id, so filter by this competition's match ids. Page in chunks
+  // to stay under PostgREST's ~1000-row cap (a 34-round league is ~8k rows).
+  const matchIds = ((fixtures ?? []) as any[]).map((f) => f.id);
+  const stats: any[] = [];
+  for (let i = 0; i < matchIds.length; i += 25) {
+    const { data: chunk } = await supabase
+      .from("match_player_details")
+      .select(
+        "match_id, round, player_id, player_name, team_id, team_name, order_index, shirt_number, is_captain, is_starter, entered_min, left_min, goals, assists, yellow_cards, red_card, own_goals, penalties_scored, penalties_missed, penalties_defended, played_under_20m, reporter_score, reporter_is_mvp",
+      )
+      .in("match_id", matchIds.slice(i, i + 25))
+      .order("match_id", { ascending: true })
+      .order("order_index", { ascending: true });
+    if (chunk) stats.push(...chunk);
+  }
+
   const snapshot = {
-    schema_version: 1,
+    schema_version: 2,
     generated_at: new Date().toISOString(),
     competition: {
       id: comp.id,
@@ -80,6 +110,7 @@ export async function GET(
         teams: comp.teams_count ?? teams.length,
         players: comp.players_count ?? (players ?? []).length,
         fixtures: (fixtures ?? []).length,
+        stats: stats.length,
       },
     },
     teams,
@@ -98,6 +129,31 @@ export async function GET(
       last_updated: p.last_updated,
     })),
     fixtures: (fixtures ?? []) as any[],
+    stats: stats.map((s) => ({
+      match_id: s.match_id,
+      round: s.round,
+      player_id: s.player_id,
+      player_name: s.player_name,
+      team_id: s.team_id,
+      team_name: s.team_name,
+      order_index: s.order_index,
+      shirt_number: s.shirt_number,
+      is_captain: s.is_captain,
+      is_starter: s.is_starter,
+      entered_min: s.entered_min,
+      left_min: s.left_min,
+      goals: s.goals,
+      assists: s.assists,
+      yellow_cards: s.yellow_cards,
+      red_card: s.red_card,
+      own_goals: s.own_goals,
+      penalties_scored: s.penalties_scored,
+      penalties_missed: s.penalties_missed,
+      penalties_defended: s.penalties_defended,
+      played_under_20m: s.played_under_20m,
+      reporter_score: s.reporter_score,
+      reporter_is_mvp: s.reporter_is_mvp,
+    })),
   };
 
   return new NextResponse(JSON.stringify(snapshot, null, 2), {
