@@ -95,6 +95,35 @@ class Supabase:
                    prefer="resolution=merge-duplicates,return=minimal",
                    json=rows)
 
+    def upsert_partial(self, table: str, rows: list[dict], on_conflict: str, *,
+                       chunk: int = 50) -> tuple[int, list[tuple[dict, str]]]:
+        """Like upsert(), but never lets one bad row sink the whole batch. Tries
+        the bulk write first (fast path); on failure it splits into chunks and
+        then single rows, so every good row still persists. Returns
+        (saved_count, failures) where failures is [(row, error_message), ...]."""
+        if not rows:
+            return (0, [])
+        try:
+            self.upsert(table, rows, on_conflict)
+            return (len(rows), [])
+        except Exception:  # noqa: BLE001 - fall back to isolating the bad rows
+            pass
+        saved = 0
+        failures: list[tuple[dict, str]] = []
+        for i in range(0, len(rows), chunk):
+            part = rows[i:i + chunk]
+            try:
+                self.upsert(table, part, on_conflict)
+                saved += len(part)
+            except Exception:  # noqa: BLE001 - narrow down to the offending rows
+                for r in part:
+                    try:
+                        self.upsert(table, [r], on_conflict)
+                        saved += 1
+                    except Exception as err:  # noqa: BLE001
+                        failures.append((r, str(err)))
+        return (saved, failures)
+
     def insert_returning(self, table: str, row: dict) -> dict:
         resp = self._rest("POST", table, prefer="return=representation",
                            json=row)

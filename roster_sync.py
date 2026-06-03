@@ -254,17 +254,48 @@ def write_squads(sb: sync.Supabase, data: dict) -> dict:
     teams = data["teams"]
     enriched = data.get("enriched_players", {})
 
+    problems: list[tuple[str, dict, str]] = []  # (table, row, error)
+
+    def _save(table: str, rows: list[dict], on_conflict: str) -> None:
+        """Upsert that keeps the good rows even if some fail, recording failures
+        so they can be reported instead of aborting the whole sync."""
+        _, failures = sb.upsert_partial(table, rows, on_conflict)
+        problems.extend((table, r, e) for r, e in failures)
+
     # FK-safe order.
     sb.upsert("competitions", [_competition_patch(comp)], "id")
-    sb.upsert("teams", _team_rows(teams), "id")
-    sb.upsert("competition_teams", _competition_team_rows(comp_id, teams),
-              "competition_id,team_id")
+    _save("teams", _team_rows(teams), "id")
+    _save("competition_teams", _competition_team_rows(comp_id, teams),
+          "competition_id,team_id")
+
     # Two upserts with uniform key sets each (PostgREST PGRST102): every player
-    # gets a base row, then the enriched subset gets its detail columns.
-    sb.upsert("players", _player_base_rows(teams), "id")
-    sb.upsert("players", _player_detail_rows(enriched), "id")
-    sb.upsert("roster_memberships", _roster_rows(comp_id, teams),
-              "competition_id,team_id,player_id")
+    # gets a base row, then the enriched subset gets its detail columns. The
+    # detail upsert only UPDATEs existing players, so drop any enriched id that
+    # has no base row (it would otherwise INSERT a player with a null name) and
+    # report it — these are the "not matching" records.
+    base_rows = _player_base_rows(teams)
+    base_ids = {r["id"] for r in base_rows}
+    detail_rows, orphans = [], []
+    for r in _player_detail_rows(enriched):
+        (detail_rows if r["id"] in base_ids else orphans).append(r)
+    for r in orphans:
+        problems.append(("players(detail)", r,
+                         "enriched player not present in the crawled roster "
+                         "(no base row) — skipped to avoid a null-name insert"))
+    _save("players", base_rows, "id")
+    _save("players", detail_rows, "id")
+    _save("roster_memberships", _roster_rows(comp_id, teams),
+          "competition_id,team_id,player_id")
+
+    if problems:
+        print(f"  ! {len(problems)} row(s) failed to save:", file=sys.stderr)
+        for table, row, err in problems[:50]:
+            ident = row.get("id") or row.get("player_id") or "?"
+            name = row.get("name") or ""
+            print(f"      [{table}] {ident} {name}: {err}".rstrip(),
+                  file=sys.stderr)
+        if len(problems) > 50:
+            print(f"      … and {len(problems) - 50} more", file=sys.stderr)
 
     # Reconcile membership: teams in the DB for this comp but not seen -> inactive.
     seen_team_ids = [t["id"] for t in teams if t.get("id")]
@@ -292,7 +323,7 @@ def write_squads(sb: sync.Supabase, data: dict) -> dict:
         print(f"  (emit_comp_sync skipped: {err})", file=sys.stderr)
     return {"competition_id": comp_id, "teams": len(teams),
             "players": sum(len(t.get("players", [])) for t in teams),
-            "enriched": len(enriched)}
+            "enriched": len(enriched), "failed": len(problems)}
 
 
 def _deactivate_missing(sb: sync.Supabase, table: str, scope: str, key: str,
@@ -374,14 +405,23 @@ def run(*, competition_url: str, full: bool, run_id: int | None, trigger: str,
 
         jobstatus.report("Writing squads to the database")
         summary = write_squads(sb, data)
+        failed = summary.get("failed", 0)
+        base_msg = (f"Synced {summary['teams']} team(s), {summary['players']} "
+                    f"roster row(s), {summary['enriched']} enriched.")
+        # Partial-failure: the good rows are saved, but flag it (red in the tray)
+        # so the unsaved records get noticed and the log can be inspected.
         sync._finish_run(sb, run_id, status="success",
-                         games_count=summary["players"])
-        jobstatus.done("success", message=f"Synced {summary['teams']} team(s), "
-                       f"{summary['players']} roster row(s), "
-                       f"{summary['enriched']} enriched.")
-        print(f"Synced {summary['teams']} team(s), {summary['players']} roster "
-              f"row(s), {summary['enriched']} enriched. crawl_run #{run_id}",
-              file=sys.stderr)
+                         games_count=summary["players"],
+                         error=(f"{failed} row(s) failed to save (see log)"
+                                if failed else None))
+        if failed:
+            jobstatus.done("error",
+                           message=f"{base_msg} {failed} row(s) FAILED — see log.")
+        else:
+            jobstatus.done("success", message=base_msg)
+        print(f"{base_msg}"
+              + (f" {failed} row(s) failed." if failed else "")
+              + f" crawl_run #{run_id}", file=sys.stderr)
         return {"run_id": run_id, **summary}
     except Exception as err:  # noqa: BLE001
         sync._finish_run(sb, run_id, status="error", error=str(err)[:2000])
