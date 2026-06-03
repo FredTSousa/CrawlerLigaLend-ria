@@ -78,16 +78,17 @@ def _load_tm_config(sb: sync.Supabase, comp: dict, comp_id: str) -> None:
 
 def _persist_team_tm(sb: sync.Supabase, team_tm: dict[str, dict]) -> None:
     """Persist newly-resolved Transfermarkt ids on teams so later runs skip the
-    name match (see teams.tm_verein_id / tm_slug)."""
-    rows = [{"id": tid, "tm_verein_id": v["verein_id"], "tm_slug": v["slug"],
-             "updated_at": sync._now()} for tid, v in team_tm.items()]
-    if not rows:
-        return
-    try:
-        sb.upsert("teams", rows, "id")
-    except Exception as err:  # noqa: BLE001
-        print(f"  (could not persist Transfermarkt ids: {err}; apply "
-              "db/migration_transfermarkt.sql)", file=sys.stderr)
+    name match (see teams.tm_verein_id / tm_slug). Uses PATCH, not upsert: the
+    team rows already exist, and an upsert would propose an insert row missing
+    the NOT NULL teams.name (rejected with 23502 even when it would UPDATE)."""
+    for tid, v in team_tm.items():
+        try:
+            sb.update("teams", f"id=eq.{tid}",
+                      {"tm_verein_id": v["verein_id"], "tm_slug": v["slug"],
+                       "updated_at": sync._now()})
+        except Exception as err:  # noqa: BLE001
+            print(f"  (could not persist Transfermarkt id for team {tid}: {err})",
+                  file=sys.stderr)
 
 
 def _rpc(sb: sync.Supabase, fn: str, args: dict) -> None:
@@ -270,18 +271,21 @@ def write_squads(sb: sync.Supabase, data: dict) -> dict:
 
     # Two upserts with uniform key sets each (PostgREST PGRST102): every player
     # gets a base row, then the enriched subset gets its detail columns. The
-    # detail upsert only UPDATEs existing players, so drop any enriched id that
-    # has no base row (it would otherwise INSERT a player with a null name) and
-    # report it — these are the "not matching" records.
+    # detail rows MUST include name: Postgres validates NOT NULL on an upsert's
+    # proposed insert row even when it resolves to an UPDATE, so omitting the
+    # NOT NULL players.name fails every row (23502). We carry the roster name so
+    # the row is valid on insert and the name is preserved on update.
     base_rows = _player_base_rows(teams)
-    base_ids = {r["id"] for r in base_rows}
-    detail_rows, orphans = [], []
+    base_name = {r["id"]: r["name"] for r in base_rows}
+    detail_rows = []
     for r in _player_detail_rows(enriched):
-        (detail_rows if r["id"] in base_ids else orphans).append(r)
-    for r in orphans:
-        problems.append(("players(detail)", r,
-                         "enriched player not present in the crawled roster "
-                         "(no base row) — skipped to avoid a null-name insert"))
+        if r["id"] not in base_name:
+            # Enriched but absent from the crawled roster — would insert a player
+            # with no roster context. Report it as a non-matching record.
+            problems.append(("players(detail)", r,
+                             "enriched player not present in the crawled roster"))
+            continue
+        detail_rows.append({**r, "name": base_name[r["id"]]})
     _save("players", base_rows, "id")
     _save("players", detail_rows, "id")
     _save("roster_memberships", _roster_rows(comp_id, teams),
