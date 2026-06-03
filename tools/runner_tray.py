@@ -124,11 +124,19 @@ def show_last_error(icon=None, item=None) -> None:
     msg = _last_error()
     if not msg:
         return
-    try:  # MB_OK | MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND
-        ctypes.windll.user32.MessageBoxW(
-            0, msg, f"{APP_NAME} — last job error", 0x10 | 0x40000 | 0x10000)
-    except Exception:
-        pass
+
+    # Show the box on its OWN thread. pystray runs menu callbacks on the tray's
+    # UI thread, and a modal MessageBox there freezes the whole tray (stuck icon,
+    # no status updates) until it's dismissed. A separate thread keeps the tray
+    # live and lets the dialog be closed independently.
+    def _box() -> None:
+        try:  # MB_OK | MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND
+            ctypes.windll.user32.MessageBoxW(
+                0, msg, f"{APP_NAME} — last job error", 0x10 | 0x40000 | 0x10000)
+        except Exception:
+            pass
+
+    threading.Thread(target=_box, daemon=True).start()
 
 
 def dismiss_error(icon=None, item=None) -> None:
