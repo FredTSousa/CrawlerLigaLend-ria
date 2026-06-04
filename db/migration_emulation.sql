@@ -64,9 +64,12 @@ alter table public.emulation_player_targets  enable row level security;
 -- ----------------------------------------------------------------------------
 -- 2) Guard helper: allow allow-listed users OR the service role.
 -- ----------------------------------------------------------------------------
+-- Read the role from the JWT claim (auth.jwt()), NOT current_user: inside a
+-- SECURITY DEFINER function current_user is the function owner, so a service-role
+-- caller would never match. The JWT claim reflects the actual caller.
 create or replace function public.emulation_can_run()
 returns boolean language sql stable as $$
-    select current_user = 'service_role' or public.is_allowed();
+    select coalesce(auth.jwt() ->> 'role', '') = 'service_role' or public.is_allowed();
 $$;
 
 -- ----------------------------------------------------------------------------
