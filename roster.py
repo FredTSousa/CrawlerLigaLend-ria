@@ -122,7 +122,12 @@ def augment_competition(comp: dict, *, session=None, delay: float = 1.0) -> dict
 # ----------------------------------------------------------------------------
 
 SECTION_RE = re.compile(r'<div class="section">([^<]+)</div>')
-STAFF_SPLIT = '<div class="staff">'
+# Split on the player card div, tolerant of extra classes: zerozero marks some
+# squad members (e.g. departed/loaned, like a captain who has since left) with
+# <div class="staff inactive">. The exact-string split missed those, merging
+# them into the previous card and silently dropping them — so players who DID
+# appear in matches (e.g. Otamendi) never made it into the roster.
+STAFF_SPLIT_RE = re.compile(r'<div class="staff[ "]')
 STAFF_NUMBER_RE = re.compile(r'<div class="number">\s*(\d*)\s*</div>')
 STAFF_PLAYER_RE = re.compile(r'/jogador/([a-z0-9-]+)/(\d+)[^"]*">\s*([^<]+?)\s*</a>')
 STAFF_AGE_RE = re.compile(r'>\s*(\d{1,2})\s*anos')
@@ -148,7 +153,7 @@ def parse_team_squad(html: str) -> list[dict]:
             continue
         seg = html[sec.end():(sections[i + 1].start()
                               if i + 1 < len(sections) else len(html))]
-        for chunk in seg.split(STAFF_SPLIT)[1:]:
+        for chunk in STAFF_SPLIT_RE.split(seg)[1:]:
             pm = STAFF_PLAYER_RE.search(chunk)
             if not pm:
                 continue
