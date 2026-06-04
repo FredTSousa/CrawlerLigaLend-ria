@@ -32,12 +32,13 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  // The competition export endpoint self-authenticates (bearer token OR signed-in
-  // cookie) in its route handler, so it must bypass the cookie-only page gate —
-  // otherwise a token-only server-to-server pull is redirected to /login (HTML).
-  const isExportApi = /^\/api\/competitions\/[^/]+\/export$/.test(path);
+  // These competition endpoints self-authenticate (bearer token OR signed-in
+  // cookie) in their route handlers, so they must bypass the cookie-only page
+  // gate — otherwise a token-only server-to-server call is redirected to /login
+  // (HTML), which a caller can mistake for success.
+  const isPublicApi = /^\/api\/competitions\/[^/]+\/(export|emulate)$/.test(path);
   const isPublic =
-    isExportApi || PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + "/"));
+    isPublicApi || PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + "/"));
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
