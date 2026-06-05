@@ -61,7 +61,7 @@ export async function GET(
       supabase
         .from("matches")
         .select(
-          "id, round, played_on, status, home_team_id, away_team_id, home_score, away_score, kickoff_at, url",
+          "id, round, played_on, status, minute, home_team_id, away_team_id, home_score, away_score, kickoff_at, url, scraped_at, updated_at",
         )
         .eq("competition_id", id)
         .order("round", { ascending: true }),
@@ -80,17 +80,30 @@ export async function GET(
   // to stay under PostgREST's ~1000-row cap (a 34-round league is ~8k rows).
   const matchIds = ((fixtures ?? []) as any[]).map((f) => f.id);
   const stats: any[] = [];
+  const reporterLinks: any[] = [];
   for (let i = 0; i < matchIds.length; i += 25) {
-    const { data: chunk } = await supabase
-      .from("match_player_details")
-      .select(
-        "match_id, round, player_id, player_name, team_id, team_name, order_index, shirt_number, is_captain, is_starter, entered_min, left_min, goals, assists, yellow_cards, red_card, own_goals, penalties_scored, penalties_missed, penalties_defended, played_under_20m, reporter_score, reporter_is_mvp",
-      )
-      .in("match_id", matchIds.slice(i, i + 25))
-      .order("match_id", { ascending: true })
-      .order("order_index", { ascending: true });
-    if (chunk) stats.push(...chunk);
+    const chunk25 = matchIds.slice(i, i + 25);
+    const [{ data: statChunk }, { data: reporterChunk }] = await Promise.all([
+      supabase
+        .from("match_player_details")
+        .select(
+          "match_id, round, player_id, player_name, team_id, team_name, order_index, shirt_number, is_captain, is_starter, entered_min, left_min, goals, assists, yellow_cards, red_card, own_goals, penalties_scored, penalties_missed, penalties_defended, played_under_20m, reporter_score, reporter_is_mvp, reporter_linked",
+        )
+        .in("match_id", chunk25)
+        .order("match_id", { ascending: true })
+        .order("order_index", { ascending: true }),
+      supabase
+        .from("matches_reporter_link")
+        .select("match_id, fetched_at, format_detected, urls, home_ratings, away_ratings")
+        .in("match_id", chunk25),
+    ]);
+    if (statChunk) stats.push(...statChunk);
+    if (reporterChunk) reporterLinks.push(...reporterChunk);
   }
+
+  const reporterByMatchId = Object.fromEntries(
+    reporterLinks.map((r) => [r.match_id, r]),
+  );
 
   const snapshot = {
     schema_version: 2,
@@ -128,7 +141,10 @@ export async function GET(
       source_url: p.source_url,
       last_updated: p.last_updated,
     })),
-    fixtures: (fixtures ?? []) as any[],
+    fixtures: ((fixtures ?? []) as any[]).map((f) => ({
+      ...f,
+      reporter: reporterByMatchId[f.id] ?? null,
+    })),
     stats: stats.map((s) => ({
       match_id: s.match_id,
       round: s.round,
@@ -153,6 +169,7 @@ export async function GET(
       played_under_20m: s.played_under_20m,
       reporter_score: s.reporter_score,
       reporter_is_mvp: s.reporter_is_mvp,
+      reporter_linked: s.reporter_linked,
     })),
   };
 
