@@ -151,15 +151,35 @@ def _competition_patch(comp: dict) -> dict:
 
 def _team_rows(teams: list[dict]) -> list[dict]:
     now = sync._now()
+    # logo_url is written separately (see _persist_team_logos): a team whose
+    # squad-page fetch failed has no crest this run, and including it here would
+    # null an existing badge (the bulk upsert needs a uniform key set, so it
+    # can't be dropped per-row).
     return [{
         "id": t["id"],
         "name": t["name"],
         "slug": t.get("slug"),
-        "logo_url": t.get("logo_url"),
         "source_url": t.get("source_url"),
         "last_sync_at": now,
         "updated_at": now,
     } for t in teams if t.get("id")]
+
+
+def _persist_team_logos(sb: sync.Supabase, teams: list[dict]) -> None:
+    """PATCH teams.logo_url only for teams whose crest we captured this run, so a
+    failed squad-page fetch (no logo) never wipes an existing badge. Mirrors
+    _persist_team_tm: the rows already exist, and PATCH avoids proposing an
+    insert missing the NOT NULL teams.name."""
+    now = sync._now()
+    for t in teams:
+        tid, logo = t.get("id"), t.get("logo_url")
+        if not tid or not logo:
+            continue
+        try:
+            sb.update("teams", f"id=eq.{tid}",
+                      {"logo_url": logo, "updated_at": now})
+        except Exception as err:  # noqa: BLE001 - non-fatal, keep syncing
+            print(f"  ! logo update failed for team {tid}: {err}", file=sys.stderr)
 
 
 def _competition_team_rows(comp_id: str, teams: list[dict]) -> list[dict]:
@@ -267,6 +287,7 @@ def write_squads(sb: sync.Supabase, data: dict) -> dict:
     # FK-safe order.
     sb.upsert("competitions", [_competition_patch(comp)], "id")
     _save("teams", _team_rows(teams), "id")
+    _persist_team_logos(sb, teams)
     _save("competition_teams", _competition_team_rows(comp_id, teams),
           "competition_id,team_id")
 

@@ -139,6 +139,26 @@ STAFF_PHOTO_RE = re.compile(
     r'class="photo"[^>]*background-image:\s*url\(\s*([\'"]?)([^\'")]+)\1\s*\)')
 
 
+def parse_team_logo(html: str, team_id: str) -> str | None:
+    """The team crest URL from the team page. zerozero names crest files
+    logos/equipas/<team_id>_<slug>_<ts>.png, so matching on this team's id
+    isolates its own badge from any other club logos on the page (fixtures
+    sidebar, etc.). Works whether the URL sits in src="...", url(...), or a
+    data-* attribute; normalises protocol-relative and root-relative forms."""
+    m = re.search(
+        r'''["'(]\s*([^"')\s]*logos/equipas/''' + re.escape(str(team_id))
+        + r'''_[^"')\s]*)\s*["')]''',
+        html, re.I)
+    if not m:
+        return None
+    url = m.group(1)
+    if url.startswith("//"):
+        return "https:" + url
+    if url.startswith("/"):
+        return BASE + url
+    return url
+
+
 def team_url(team_id: str, epoca_id: str | None, slug: str = "x") -> str:
     u = f"{BASE}/equipa/{slug or 'x'}/{team_id}"
     return u + (f"?epoca_id={epoca_id}" if epoca_id else "")
@@ -194,10 +214,12 @@ def get_team_roster(epoca_id: str | None, team: dict, *, session=None,
     url = team_url(team["id"], epoca_id, team.get("slug") or "x")
     html = crawler.fetch(session, url, delay=delay)
     players = parse_team_squad(html)
+    logo_url = parse_team_logo(html, team["id"])
     if not players:
         print(f"  ! WARNING: no players parsed for team {team.get('name') or team['id']} "
               f"({url}). Check SECTION_RE/staff parsing (# VERIFY).", file=sys.stderr)
-    return {"team_id": team["id"], "source_url": url, "players": players}
+    return {"team_id": team["id"], "source_url": url, "players": players,
+            "logo_url": logo_url}
 
 
 # ----------------------------------------------------------------------------
@@ -298,10 +320,12 @@ def crawl_competition_squads(comp: dict, teams: list[dict], *, full: bool = Fals
             print(f"  ! roster failed for {t.get('name') or t['id']}: {err}",
                   file=sys.stderr)
             squad = {"team_id": t["id"], "source_url": team_url(t["id"], epoca),
-                     "players": []}
+                     "players": [], "logo_url": None}
         t = dict(t)
         t["players"] = squad["players"]
         t["source_url"] = squad["source_url"]
+        if squad.get("logo_url"):
+            t["logo_url"] = squad["logo_url"]
         out_teams.append(t)
 
         if full:
