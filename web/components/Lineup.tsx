@@ -44,7 +44,7 @@ function StatIcons({ p }: { p: Player }) {
   if (p.goals > 0)
     chips.push(<span className="chip" title="Goals" key="g">⚽{count(p.goals)}</span>);
   if (p.assists > 0)
-    chips.push(<span className="chip" title="Assists" key="a">🅰️{count(p.assists)}</span>);
+    chips.push(<span className="chip" title="Assists" key="a">👟{count(p.assists)}</span>);
   if (p.yellow_cards > 0)
     chips.push(<span className="chip" title="Yellow card" key="y">🟨{count(p.yellow_cards)}</span>);
   if (p.red_card)
