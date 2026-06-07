@@ -16,7 +16,7 @@ export default async function PlayerDetails({
   const { data: player } = await supabase
     .from("players")
     .select(
-      "id, name, slug, age, birth_date, nationality, position, position_group, position_code, club_name, source_url, enriched_at, last_sync_at, updated_at",
+      "id, name, slug, age, birth_date, nationality, position, position_group, position_code, club_name, photo_url, source_url, enriched_at, last_sync_at, updated_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -46,12 +46,39 @@ export default async function PlayerDetails({
     <>
       <div className="panel">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <h2 style={{ marginBottom: 2 }}>{player.name}</h2>
-            <div className="muted" style={{ fontSize: 13 }}>
-              zz {player.id}
-              {player.position && ` · ${player.position}`}
-              {player.position_code && ` (${player.position_code})`}
+          <div className="row" style={{ gap: 12, alignItems: "flex-start" }}>
+            {player.photo_url ? (
+              <img
+                src={player.photo_url}
+                alt={player.name ?? ""}
+                width={64}
+                height={64}
+                style={{ borderRadius: "50%", objectFit: "cover", display: "block" }}
+              />
+            ) : (
+              <div
+                title="no photo"
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: "50%",
+                  background: "var(--border, #2a2a2a)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "var(--muted, #888)",
+                }}
+              >
+                ?
+              </div>
+            )}
+            <div>
+              <h2 style={{ marginBottom: 2 }}>{player.name}</h2>
+              <div className="muted" style={{ fontSize: 13 }}>
+                zz {player.id}
+                {player.position && ` · ${player.position}`}
+                {player.position_code && ` (${player.position_code})`}
+              </div>
             </div>
           </div>
           <div className="row" style={{ gap: 8 }}>

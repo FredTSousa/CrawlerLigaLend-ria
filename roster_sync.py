@@ -192,6 +192,7 @@ def _player_base_rows(teams: list[dict]) -> list[dict]:
                 "slug": p.get("slug"),
                 "position_group": p.get("position_group"),
                 "age": p.get("age"),  # roster page gives age inline
+                "photo_url": p.get("photo_url"),  # headshot from the team page
                 "source_url": p.get("source_url"),
                 "last_sync_at": now,
                 "updated_at": now,

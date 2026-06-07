@@ -28,7 +28,7 @@ export default async function TeamDetails({
 
   const { data: roster } = await supabase
     .from("competition_player_details")
-    .select("player_id, player_name, age, position_group, position, club_name, shirt_number, last_updated")
+    .select("player_id, player_name, age, position_group, position, club_name, photo_url, shirt_number, last_updated")
     .eq("competition_id", id)
     .eq("team_id", teamId)
     .eq("active", true);
@@ -92,6 +92,7 @@ export default async function TeamDetails({
               <thead>
                 <tr>
                   <th className="num">#</th>
+                  <th></th>
                   <th>Name</th>
                   <th className="num">Age</th>
                   <th>Position</th>
@@ -104,6 +105,7 @@ export default async function TeamDetails({
                   .map((p) => (
                     <tr key={p.player_id}>
                       <td className="num">{p.shirt_number ?? "—"}</td>
+                      <td><Avatar src={p.photo_url} name={p.player_name} /></td>
                       <td><Link href={`/players/${p.player_id}`}>{p.player_name}</Link></td>
                       <td className="num">{p.age ?? "—"}</td>
                       <td>{p.position ?? <span className="muted">not enriched</span>}</td>
@@ -120,6 +122,41 @@ export default async function TeamDetails({
         </div>
       )}
     </>
+  );
+}
+
+function Avatar({ src, name }: { src: string | null; name: string | null }) {
+  if (!src) {
+    // No headshot crawled — show a clear, muted placeholder so a failed/partial
+    // photo crawl is obvious at a glance.
+    return (
+      <div
+        title="no photo"
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: "50%",
+          background: "var(--border, #2a2a2a)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 11,
+          color: "var(--muted, #888)",
+        }}
+      >
+        ?
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={name ?? ""}
+      width={32}
+      height={32}
+      loading="lazy"
+      style={{ borderRadius: "50%", objectFit: "cover", display: "block" }}
+    />
   );
 }
 

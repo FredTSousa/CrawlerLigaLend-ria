@@ -51,6 +51,7 @@ alter table public.players
     add column if not exists position_group text,        -- latest roster grouping
     add column if not exists position_code  text,        -- normalized: GK, CB, ... (see roster.py)
     add column if not exists club_name      text,        -- latest club
+    add column if not exists photo_url       text,        -- zerozero squad-page headshot
     add column if not exists source_url     text,        -- /jogador/<slug>/<id>
     add column if not exists last_sync_at   timestamptz,
     add column if not exists enriched_at    timestamptz, -- last time the detail page was opened
@@ -126,6 +127,7 @@ select
     p.position,
     p.position_code,
     p.club_name,
+    p.photo_url,
     rm.shirt_number,
     rm.active,
     p.source_url,

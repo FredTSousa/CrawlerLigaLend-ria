@@ -91,7 +91,8 @@ begin
         and new.position_group is not distinct from old.position_group
         and new.age            is not distinct from old.age
         and new.club_name      is not distinct from old.club_name
-        and new.nationality    is not distinct from old.nationality) then
+        and new.nationality    is not distinct from old.nationality
+        and new.photo_url      is not distinct from old.photo_url) then
         return null;  -- nothing a subscriber cares about changed
     end if;
     insert into public.entity_outbox (entity_type, entity_id, competition_id)
@@ -158,6 +159,7 @@ returns jsonb language sql stable as $$
                 'position_code', p.position_code,
                 'age', coalesce(rm.age_at_sync, p.age),
                 'club_name', p.club_name,
+                'photo_url', p.photo_url,
                 'shirt_number', rm.shirt_number,
                 'active', rm.active)
                 order by rm.position_group nulls last, rm.shirt_number nulls last)
@@ -178,6 +180,7 @@ returns jsonb language sql stable as $$
             'age', p.age, 'birth_date', p.birth_date, 'nationality', p.nationality,
             'position', p.position, 'position_group', p.position_group,
             'position_code', p.position_code, 'club_name', p.club_name,
+            'photo_url', p.photo_url,
             'source_url', p.source_url, 'last_updated', p.updated_at,
             'team_id', (select rm.team_id from public.roster_memberships rm
                         where rm.player_id = p.id and rm.competition_id = p_competition_id

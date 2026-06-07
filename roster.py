@@ -18,6 +18,7 @@ VERIFIED against real markup (Liga Portugal 2025/26, época 155):
   - squad groups: <div class="section">Guarda Redes|Defesa|Médio|Avançado</div>
     (the first four sections; later sections are staff/honours and are ignored)
   - each player:  <div class="staff"> … <div class="number">N</div> …
+                  <div class="photo" style="background-image: url('…')"></div> …
                   <a href="/jogador/<slug>/<id>?epoca_id=…">Name</a> …
                   <span>NN anos - …</span>
   - team page resolves by id alone: /equipa/_/<id>?epoca_id=<epoca>
@@ -131,6 +132,11 @@ STAFF_SPLIT_RE = re.compile(r'<div class="staff[ "]')
 STAFF_NUMBER_RE = re.compile(r'<div class="number">\s*(\d*)\s*</div>')
 STAFF_PLAYER_RE = re.compile(r'/jogador/([a-z0-9-]+)/(\d+)[^"]*">\s*([^<]+?)\s*</a>')
 STAFF_AGE_RE = re.compile(r'>\s*(\d{1,2})\s*anos')
+# The headshot is a CSS background-image on <div class="photo">, not an <img>:
+#   <div class="photo" style="background-image: url('https://cdn-img.staticzz.com/
+#   img/planteis/new/19/52/14901952_anatoliy_trubin_20250809115631.png')"></div>
+STAFF_PHOTO_RE = re.compile(
+    r'class="photo"[^>]*background-image:\s*url\(\s*([\'"]?)([^\'")]+)\1\s*\)')
 
 
 def team_url(team_id: str, epoca_id: str | None, slug: str = "x") -> str:
@@ -162,6 +168,7 @@ def parse_team_squad(html: str) -> list[dict]:
                 continue
             num = STAFF_NUMBER_RE.search(chunk)
             age = STAFF_AGE_RE.search(chunk)
+            photo = STAFF_PHOTO_RE.search(chunk)
             players[pid] = {
                 "id": pid,
                 "slug": slug,
@@ -169,6 +176,7 @@ def parse_team_squad(html: str) -> list[dict]:
                 "position_group": group,
                 "shirt_number": int(num.group(1)) if num and num.group(1) else None,
                 "age": int(age.group(1)) if age else None,
+                "photo_url": photo.group(2) if photo else None,
                 "source_url": f"{BASE}/jogador/{slug}/{pid}",
             }
     return list(players.values())
