@@ -133,13 +133,14 @@ def url_date(url: str) -> date | None:
 
 
 def _score(raw: str | None):
-    """'(5)' -> 5 ; '(-)' / '-' -> 0 (reporter gave no rating) ; '' / None -> None (not scraped)."""
+    """'(5)' -> 5 ; any dash variant '(-)'/'(–)'/'—'/'-' -> 0 (reporter gave no rating) ; '' / None -> None (not scraped)."""
     if raw is None or raw.strip() == "":
         return None
-    if raw.strip() in ("-", "(-)"):
-        return 0
     m = re.search(r"\d+", raw)
-    return int(m.group(0)) if m else None
+    if m:
+        return int(m.group(0))
+    # No digit → reporter gave no rating (-, –, —, with or without parens)
+    return 0
 
 
 def fetch(url: str, *, retries: int = 3, delay: float = 1.0) -> str:
