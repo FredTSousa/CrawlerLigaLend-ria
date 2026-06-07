@@ -169,6 +169,26 @@ class Supabase:
     def set_watch(self, match_id: str, on: bool) -> None:
         self.update("matches", f"id=eq.{match_id}", {"watch": on})
 
+    def unscored_finished_matches(self, competition_id: str) -> list[str]:
+        """Match IDs in this competition that are final but have at least one
+        player with reporter_linked=false (reporter scores not yet fetched)."""
+        resp = self._rest(
+            "GET",
+            f"match_players?select=match_id,matches!inner(competition_id,status)"
+            f"&matches.competition_id=eq.{competition_id}"
+            f"&matches.status=eq.final"
+            f"&reporter_linked=eq.false",
+        )
+        rows = resp.json()
+        seen: set[str] = set()
+        out: list[str] = []
+        for r in rows:
+            mid = r.get("match_id")
+            if mid and mid not in seen:
+                seen.add(mid)
+                out.append(mid)
+        return out
+
 
 # ----------------------------------------------------------------------------
 # Row builders
@@ -378,6 +398,28 @@ def _maybe_fetch_round_reporters(games: list[dict], *, round_no: int | None,
         print(f"  ! reporter round auto-fetch failed: {err}", file=sys.stderr)
 
 
+def _fetch_missing_reporters(sb: Supabase, competition_id: str, *,
+                              github_run_id: str | None, delay: float) -> None:
+    """Fetch reporter scores for any finished match in this competition that
+    still has unlinked players. Runs after a manual crawl so predraft games
+    (and any other gaps) get filled in automatically."""
+    try:
+        match_ids = sb.unscored_finished_matches(competition_id)
+        if not match_ids:
+            return
+        print(f"  reporter gap-fill: {len(match_ids)} match(es) with missing scores",
+              file=sys.stderr)
+        import reporter_sync  # lazy: reporter_sync imports sync (circular)
+        for mid in match_ids:
+            try:
+                reporter_sync.run(mid, run_id=None, github_run_id=github_run_id,
+                                  delay=delay)
+            except Exception as err:  # noqa: BLE001
+                print(f"  ! reporter gap-fill failed for {mid}: {err}", file=sys.stderr)
+    except Exception as err:  # noqa: BLE001
+        print(f"  ! reporter gap-fill scan failed: {err}", file=sys.stderr)
+
+
 def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
         trigger: str, github_run_id: str | None, delay: float,
         competition_url: str | None = None) -> dict:
@@ -428,6 +470,16 @@ def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
                 _maybe_fetch_round_reporters(games, round_no=round_no,
                                              github_run_id=github_run_id,
                                              delay=delay)
+            # Gap-fill: fetch reporter scores for any finished match in this
+            # competition that still has unlinked players (e.g. predraft games).
+            comp_id = competition["id_edicao"] if competition else None
+            if not comp_id and games:
+                existing = sb.match_existing([games[0].get("game_id", "")])
+                row = next(iter(existing.values()), {})
+                comp_id = row.get("competition_id")
+            if comp_id:
+                _fetch_missing_reporters(sb, comp_id, github_run_id=github_run_id,
+                                         delay=delay)
         return {"run_id": run_id, "games": len(games)}
     except Exception as err:  # noqa: BLE001
         _finish_run(sb, run_id, status="error", error=str(err)[:2000])
