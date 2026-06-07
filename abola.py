@@ -133,10 +133,12 @@ def url_date(url: str) -> date | None:
 
 
 def _score(raw: str | None):
-    """'(5)' -> 5 ; '(-)' / '-' / '' -> None."""
-    if raw is None:
+    """'(5)' -> 5 ; '(-)' / '-' -> 0 (reporter gave no rating) ; '' / None -> None (not scraped)."""
+    if raw is None or raw.strip() == "":
         return None
-    m = re.search(r"-?\d+", raw)
+    if raw.strip() in ("-", "(-)"):
+        return 0
+    m = re.search(r"\d+", raw)
     return int(m.group(0)) if m else None
 
 
