@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SquadSyncButton from "@/components/SquadSyncButton";
 import TmSettings from "@/components/TmSettings";
+import EmulationControl from "@/components/EmulationControl";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +75,15 @@ export default async function CompetitionDetails({
     .select("id", { count: "exact", head: true })
     .eq("competition_id", id);
 
+  // Rounds available to replay (newest first) — drives the emulation control.
+  const { data: roundRows } = await supabase
+    .from("matches")
+    .select("round")
+    .eq("competition_id", id);
+  const rounds = [
+    ...new Set(((roundRows ?? []) as any[]).map((r) => r.round).filter((r) => r != null)),
+  ].sort((a, b) => b - a);
+
   const compLabel = comp.full_name || comp.name || comp.slug;
 
   return (
@@ -113,6 +123,14 @@ export default async function CompetitionDetails({
             season={comp.season ?? null}
           />
         </div>
+
+        {/* Live replay — rehearse a round on an accelerated, configurable clock. */}
+        {rounds.length > 0 && (
+          <div className="row" style={{ marginTop: 12, gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <span className="muted" style={{ fontSize: 13 }}>Live replay</span>
+            <EmulationControl competitionId={comp.id} rounds={rounds} />
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
