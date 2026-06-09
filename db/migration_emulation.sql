@@ -53,8 +53,13 @@ create table if not exists public.emulation_player_targets (
     goals               int, assists int, yellow_cards int, red_card boolean,
     own_goals           int, penalties_scored int, penalties_missed int, penalties_defended int,
     played_under_20m    boolean, reporter_score int, reporter_is_mvp boolean,
+    entered_min         int, left_min int,
     primary key (run_id, match_id, player_id)
 );
+
+-- Backfill the substitution-timing columns on previously-created tables.
+alter table public.emulation_player_targets add column if not exists entered_min int;
+alter table public.emulation_player_targets add column if not exists left_min    int;
 
 alter table public.emulation_runs            enable row level security;
 alter table public.emulation_match_targets   enable row level security;
@@ -90,6 +95,7 @@ begin
            red_card = pt.red_card, own_goals = pt.own_goals,
            penalties_scored = pt.penalties_scored, penalties_missed = pt.penalties_missed,
            penalties_defended = pt.penalties_defended, played_under_20m = pt.played_under_20m,
+           entered_min = pt.entered_min, left_min = pt.left_min,
            reporter_score = pt.reporter_score, reporter_is_mvp = pt.reporter_is_mvp,
            reporter_linked = (pt.reporter_score is not null), updated_at = now()
       from public.emulation_player_targets pt
@@ -143,11 +149,11 @@ begin
         run_id, match_id, player_id, day_index,
         goals, assists, yellow_cards, red_card, own_goals,
         penalties_scored, penalties_missed, penalties_defended,
-        played_under_20m, reporter_score, reporter_is_mvp)
+        played_under_20m, reporter_score, reporter_is_mvp, entered_min, left_min)
     select v_run_id, mp.match_id, mp.player_id, t.day_index,
            mp.goals, mp.assists, mp.yellow_cards, mp.red_card, mp.own_goals,
            mp.penalties_scored, mp.penalties_missed, mp.penalties_defended,
-           mp.played_under_20m, mp.reporter_score, mp.reporter_is_mvp
+           mp.played_under_20m, mp.reporter_score, mp.reporter_is_mvp, mp.entered_min, mp.left_min
       from public.match_players mp
       join public.emulation_match_targets t
         on t.run_id = v_run_id and t.match_id = mp.match_id;
@@ -160,7 +166,8 @@ begin
     update public.match_players mp
        set goals = 0, assists = 0, yellow_cards = 0, red_card = false, own_goals = 0,
            penalties_scored = 0, penalties_missed = 0, penalties_defended = 0,
-           played_under_20m = false, reporter_score = null, reporter_is_mvp = false,
+           played_under_20m = false, entered_min = null, left_min = null,
+           reporter_score = null, reporter_is_mvp = false,
            reporter_linked = false, updated_at = now()
       from public.emulation_match_targets t
      where t.run_id = v_run_id and mp.match_id = t.match_id;
@@ -213,7 +220,10 @@ begin
          where t.run_id = r.id and m.id = t.match_id
            and v_elapsed >= t.day_index*ms and v_elapsed < (t.day_index + 1)*ms;
 
-        -- LIVE players: climbing counts (k = floor(f * (final+1)), capped).
+        -- LIVE players: climbing counts (k = floor(f * (final+1)), capped). The
+        -- subbed-in/off minutes are revealed only once the live clock (same
+        -- minute formula as the matches update) reaches them, so substitutions
+        -- surface progressively instead of all at kickoff.
         update public.match_players mp
            set goals = least(pt.goals, floor(f.frac * (pt.goals + 1)))::int,
                assists = least(pt.assists, floor(f.frac * (pt.assists + 1)))::int,
@@ -222,9 +232,14 @@ begin
                penalties_scored = least(pt.penalties_scored, floor(f.frac * (pt.penalties_scored + 1)))::int,
                penalties_missed = least(pt.penalties_missed, floor(f.frac * (pt.penalties_missed + 1)))::int,
                penalties_defended = least(pt.penalties_defended, floor(f.frac * (pt.penalties_defended + 1)))::int,
+               entered_min = case when f.live_min >= pt.entered_min then pt.entered_min end,
+               left_min    = case when f.live_min >= pt.left_min    then pt.left_min    end,
                updated_at = now()
           from public.emulation_player_targets pt
-          cross join lateral (select (v_elapsed - pt.day_index*ms)/ms as frac) f
+          cross join lateral (
+              select (v_elapsed - pt.day_index*ms)/ms as frac,
+                     floor(least(1, (v_elapsed - pt.day_index*ms)/ms) * 94) as live_min
+          ) f
          where pt.run_id = r.id and mp.match_id = pt.match_id and mp.player_id = pt.player_id
            and v_elapsed >= pt.day_index*ms and v_elapsed < (pt.day_index + 1)*ms;
 
@@ -245,6 +260,7 @@ begin
                red_card = pt.red_card, own_goals = pt.own_goals,
                penalties_scored = pt.penalties_scored, penalties_missed = pt.penalties_missed,
                penalties_defended = pt.penalties_defended, played_under_20m = pt.played_under_20m,
+               entered_min = pt.entered_min, left_min = pt.left_min,
                updated_at = now()
           from public.emulation_player_targets pt
          where pt.run_id = r.id and mp.match_id = pt.match_id and mp.player_id = pt.player_id
@@ -255,7 +271,9 @@ begin
                 or mp.penalties_scored is distinct from pt.penalties_scored
                 or mp.penalties_missed is distinct from pt.penalties_missed
                 or mp.penalties_defended is distinct from pt.penalties_defended
-                or mp.played_under_20m is distinct from pt.played_under_20m);
+                or mp.played_under_20m is distinct from pt.played_under_20m
+                or mp.entered_min is distinct from pt.entered_min
+                or mp.left_min is distinct from pt.left_min);
 
         -- REPORTER ratings (after FT + delay; guarded so it fires once).
         update public.match_players mp
