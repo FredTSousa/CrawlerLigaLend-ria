@@ -96,12 +96,22 @@ HEADERS = {
 # (match crawl AND roster crawl) goes through fetch(), so enforcing a minimum
 # gap here throttles the whole crawler from one place, regardless of caller.
 #
+# It isn't just the *rate* that gets flagged — a near-constant gap between
+# requests is itself a bot tell. So the wait is a fairly large floor PLUS wide
+# random jitter PLUS an occasional much-longer pause, to look like irregular
+# human browsing rather than a metronome. A long backfill (e.g. the World Cup:
+# 100+ pages) is exactly where a tight, regular cadence gets the IP poisoned.
+#
 # Tunable without code changes:
-#   ZEROZERO_MIN_INTERVAL  seconds between requests (floor; default 5.0)
-#   ZEROZERO_JITTER        extra random 0..N seconds per request (default 3.0)
-# Set ZEROZERO_MIN_INTERVAL=0 to disable (e.g. fast local parsing tests).
-MIN_REQUEST_INTERVAL = float(os.environ.get("ZEROZERO_MIN_INTERVAL", "5.0"))
-REQUEST_JITTER = float(os.environ.get("ZEROZERO_JITTER", "3.0"))
+#   ZEROZERO_MIN_INTERVAL    seconds between requests (floor; default 12.0)
+#   ZEROZERO_JITTER          extra random 0..N seconds per request (default 12.0)
+#   ZEROZERO_LONG_PAUSE_PROB chance per request of an extra long pause (0..1; default 0.15)
+#   ZEROZERO_LONG_PAUSE_MAX  max seconds of that extra pause (default 45.0)
+# Set ZEROZERO_MIN_INTERVAL=0 (and JITTER=0) to disable (fast local parsing tests).
+MIN_REQUEST_INTERVAL = float(os.environ.get("ZEROZERO_MIN_INTERVAL", "12.0"))
+REQUEST_JITTER = float(os.environ.get("ZEROZERO_JITTER", "12.0"))
+LONG_PAUSE_PROB = float(os.environ.get("ZEROZERO_LONG_PAUSE_PROB", "0.15"))
+LONG_PAUSE_MAX = float(os.environ.get("ZEROZERO_LONG_PAUSE_MAX", "45.0"))
 
 # Wall-clock (monotonic) timestamp of the last request, shared process-wide so a
 # single crawl run paces all its requests together.
@@ -109,15 +119,21 @@ _last_request_ts = 0.0
 
 
 def _throttle(min_interval: float) -> None:
-    """Block until at least `min_interval` (+ a little random jitter) seconds
-    have elapsed since the previous request. Jitter avoids a robotically exact
-    cadence, which is itself a bot signal."""
+    """Block until enough time has elapsed since the previous request. The wait
+    is a floor (`min_interval`) plus wide uniform jitter plus, now and then, a
+    much-longer pause — deliberately irregular, because a steady cadence is a
+    bot signal that gets the IP served *poisoned* data."""
     global _last_request_ts
     interval = max(min_interval, 0.0)
     if interval <= 0 and REQUEST_JITTER <= 0:
         _last_request_ts = time.monotonic()
         return
-    target = interval + (random.uniform(0, REQUEST_JITTER) if REQUEST_JITTER > 0 else 0)
+    target = interval
+    if REQUEST_JITTER > 0:
+        target += random.uniform(0, REQUEST_JITTER)
+    # Occasionally wait a lot longer, breaking up the regular rhythm.
+    if LONG_PAUSE_MAX > 0 and random.random() < LONG_PAUSE_PROB:
+        target += random.uniform(0, LONG_PAUSE_MAX)
     wait = (_last_request_ts + target) - time.monotonic()
     if wait > 0:
         time.sleep(wait)
