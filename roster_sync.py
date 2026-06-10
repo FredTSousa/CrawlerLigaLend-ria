@@ -233,6 +233,7 @@ def _player_detail_rows(enriched: dict[str, dict]) -> list[dict]:
         "age": d.get("age"),
         "birth_date": d.get("birth_date"),
         "nationality": d.get("nationality"),
+        "market_value_k": d.get("market_value_k"),  # thousands of euros
         "enriched_at": now,
         "last_sync_at": now,
         "updated_at": now,

@@ -236,6 +236,40 @@ _TM_DOB_RE = re.compile(
     r'</table>\s*</td>\s*<td class="zentriert">\s*'
     r"(\d{2})/(\d{2})/(\d{4})\s*\((\d{1,2})\)")
 _TM_NAT_RE = re.compile(r'flagge[^>]*title="([^"]+)"')
+# Market value ("Valor de mercado") is the row's last cell, right-aligned and
+# linking to the value-history page: <td class="rechts hauptlink"><a
+# href="…/marktwertverlauf/…">8,00 M €</a></td>. A player with no value shows
+# "-". Portuguese formatting: decimal comma, "M €" = millions, "mil €" = thousands.
+_TM_MV_RE = re.compile(
+    r'class="rechts hauptlink">(?:<a[^>]*>)?\s*([^<]+?)\s*(?:</a>)?\s*</td>')
+
+
+def market_value_k(text: str | None) -> int | None:
+    """Parse a Transfermarkt market value into THOUSANDS of euros.
+    "8,00 M €" -> 8000, "600 mil €" -> 600, "-"/None -> None."""
+    if not text:
+        return None
+    t = crawler.clean_name(text)
+    if not t or t == "-":
+        return None
+    m = re.search(r"([\d.,]+)\s*(mil|mio|milh\w*|M|bn|k)?", t, re.I)
+    if not m:
+        return None
+    # European number formatting: "." groups thousands, "," is the decimal point.
+    try:
+        val = float(m.group(1).replace(".", "").replace(",", "."))
+    except ValueError:
+        return None
+    unit = (m.group(2) or "").lower()
+    if unit in ("m", "mio") or unit.startswith("milh"):
+        val *= 1000           # millions -> thousands
+    elif unit == "bn":
+        val *= 1_000_000      # billions -> thousands
+    elif unit in ("mil", "k"):
+        val *= 1              # already thousands
+    else:
+        val /= 1000           # bare euros -> thousands
+    return int(round(val))
 
 
 def squad_url(slug: str, verein_id: str, saison_id: str) -> str:
@@ -257,6 +291,7 @@ def parse_team_squad(html: str) -> list[dict]:
         pos = _TM_POS_RE.search(chunk)
         dob = _TM_DOB_RE.search(chunk)
         nat = _TM_NAT_RE.search(chunk)
+        mv = _TM_MV_RE.search(chunk)
         position = crawler.clean_name(pos.group(1)) if pos else None
         players.append({
             "tm_id": tm_id,
@@ -268,6 +303,7 @@ def parse_team_squad(html: str) -> list[dict]:
                            if dob else None),
             "age": int(dob.group(4)) if dob else None,
             "nationality": crawler.clean_name(nat.group(1)) if nat else None,
+            "market_value_k": market_value_k(mv.group(1)) if mv else None,
         })
     return players
 
@@ -384,6 +420,7 @@ def _detail(tm_player: dict) -> dict:
         "age": tm_player.get("age"),
         "birth_date": tm_player.get("birth_date"),
         "nationality": tm_player.get("nationality"),
+        "market_value_k": tm_player.get("market_value_k"),
     }
 
 

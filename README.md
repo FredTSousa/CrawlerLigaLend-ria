@@ -178,6 +178,13 @@ python roster_sync.py --player 547211
 python roster.py --team 32 --full
 ```
 
-Apply `db/migration_competition_squads.sql` (schema) and, for export,
+On a Full sync the **detailed position** and **market value** come from
+Transfermarkt (`transfermarkt.py`) — one league/cup page + one squad page per
+club — not from per-player zerozero pages. The market value (`Valor de mercado`)
+is stored on `players.market_value_k` in **thousands of euros** (`8,00 M €` →
+`8000`, `600 mil €` → `600`).
+
+Apply `db/migration_competition_squads.sql` (schema), `db/migration_transfermarkt.sql`
+(TM config), `db/migration_market_value.sql` (market value) and, for export,
 `db/migration_entity_export.sql` before running. The backoffice lives at
 `/competitions` in the web app.
