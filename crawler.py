@@ -41,6 +41,12 @@ import sys
 import time
 from datetime import datetime, timezone
 
+try:
+    from zoneinfo import ZoneInfo
+    _LISBON = ZoneInfo("Europe/Lisbon")
+except Exception:  # pragma: no cover - zoneinfo/tzdata unavailable
+    _LISBON = None
+
 import requests
 
 import jobstatus  # best-effort progress heartbeat for the runner tray
@@ -183,6 +189,21 @@ def clean_name(raw: str) -> str:
     return re.sub(r"\s+", " ", htmllib.unescape(raw).replace("\xa0", " ")).strip()
 
 
+def _lisbon_iso(date_str: str | None, hh: str, mm: str) -> str | None:
+    """Build an ISO timestamptz from a zerozero match date (YYYY-MM-DD) and its
+    locally-displayed kickoff time. zerozero shows Europe/Lisbon wall-clock; we
+    attach that zone so the stored timestamptz is unambiguous."""
+    if not date_str:
+        return None
+    try:
+        y, mo, d = (int(x) for x in date_str.split("-"))
+        if _LISBON is not None:
+            return datetime(y, mo, d, int(hh), int(mm), tzinfo=_LISBON).isoformat()
+        return f"{date_str}T{int(hh):02d}:{int(mm):02d}:00"  # naive fallback
+    except Exception:
+        return None
+
+
 def leading_minute(text: str) -> int | None:
     """Extract the base minute from strings like "71'", "90+1'", "66' (g.p.)"."""
     m = re.search(r"(\d+)", text)
@@ -204,6 +225,11 @@ TEAM_LOGO_ID_RE = re.compile(
     r'<a href="/equipa/[^"]*">\s*<img[^>]*logos/equipas/(\d+)_')
 RESULT_CELL_RE = re.compile(
     r'<td id="tdl_(\d+)" class="result">(.*?)</td>', re.S)
+# Score/kickoff cell: class="result" for a played match (holds the score) or
+# class="vs" for a scheduled one (holds the kickoff time, e.g. "20:15").
+CELL_RE = re.compile(
+    r'<td id="tdl_(\d+)" class="(result|vs)">(.*?)</td>', re.S)
+TIME_RE = re.compile(r"\b(\d{1,2}):(\d{2})\b")
 
 
 def parse_round_games(html: str) -> list[dict]:
@@ -223,10 +249,12 @@ def parse_round_games(html: str) -> list[dict]:
     games: list[dict] = []
     seen: set[str] = set()
     for row in block.split("<tr>")[1:]:
-        res = RESULT_CELL_RE.search(row)
-        if not res:
+        # A played match's cell is class="result" (score); a scheduled match's is
+        # class="vs" (kickoff time). Capture both so future fixtures aren't lost.
+        cell = CELL_RE.search(row)
+        if not cell:
             continue
-        gid = res.group(1)
+        gid, cell_class, cell_html = cell.group(1), cell.group(2), cell.group(3)
         if gid in seen:
             continue
         seen.add(gid)
@@ -234,8 +262,8 @@ def parse_round_games(html: str) -> list[dict]:
         link = GAME_LINK_RE.search(row)
         slug = link.group(1) if link else gid
 
-        # Names: home text cell precedes the result td, away cell follows it.
-        # Ids: home crest precedes the result td, away crest follows it.
+        # Names: home text cell precedes the result/vs td, away cell follows it.
+        # Ids: home crest precedes it, away crest follows it.
         names = TEAM_NAME_RE.findall(row)
         ids = TEAM_LOGO_ID_RE.findall(row)
         if len(names) < 2 or len(ids) < 2:
@@ -243,20 +271,33 @@ def parse_round_games(html: str) -> list[dict]:
         home = {"name": clean_name(names[0]), "id": ids[0]}
         away = {"name": clean_name(names[1]), "id": ids[1]}
 
-        score = None
-        sm = re.search(r"(\d+)\s*-\s*(\d+)", strip_tags(res.group(2)))
-        if sm:
-            score = {"home": int(sm.group(1)), "away": int(sm.group(2))}
-
         date_m = re.match(r"(\d{4}-\d{2}-\d{2})", slug)
+        date = date_m.group(1) if date_m else None
+
+        score = None
+        kickoff_at = None
+        status = None
+        cell_text = strip_tags(cell_html)
+        if cell_class == "result":
+            sm = re.search(r"(\d+)\s*-\s*(\d+)", cell_text)
+            if sm:
+                score = {"home": int(sm.group(1)), "away": int(sm.group(2))}
+        else:  # "vs" — scheduled: the cell text is the kickoff time (Lisbon).
+            status = "scheduled"
+            tm = TIME_RE.search(cell_text)
+            if tm:
+                kickoff_at = _lisbon_iso(date, tm.group(1), tm.group(2))
+
         games.append({
             "game_id": gid,
             "slug": slug,
             "url": f"{BASE}/jogo/{slug}/{gid}",
-            "date": date_m.group(1) if date_m else None,
+            "date": date,
             "home_team": home,
             "away_team": away,
             "result": score,
+            "kickoff_at": kickoff_at,
+            "status": status,
         })
     return games
 

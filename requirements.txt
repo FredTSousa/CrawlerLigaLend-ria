@@ -1,5 +1,8 @@
 requests>=2.20
 curl_cffi>=0.7
+# IANA tz database so zoneinfo("Europe/Lisbon") resolves on all platforms
+# (Windows + slim Linux images lack system tzdata) — used for fixture kickoff_at.
+tzdata>=2024.1
 
 # abola.py (player-ratings scraper)
 beautifulsoup4>=4.12
