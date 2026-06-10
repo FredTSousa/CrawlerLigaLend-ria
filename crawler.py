@@ -838,9 +838,14 @@ def get_match(game: dict | str, *,
         "home_team": home,
         "away_team": away,
         "result": result,
-        "status": state["status"],
+        # Prefer the fixture-table values (the round page is where the kickoff
+        # time and scheduled/played state are actually published); fall back to
+        # whatever the match page itself yields. Without this, a round/backfill
+        # crawl (which routes every match through get_match) dropped the kickoff
+        # time parsed by parse_round_games, leaving matches.kickoff_at NULL.
+        "status": seed.get("status") or state["status"],
         "minute": state["minute"],
-        "kickoff_at": state["kickoff_at"],
+        "kickoff_at": seed.get("kickoff_at") or state["kickoff_at"],
         "players": players,
     }
 

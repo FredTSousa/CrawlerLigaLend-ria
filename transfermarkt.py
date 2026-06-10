@@ -180,6 +180,50 @@ def get_league_teams(code: str, saison_id: str, *, session=None) -> list[dict]:
     return teams
 
 
+# Cup competitions (e.g. the World Cup) have no league table; their teams live on
+# a "teilnehmer" (participants) page and link as /<slug>/startseite/verein/<id>
+# (German slug, but the title= is the localized — Portuguese — name we match on).
+# The kader/squad page form is identical to a club's, so get_team_squad is reused.
+_CUP_TEAM_RE = re.compile(
+    r'<a\s+title="([^"]+)"\s+href="/([a-z0-9-]+)/startseite/verein/(\d+)"')
+
+
+def cup_teilnehmer_url(code: str, saison_id: str) -> str:
+    return f"{TM_BASE}/x/teilnehmer/pokalwettbewerb/{code}/saison_id/{saison_id}"
+
+
+def parse_cup_teams(html: str) -> list[dict]:
+    teams: list[dict] = []
+    seen: set[str] = set()
+    for name, slug, verein_id in _CUP_TEAM_RE.findall(html):
+        if verein_id in seen:
+            continue
+        seen.add(verein_id)
+        teams.append({"name": crawler.clean_name(name),
+                      "slug": slug, "verein_id": verein_id})
+    return teams
+
+
+def get_cup_teams(code: str, saison_id: str, *, session=None) -> list[dict]:
+    session = session or crawler.new_session()
+    return parse_cup_teams(_fetch(session, cup_teilnehmer_url(code, saison_id)))
+
+
+def get_competition_teams(code: str, saison_id: str, *, session=None) -> list[dict]:
+    """The TM teams to match against — a league table if present, else the cup
+    participants page. Tries the league form first (one request); a cup like the
+    World Cup yields nothing there, so it falls back to the teilnehmer page."""
+    session = session or crawler.new_session()
+    teams = parse_league_teams(_fetch(session, league_url(code, saison_id)))
+    if teams:
+        return teams
+    teams = get_cup_teams(code, saison_id, session=session)
+    if not teams:
+        print(f"  ! WARNING: no TM teams parsed for {code}/{saison_id} "
+              "(neither league table nor cup participants).", file=sys.stderr)
+    return teams
+
+
 # ----------------------------------------------------------------------------
 # Team kader (squad) -> players with detailed position
 # ----------------------------------------------------------------------------
@@ -380,7 +424,7 @@ def enrich_competition(comp: dict, zz_teams: list[dict], *, session=None,
         slug = zz.get("tm_slug")
         if not verein:
             if league_teams is None:
-                league_teams = get_league_teams(code, saison, session=session)
+                league_teams = get_competition_teams(code, saison, session=session)
             tm = match_team(zz, league_teams, aliases)
             if not tm:
                 print(f"  ? no TM team for {zz.get('name') or zz['id']}",
