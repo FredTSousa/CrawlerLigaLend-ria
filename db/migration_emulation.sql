@@ -209,21 +209,11 @@ begin
         select coalesce(max(day_index) + 1, 0) into v_days
           from public.emulation_match_targets where run_id = r.id;
 
-        -- LIVE matches: ticking minute + climbing score.
-        update public.matches m
-           set status = 'live',
-               minute = floor(least(1, (v_elapsed - t.day_index*ms)/ms) * 94)::text || '''',
-               home_score = least(t.home_score, floor(((v_elapsed - t.day_index*ms)/ms) * (t.home_score + 1)))::int,
-               away_score = least(t.away_score, floor(((v_elapsed - t.day_index*ms)/ms) * (t.away_score + 1)))::int,
-               updated_at = now()
-          from public.emulation_match_targets t
-         where t.run_id = r.id and m.id = t.match_id
-           and v_elapsed >= t.day_index*ms and v_elapsed < (t.day_index + 1)*ms;
-
         -- LIVE players: climbing counts (k = floor(f * (final+1)), capped). The
         -- subbed-in/off minutes are revealed only once the live clock (same
         -- minute formula as the matches update) reaches them, so substitutions
-        -- surface progressively instead of all at kickoff.
+        -- surface progressively instead of all at kickoff. Runs BEFORE the
+        -- matches update so the live scoreline can be summed from these reveals.
         update public.match_players mp
            set goals = least(pt.goals, floor(f.frac * (pt.goals + 1)))::int,
                assists = least(pt.assists, floor(f.frac * (pt.assists + 1)))::int,
@@ -242,6 +232,30 @@ begin
           ) f
          where pt.run_id = r.id and mp.match_id = pt.match_id and mp.player_id = pt.player_id
            and v_elapsed >= pt.day_index*ms and v_elapsed < (pt.day_index + 1)*ms;
+
+        -- LIVE matches: ticking minute + a scoreline SUMMED from the players
+        -- just revealed above, so the score can never run ahead of (or behind)
+        -- the visible scorers. Each team's score = its players' open-play goals
+        -- + converted penalties, plus the opponents' own goals.
+        update public.matches m
+           set status = 'live',
+               minute = floor(least(1, (v_elapsed - t.day_index*ms)/ms) * 94)::text || '''',
+               home_score = sc.home,
+               away_score = sc.away,
+               updated_at = now()
+          from public.emulation_match_targets t
+          join lateral (
+              select
+                coalesce(sum(case when mp.team_id = mm.home_team_id then mp.goals + mp.penalties_scored
+                                  when mp.team_id = mm.away_team_id then mp.own_goals else 0 end), 0)::int as home,
+                coalesce(sum(case when mp.team_id = mm.away_team_id then mp.goals + mp.penalties_scored
+                                  when mp.team_id = mm.home_team_id then mp.own_goals else 0 end), 0)::int as away
+              from public.match_players mp
+              join public.matches mm on mm.id = mp.match_id
+             where mp.match_id = t.match_id
+          ) sc on true
+         where t.run_id = r.id and m.id = t.match_id
+           and v_elapsed >= t.day_index*ms and v_elapsed < (t.day_index + 1)*ms;
 
         -- FINAL matches (guarded so it fires once).
         update public.matches m
