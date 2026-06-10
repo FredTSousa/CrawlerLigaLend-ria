@@ -241,10 +241,46 @@ TEAM_LOGO_ID_RE = re.compile(
     r'<a href="/equipa/[^"]*">\s*<img[^>]*logos/equipas/(\d+)_')
 # National-team competitions (e.g. the World Cup) show flags instead of club
 # crests (/img/bandeiras/<flag>_… — that number is a flag code, NOT the team
-# id) and their /equipa/ links omit the numeric id (?edicao_id=…). The real
-# team ids live in each row's head-to-head link, in home-away order. Used only
-# as a fallback when no club crest id is found, so club leagues are unaffected.
-H2H_ID_RE = re.compile(r'/estatisticas/[a-z0-9-]+/t(\d+)-t(\d+)')
+# id) and their /equipa/ links omit the numeric id (?edicao_id=…). The only
+# place the real team ids appear is each row's head-to-head link. CAREFUL: that
+# link lists the two ids in ASCENDING id order, *not* home-away — so we map them
+# back to home/away via the row's ordered team slugs (see _h2h_home_away_ids).
+# Used only when no club crest id is found, so club leagues are unaffected.
+H2H_RE = re.compile(r'/estatisticas/([a-z0-9-]+)/t(\d+)-t(\d+)')
+# Team-page slugs in a fixture row, in document order (home cell, flag, then the
+# away pair). Used to anchor the ascending-ordered h2h ids onto home/away.
+EQUIPA_SLUG_RE = re.compile(r'/equipa/([a-z0-9-]+)')
+
+
+def _ordered_team_slugs(row: str) -> list[str]:
+    """The distinct /equipa/ slugs in a fixture row, in order: [home, away]."""
+    slugs: list[str] = []
+    for m in EQUIPA_SLUG_RE.finditer(row):
+        if m.group(1) not in slugs:
+            slugs.append(m.group(1))
+    return slugs
+
+
+def _h2h_home_away_ids(home_slug: str | None, away_slug: str | None,
+                       h2h_slug: str, id0: str, id1: str
+                       ) -> tuple[str | None, str | None]:
+    """Map a head-to-head link's two ids onto (home_id, away_id).
+
+    The h2h link is ``/estatisticas/<slugA>-<slugB>/t<idA>-t<idB>`` with the two
+    teams in ASCENDING id order, so position 0/1 is NOT home/away. The h2h slug
+    is the two team slugs joined in that same order, so we anchor on the known
+    home/away slug (prefix/suffix match — robust to slight slug-form differences
+    such as ``rep-dem-congo`` vs ``rd-congo``). Returns (None, None) when the
+    orientation can't be determined, so we never guess a wrong id."""
+    if home_slug and h2h_slug.startswith(home_slug + "-"):
+        return id0, id1
+    if away_slug and h2h_slug.startswith(away_slug + "-"):
+        return id1, id0
+    if home_slug and h2h_slug.endswith("-" + home_slug):
+        return id1, id0
+    if away_slug and h2h_slug.endswith("-" + away_slug):
+        return id0, id1
+    return None, None
 # zerozero uses this sentinel team id for not-yet-decided knockout slots
 # (e.g. "2A" vs "2B" before the groups are played). Treated as "no team yet"
 # so we never create a bogus shared team or self-referential fixture.
@@ -291,19 +327,30 @@ def parse_round_games(html: str) -> list[dict]:
         # Names: home text cell precedes the result/vs td, away cell follows it.
         # Ids: home crest precedes it, away crest follows it.
         names = TEAM_NAME_RE.findall(row)
-        ids = TEAM_LOGO_ID_RE.findall(row)
-        if len(ids) < 2:
-            # National-team rows carry no club crest; read the ids (home-away)
-            # from the head-to-head link instead.
-            h2h = H2H_ID_RE.search(row)
-            if h2h:
-                ids = [h2h.group(1), h2h.group(2)]
-        if len(names) < 2 or len(ids) < 2:
+        if len(names) < 2:
             continue
+        # Club fixtures: the crest filename gives each team's id in home-away
+        # order. National-team fixtures have no crest; their ids live only in the
+        # head-to-head link (ascending id order), so we anchor them onto
+        # home/away via the row's ordered team slugs.
+        crest_ids = TEAM_LOGO_ID_RE.findall(row)
+        if len(crest_ids) >= 2:
+            hid, aid = crest_ids[0], crest_ids[1]
+        else:
+            hid = aid = None
+            h2h = H2H_RE.search(row)
+            if h2h:
+                slugs = _ordered_team_slugs(row)
+                hid, aid = _h2h_home_away_ids(
+                    slugs[0] if len(slugs) > 0 else None,
+                    slugs[1] if len(slugs) > 1 else None,
+                    h2h.group(1), h2h.group(2), h2h.group(3))
         # A not-yet-decided knockout slot ("2A", "Vencedor E1") carries the
         # placeholder id -> store no team id (the real team fills in once known).
-        hid = ids[0] if ids[0] != PLACEHOLDER_TEAM_ID else None
-        aid = ids[1] if ids[1] != PLACEHOLDER_TEAM_ID else None
+        if hid == PLACEHOLDER_TEAM_ID:
+            hid = None
+        if aid == PLACEHOLDER_TEAM_ID:
+            aid = None
         home = {"name": clean_name(names[0]), "id": hid}
         away = {"name": clean_name(names[1]), "id": aid}
 

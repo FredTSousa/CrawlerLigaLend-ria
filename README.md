@@ -121,7 +121,9 @@ The crawler handles more than club leagues:
 
 - **National-team competitions** (e.g. the World Cup) identify teams by flag,
   not club crest, and their `/equipa/` links omit the numeric id. The team ids
-  are read from each fixture row's head-to-head link as a fallback.
+  come from each fixture row's head-to-head link — which lists them in
+  *ascending id* order, not home–away — so they're re-anchored onto home/away
+  via the row's ordered team slugs (`_h2h_home_away_ids`).
 - **Knockout phases** (`Oitavos-de-Final`, `Quartos`, `Final`, …) are addressed
   by `fase` rather than a `jornada` number. `get_competition` discovers them
   (`comp["phases"]`); a `--backfill` run crawls the group stage and then each
