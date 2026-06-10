@@ -229,6 +229,10 @@ TEAM_LOGO_ID_RE = re.compile(
 # team ids live in each row's head-to-head link, in home-away order. Used only
 # as a fallback when no club crest id is found, so club leagues are unaffected.
 H2H_ID_RE = re.compile(r'/estatisticas/[a-z0-9-]+/t(\d+)-t(\d+)')
+# zerozero uses this sentinel team id for not-yet-decided knockout slots
+# (e.g. "2A" vs "2B" before the groups are played). Treated as "no team yet"
+# so we never create a bogus shared team or self-referential fixture.
+PLACEHOLDER_TEAM_ID = "999999"
 RESULT_CELL_RE = re.compile(
     r'<td id="tdl_(\d+)" class="result">(.*?)</td>', re.S)
 # Score/kickoff cell: class="result" for a played match (holds the score) or
@@ -280,8 +284,12 @@ def parse_round_games(html: str) -> list[dict]:
                 ids = [h2h.group(1), h2h.group(2)]
         if len(names) < 2 or len(ids) < 2:
             continue
-        home = {"name": clean_name(names[0]), "id": ids[0]}
-        away = {"name": clean_name(names[1]), "id": ids[1]}
+        # A not-yet-decided knockout slot ("2A", "Vencedor E1") carries the
+        # placeholder id -> store no team id (the real team fills in once known).
+        hid = ids[0] if ids[0] != PLACEHOLDER_TEAM_ID else None
+        aid = ids[1] if ids[1] != PLACEHOLDER_TEAM_ID else None
+        home = {"name": clean_name(names[0]), "id": hid}
+        away = {"name": clean_name(names[1]), "id": aid}
 
         date_m = re.match(r"(\d{4}-\d{2}-\d{2})", slug)
         date = date_m.group(1) if date_m else None
@@ -627,6 +635,25 @@ ID_EDICAO_RE = re.compile(r'name="id_edicao"[^>]*value="(\d+)"')
 FASE_RE = re.compile(r'name="fase"[^>]*value="(\d+)"')
 ROUND_OPTION_RE = re.compile(
     r'<option value="(\d+)"([^>]*)>\s*Jornada\s*\d+\s*</option>')
+# Knockout-phase tabs on a competition page link to /edicao/<slug>/<id>?fase=N
+# with the phase name as text (e.g. "Oitavos-de-Final"). The active phase (the
+# group stage on the landing page) is rendered without a link, so this yields
+# only the *other* phases — exactly the knockout rounds. League pages have none.
+PHASE_LINK_RE = re.compile(
+    r'<a[^>]+href="/edicao/[^"]*[?&]fase=(\d+)[^"]*"[^>]*>([^<]+)</a>')
+
+
+def parse_phases(html: str) -> list[dict]:
+    """Return knockout/cup phases linked on a competition page, in bracket
+    order: [{fase, name}]. Empty for a plain league (single-phase) page."""
+    phases: list[dict] = []
+    seen: set[str] = set()
+    for fase, label in PHASE_LINK_RE.findall(html):
+        if fase in seen:
+            continue
+        seen.add(fase)
+        phases.append({"fase": fase, "name": clean_name(label)})
+    return phases
 
 
 def _session(session: requests.Session | None) -> requests.Session:
@@ -650,9 +677,10 @@ def get_competition(base_url: str = COMPETITION_URL, *,
     """Stage 1 — read the competition landing page and return the variables
     needed to request each fixture (round).
 
-    Returns: {name, url, id_edicao, fase, rounds: [int], current_round: int}.
-    Use ``fixture_url(comp["fase"], n)`` (or pass ``comp`` to ``get_fixture``)
-    to address round ``n``.
+    Returns: {name, url, id_edicao, fase, rounds: [int], current_round: int,
+              phases: [{fase, name}]}. ``phases`` lists any knockout/cup phases
+    (empty for a plain league). Use ``fixture_url(comp["fase"], n)`` (or pass
+    ``comp`` to ``get_fixture``) to address round ``n``.
     """
     session = _session(session)
     html = fetch(session, base_url, delay=delay)
@@ -675,6 +703,8 @@ def get_competition(base_url: str = COMPETITION_URL, *,
         "fase": fase_m.group(1),
         "rounds": rounds,
         "current_round": current,
+        # Knockout phases (cup competitions); empty for a plain league.
+        "phases": parse_phases(html),
     }
 
 
@@ -753,8 +783,27 @@ def get_match(game: dict | str, *,
 
 
 # ----------------------------------------------------------------------------
-# Convenience composer — runs all three stages for one round
+# Convenience composers — run all three stages for one round / knockout phase
 # ----------------------------------------------------------------------------
+
+
+def _crawl_fixture_games(session, fixture: dict, *, progress_label: str,
+                         delay: float) -> list[dict]:
+    """Crawl every match of a parsed fixture, in order. Skips (and logs) any
+    single match that fails so one bad page never sinks the whole fixture.
+    fetch() throttles every request globally, so no explicit sleep is needed."""
+    games: list[dict] = []
+    total = len(fixture["games"])
+    for i, g in enumerate(fixture["games"], 1):
+        label = g.get("slug", g["url"])
+        print(f"[{i}/{total}] {label}", file=sys.stderr)
+        jobstatus.report(f"{progress_label}: match {label}",
+                         current=i, total=total)
+        try:
+            games.append(get_match(g, session=session, delay=delay))
+        except Exception as err:  # noqa: BLE001
+            print(f"  ! skipped {g['url']}: {err}", file=sys.stderr)
+    return games
 
 
 def crawl_round(jornada: int | str | None = None, *,
@@ -784,22 +833,47 @@ def crawl_round(jornada: int | str | None = None, *,
     print(f"Round {fixture['round']}: {len(fixture['games'])} games.",
           file=sys.stderr)
 
-    games: list[dict] = []
-    total = len(fixture["games"])
-    for i, g in enumerate(fixture["games"], 1):
-        label = g.get("slug", g["url"])
-        print(f"[{i}/{total}] {label}", file=sys.stderr)
-        jobstatus.report(f"Round {fixture['round']}: match {label}",
-                         current=i, total=total)
-        try:
-            games.append(get_match(g, session=session, delay=delay))
-        except Exception as err:  # noqa: BLE001
-            print(f"  ! skipped {g['url']}: {err}", file=sys.stderr)
-        # No explicit sleep: fetch() throttles every request globally.
+    games = _crawl_fixture_games(
+        session, fixture, progress_label=f"Round {fixture['round']}", delay=delay)
 
     return {
         "competition": competition.get("name") if competition else None,
         "round": fixture["round"],
+        "source_url": fixture["url"],
+        "scraped_at": datetime.now(timezone.utc).isoformat(),
+        "games": games,
+    }
+
+
+def get_phase_fixture(competition: dict, fase: str | int, *,
+                      session: requests.Session | None = None,
+                      delay: float = 1.0) -> dict:
+    """Like :func:`get_fixture`, but addresses a knockout *phase* by ``fase``
+    (which has no jornada). Returns {url, games:[...]}."""
+    base = competition.get("url") or COMPETITION_URL
+    session = _session(session)
+    url = f"{base}?fase={fase}"
+    html = fetch(session, url, delay=delay)
+    return {"url": url, "games": parse_round_games(html)}
+
+
+def crawl_phase(competition: dict, fase: str | int, *, round_no: int,
+                phase_name: str | None = None, delay: float = 1.0) -> dict:
+    """Crawl one full knockout phase end-to-end. ``round_no`` is the synthetic
+    round number this phase maps to (continues after the group jornadas) and
+    ``phase_name`` is its readable label (e.g. "Oitavos-de-Final")."""
+    session = new_session()
+    fixture = get_phase_fixture(competition, fase, session=session, delay=delay)
+    label = phase_name or f"Phase {fase}"
+    print(f"{label}: {len(fixture['games'])} games.", file=sys.stderr)
+
+    games = _crawl_fixture_games(
+        session, fixture, progress_label=label, delay=delay)
+
+    return {
+        "competition": competition.get("name") if competition else None,
+        "round": round_no,
+        "phase": phase_name,
         "source_url": fixture["url"],
         "scraped_at": datetime.now(timezone.utc).isoformat(),
         "games": games,

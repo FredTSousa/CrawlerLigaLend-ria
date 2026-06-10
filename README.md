@@ -115,6 +115,27 @@ Without `--out` the JSON is printed to stdout; progress goes to stderr.
 > round that has one and see such a log line, add the exact title to
 > `classify_events` in `crawler.py`.
 
+## Cup & international competitions
+
+The crawler handles more than club leagues:
+
+- **National-team competitions** (e.g. the World Cup) identify teams by flag,
+  not club crest, and their `/equipa/` links omit the numeric id. The team ids
+  are read from each fixture row's head-to-head link as a fallback.
+- **Knockout phases** (`Oitavos-de-Final`, `Quartos`, `Final`, …) are addressed
+  by `fase` rather than a `jornada` number. `get_competition` discovers them
+  (`comp["phases"]`); a `--backfill` run crawls the group stage and then each
+  knockout phase, mapping it to a `round` number continuing after the group
+  jornadas and storing the readable name in `matches.phase` (apply
+  `db/migration_knockout_phase.sql` first; league rounds leave it `NULL`).
+- **Not-yet-decided brackets** ("2A" vs "2B" before the groups are played) use a
+  placeholder team id; it's stored as no team (the real team fills in once the
+  draw resolves — the match id is stable).
+
+```bash
+python sync.py --competition mundial --backfill   # group stage + every knockout phase
+```
+
 ## Competition squads (Teams & Players)
 
 Beyond fixtures, a competition can own its **teams** and their **players**.

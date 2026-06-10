@@ -230,7 +230,7 @@ def _collect_entities(games: list[dict]) -> tuple[list[dict], list[dict]]:
 
 
 def _match_row(game: dict, *, competition_id: str | None, round_no: int | None,
-               scraped_at: str | None) -> dict:
+               scraped_at: str | None, phase: str | None = None) -> dict:
     result = game.get("result") or {}
     has_score = result.get("home") is not None and result.get("away") is not None
 
@@ -241,7 +241,7 @@ def _match_row(game: dict, *, competition_id: str | None, round_no: int | None,
     if round_no is not None and has_score:
         status = "final"
 
-    return {
+    row = {
         "id": game["game_id"],
         "competition_id": competition_id,
         "round": round_no,
@@ -257,6 +257,12 @@ def _match_row(game: dict, *, competition_id: str | None, round_no: int | None,
         "scraped_at": scraped_at or _now(),
         "updated_at": _now(),
     }
+    # Only knockout fixtures carry a phase. Omitting the key for league/group
+    # rounds means those crawls never touch the matches.phase column, so they
+    # keep working even where the (additive) migration hasn't been applied.
+    if phase is not None:
+        row["phase"] = phase
+    return row
 
 
 def _match_player_rows(game: dict) -> list[dict]:
@@ -298,7 +304,7 @@ def _match_player_rows(game: dict) -> list[dict]:
 
 def write_games(sb: Supabase, games: list[dict], *,
                 competition: dict | None, round_no: int | None,
-                scraped_at: str | None) -> None:
+                scraped_at: str | None, phase: str | None = None) -> None:
     """Upsert all entities and stats for a set of games (FK-safe order)."""
     games = [g for g in games if g and g.get("game_id")]
     if not games:
@@ -314,7 +320,8 @@ def write_games(sb: Supabase, games: list[dict], *,
     sb.upsert("players", players, "id")
 
     match_rows = [_match_row(g, competition_id=competition_id,
-                             round_no=round_no, scraped_at=scraped_at)
+                             round_no=round_no, scraped_at=scraped_at,
+                             phase=phase)
                   for g in games]
 
     # Status moves forward only (scheduled -> live -> final): a stale crawl
@@ -563,6 +570,41 @@ def run_backfill(*, competition_url: str, run_id: int | None, trigger: str,
                 for g in games
             ):
                 _maybe_fetch_round_reporters(games, round_no=data["round"],
+                                             github_run_id=github_run_id,
+                                             delay=delay)
+
+        # Knockout/cup phases (Oitavos, Quartos, Final, ...). They aren't
+        # numbered jornadas; map each to a round number continuing after the
+        # group stage and store its readable name in matches.phase. Empty for a
+        # plain league, so this whole block is a no-op there.
+        group_max = max(all_rounds) if all_rounds else 0
+        knockouts = [p for p in (comp.get("phases") or [])
+                     if p.get("fase") and p["fase"] != comp.get("fase")]
+        for idx, ph in enumerate(knockouts, 1):
+            rd = group_max + idx
+            if not needs(rd):
+                continue
+            jobstatus.report(f"Backfill {label}: {ph['name']}")
+            try:
+                data = crawler.crawl_phase(comp, ph["fase"], round_no=rd,
+                                           phase_name=ph["name"], delay=delay)
+            except Exception as err:  # noqa: BLE001 - skip a bad phase, keep going
+                print(f"  ! phase {ph['name']} failed: {err}", file=sys.stderr)
+                continue
+            games = data["games"]
+            write_games(sb, games, competition=comp, round_no=rd,
+                        scraped_at=data.get("scraped_at"), phase=ph["name"])
+            total_games += len(games)
+            crawled_rounds += 1
+            print(f"  {ph['name']} (round {rd}): synced {len(games)} game(s).",
+                  file=sys.stderr)
+
+            if fetch_reporters and any(
+                (g.get("result") or {}).get("home") is not None
+                and (g.get("result") or {}).get("away") is not None
+                for g in games
+            ):
+                _maybe_fetch_round_reporters(games, round_no=rd,
                                              github_run_id=github_run_id,
                                              delay=delay)
 
