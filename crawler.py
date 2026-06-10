@@ -223,6 +223,12 @@ TEAM_NAME_RE = re.compile(
 # anchor itself omits it (e.g. /equipa/benfica?epoca_id=155).
 TEAM_LOGO_ID_RE = re.compile(
     r'<a href="/equipa/[^"]*">\s*<img[^>]*logos/equipas/(\d+)_')
+# National-team competitions (e.g. the World Cup) show flags instead of club
+# crests (/img/bandeiras/<flag>_… — that number is a flag code, NOT the team
+# id) and their /equipa/ links omit the numeric id (?edicao_id=…). The real
+# team ids live in each row's head-to-head link, in home-away order. Used only
+# as a fallback when no club crest id is found, so club leagues are unaffected.
+H2H_ID_RE = re.compile(r'/estatisticas/[a-z0-9-]+/t(\d+)-t(\d+)')
 RESULT_CELL_RE = re.compile(
     r'<td id="tdl_(\d+)" class="result">(.*?)</td>', re.S)
 # Score/kickoff cell: class="result" for a played match (holds the score) or
@@ -266,6 +272,12 @@ def parse_round_games(html: str) -> list[dict]:
         # Ids: home crest precedes it, away crest follows it.
         names = TEAM_NAME_RE.findall(row)
         ids = TEAM_LOGO_ID_RE.findall(row)
+        if len(ids) < 2:
+            # National-team rows carry no club crest; read the ids (home-away)
+            # from the head-to-head link instead.
+            h2h = H2H_ID_RE.search(row)
+            if h2h:
+                ids = [h2h.group(1), h2h.group(2)]
         if len(names) < 2 or len(ids) < 2:
             continue
         home = {"name": clean_name(names[0]), "id": ids[0]}

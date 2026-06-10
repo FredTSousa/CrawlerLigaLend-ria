@@ -506,6 +506,13 @@ def run_backfill(*, competition_url: str, run_id: int | None, trigger: str,
     run_id = _begin_run(sb, run_id=run_id, trigger=trigger, kind="backfill",
                         target=str(label), github_run_id=github_run_id)
     try:
+        # Persist the competition up front so an attempted league always shows
+        # up (with its metadata) even if no rounds yield games this run -- e.g.
+        # a future-only schedule, or a format the fixture parser can't read yet.
+        # write_games() also upserts it per round, but it bails on empty games.
+        if comp_id:
+            sb.upsert("competitions", [_competition_row(comp)], "id")
+
         existing = sb.competition_rounds_status(comp_id) if comp_id else {}
         all_rounds = comp.get("rounds") or []
 
