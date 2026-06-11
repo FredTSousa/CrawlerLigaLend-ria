@@ -137,6 +137,12 @@ STAFF_AGE_RE = re.compile(r'>\s*(\d{1,2})\s*anos')
 #   img/planteis/new/19/52/14901952_anatoliy_trubin_20250809115631.png')"></div>
 STAFF_PHOTO_RE = re.compile(
     r'class="photo"[^>]*background-image:\s*url\(\s*([\'"]?)([^\'")]+)\1\s*\)')
+# A prominent player can link WITHOUT the numeric id (/jogador/<slug>?edicao_id=…
+# — e.g. Cristiano Ronaldo), the /jogador twin of the big-club crest quirk. Then
+# read the id from the photo filename (img/jogadores/.../<id>_<slug>_<ts>.png),
+# exactly like the team-crest trick in crawler.py.
+STAFF_PLAYER_NOID_RE = re.compile(r'/jogador/([a-z0-9-]+)[^"]*">\s*([^<]+?)\s*</a>')
+STAFF_PHOTO_ID_RE = re.compile(r'jogadores/[^"\')]*?(\d+)_[a-z]')
 
 
 def parse_team_logo(html: str, team_id: str) -> str | None:
@@ -188,9 +194,16 @@ def parse_team_squad(html: str) -> list[dict]:
                               if i + 1 < len(sections) else len(html))]
         for chunk in STAFF_SPLIT_RE.split(seg)[1:]:
             pm = STAFF_PLAYER_RE.search(chunk)
-            if not pm:
-                continue
-            slug, pid, name = pm.groups()
+            if pm:
+                slug, pid, name = pm.groups()
+            else:
+                # Player link without a numeric id: recover the id from the photo.
+                nm = STAFF_PLAYER_NOID_RE.search(chunk)
+                ph = STAFF_PHOTO_ID_RE.search(chunk)
+                if not nm or not ph:
+                    continue
+                slug, name = nm.groups()
+                pid = ph.group(1)
             if pid in players:
                 continue
             num = STAFF_NUMBER_RE.search(chunk)
