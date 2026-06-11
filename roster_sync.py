@@ -485,10 +485,23 @@ def _db_teams_with_rosters(sb: sync.Supabase, comp_id: str) -> list[dict]:
     crawl. Shape matches roster.crawl_competition_squads output."""
     teams = team_ids_from_matches(sb, comp_id)  # id,name,slug,tm_verein_id,tm_slug
     by_id = {t["id"]: {**t, "players": []} for t in teams if t.get("id")}
-    rm = sb._rest(
-        "GET",
-        f"roster_memberships?competition_id=eq.{comp_id}&active=is.true"
-        "&select=team_id,player_id,shirt_number,age_at_sync,position_group").json()
+    # PostgREST caps a single response (db-max-rows, default 1000). A big
+    # competition like the 48-team World Cup has ~1250 active memberships, so an
+    # unpaginated read silently drops whole teams' rosters (they fall past row
+    # 1000 and arrive with zero players -> never enriched). Page through with an
+    # explicit order so limit/offset is deterministic.
+    rm: list[dict] = []
+    page_size, offset = 1000, 0
+    while True:
+        page = sb._rest(
+            "GET",
+            f"roster_memberships?competition_id=eq.{comp_id}&active=is.true"
+            "&select=team_id,player_id,shirt_number,age_at_sync,position_group"
+            f"&order=team_id,player_id&limit={page_size}&offset={offset}").json()
+        rm.extend(page)
+        if len(page) < page_size:
+            break
+        offset += page_size
     pids = sorted({r["player_id"] for r in rm if r.get("player_id")})
     pinfo: dict[str, dict] = {}
     for i in range(0, len(pids), 200):
