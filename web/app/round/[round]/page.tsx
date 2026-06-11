@@ -21,7 +21,7 @@ export default async function RoundPage({
   let query = supabase
     .from("matches")
     .select(
-      "id, played_on, home_score, away_score, url, status, minute, home_team_id, away_team_id, " +
+      "id, played_on, kickoff_at, home_score, away_score, url, status, minute, home_team_id, away_team_id, " +
         "home_team:teams!matches_home_team_id_fkey(id,name), " +
         "away_team:teams!matches_away_team_id_fkey(id,name)",
     )
@@ -70,7 +70,9 @@ export default async function RoundPage({
                 <span className="h">{g.home_team?.name}</span>
                 <span className="score">
                   {g.status === "scheduled"
-                    ? "vs"
+                    ? g.kickoff_at
+                      ? fmtKickoff(g.kickoff_at)
+                      : "vs"
                     : `${g.home_score ?? "–"}-${g.away_score ?? "–"}`}
                   {g.status && g.status !== "final" && (
                     <>
@@ -110,6 +112,19 @@ export default async function RoundPage({
       </p>
     </>
   );
+}
+
+function fmtKickoff(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "vs";
+  return d.toLocaleString(undefined, {
+    timeZone: "Europe/Lisbon",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function RepCoverage({ s }: { s?: { players: number; linked: number; fetched: boolean } }) {
