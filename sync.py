@@ -175,8 +175,10 @@ class Supabase:
         if not ids:
             return {}
         inlist = ",".join(ids)
-        resp = self._rest("GET",
-                          f"matches?id=in.({inlist})&select=id,status,competition_id")
+        resp = self._rest(
+            "GET",
+            f"matches?id=in.({inlist})"
+            "&select=id,status,competition_id,home_team_id,away_team_id")
         return {r["id"]: r for r in resp.json()}
 
     def competition_rounds_status(self, competition_id: str) -> dict[int, list[str]]:
@@ -372,6 +374,15 @@ def write_games(sb: Supabase, games: list[dict], *,
             r["status"] = cur
         if r.get("competition_id") is None and prev.get("competition_id"):
             r["competition_id"] = prev["competition_id"]
+        # Never null out a known team id. National-team fixtures resolve their
+        # ids from the head-to-head link by anchoring on the row's /equipa/
+        # slugs; when those slugs differ enough that anchoring fails (e.g.
+        # rd-congo vs rep-dem-congo) the crawl yields None — which must NOT
+        # overwrite an id already established (the repair that recovered Congo/
+        # Senegal/Tunisia would be undone on the next re-crawl otherwise).
+        for side in ("home_team_id", "away_team_id"):
+            if r.get(side) is None and prev.get(side):
+                r[side] = prev[side]
 
     sb.upsert("matches", match_rows, "id")
 
