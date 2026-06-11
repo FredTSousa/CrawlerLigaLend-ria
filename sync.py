@@ -27,7 +27,9 @@ from __future__ import annotations
 
 import argparse
 import os
+import random
 import sys
+import time
 from datetime import datetime, timezone
 
 import requests
@@ -77,16 +79,49 @@ class Supabase:
             "Content-Type": "application/json",
         })
 
+    # Transient transport/server failures worth retrying. A single TCP reset
+    # (WinError 10054) or a momentary PostgREST 502/503/504 must NOT abort a long
+    # run — a 48-team World Cup sync makes hundreds of REST calls in write_squads
+    # alone, and losing the whole crawl to one dropped connection wastes the
+    # (deliberately slow, throttled) zerozero scrape that produced the data.
+    _RETRY_STATUS = frozenset({502, 503, 504})
+
     def _rest(self, method: str, path: str, *, prefer: str | None = None,
-              **kw) -> requests.Response:
+              retries: int = 4, **kw) -> requests.Response:
         headers = {"Prefer": prefer} if prefer else {}
-        resp = self.session.request(
-            method, f"{self.url}/rest/v1/{path}", headers=headers,
-            timeout=30, **kw)
-        if not resp.ok:
-            raise RuntimeError(
-                f"Supabase {method} {path} -> {resp.status_code}: {resp.text}")
-        return resp
+        url = f"{self.url}/rest/v1/{path}"
+        last_err: str | None = None
+        for attempt in range(1, retries + 1):
+            try:
+                resp = self.session.request(
+                    method, url, headers=headers, timeout=30, **kw)
+            except (requests.exceptions.ConnectionError,
+                    requests.exceptions.Timeout,
+                    requests.exceptions.ChunkedEncodingError) as err:
+                # Transport-level failure (reset/timeout) — retry with backoff.
+                last_err = str(err)
+                if attempt == retries:
+                    raise RuntimeError(
+                        f"Supabase {method} {path} failed after {retries} "
+                        f"attempts: {last_err}") from err
+            else:
+                if resp.ok:
+                    return resp
+                # HTTP errors: only the transient 5xx gateway codes are worth a
+                # retry; a 4xx (bad payload, conflict) is deterministic, so fail
+                # fast with the body to aid debugging.
+                if resp.status_code not in self._RETRY_STATUS or attempt == retries:
+                    raise RuntimeError(
+                        f"Supabase {method} {path} -> "
+                        f"{resp.status_code}: {resp.text}")
+                last_err = f"{resp.status_code}: {resp.text[:200]}"
+            backoff = min(2 ** (attempt - 1), 8) + random.uniform(0, 0.5)
+            print(f"  ! Supabase {method} {path} transient failure "
+                  f"({attempt}/{retries}): {last_err}; retrying in "
+                  f"{backoff:.1f}s", file=sys.stderr)
+            time.sleep(backoff)
+        # Unreachable (the loop either returns or raises), but keeps mypy happy.
+        raise RuntimeError(f"Supabase {method} {path} failed: {last_err}")
 
     def upsert(self, table: str, rows: list[dict], on_conflict: str) -> None:
         if not rows:
