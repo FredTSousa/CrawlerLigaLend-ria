@@ -240,8 +240,11 @@ _TM_NAT_RE = re.compile(r'flagge[^>]*title="([^"]+)"')
 # linking to the value-history page: <td class="rechts hauptlink"><a
 # href="…/marktwertverlauf/…">8,00 M €</a></td>. A player with no value shows
 # "-". Portuguese formatting: decimal comma, "M €" = millions, "mil €" = thousands.
+# NB: on league kader pages the value <a> is followed by a trailing trend <span>
+# ("Valor de mercado anterior: …") before </td>, so stop the capture at </a>
+# (or </td> for the bare "-" cell), NOT at the cell close.
 _TM_MV_RE = re.compile(
-    r'class="rechts hauptlink">(?:<a[^>]*>)?\s*([^<]+?)\s*(?:</a>)?\s*</td>')
+    r'class="rechts hauptlink">\s*(?:<a[^>]*>)?\s*([^<]+?)\s*(?:</a>|</td>)')
 
 
 def market_value_k(text: str | None) -> int | None:
