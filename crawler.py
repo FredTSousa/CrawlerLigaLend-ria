@@ -416,6 +416,27 @@ def parse_game_header(html: str) -> dict:
     home_name, away_name = team_name("right"), team_name("left")
     home_id, away_id = crest_id("match-header-left"), crest_id("match-header-right")
 
+    # National-team pages (e.g. the World Cup) show flags instead of club crests,
+    # so crest_id() finds nothing. The numeric ids live only in the head-to-head
+    # link, in ASCENDING id order — anchor them onto home/away via the header's
+    # ordered /equipa/ slugs (the same approach parse_round_games uses for the
+    # fixtures table). Only runs when a crest id is missing, so clubs are
+    # unaffected.
+    if home_id is None or away_id is None:
+        h2h = H2H_RE.search(html)
+        if h2h:
+            slugs = _ordered_team_slugs(block)  # [home, away] within the <h1>
+            hid, aid = _h2h_home_away_ids(
+                slugs[0] if len(slugs) > 0 else None,
+                slugs[1] if len(slugs) > 1 else None,
+                h2h.group(1), h2h.group(2), h2h.group(3))
+            home_id = home_id or hid
+            away_id = away_id or aid
+    if home_id == PLACEHOLDER_TEAM_ID:
+        home_id = None
+    if away_id == PLACEHOLDER_TEAM_ID:
+        away_id = None
+
     def team(name: str | None, tid: str | None) -> dict | None:
         if not name:
             return None
