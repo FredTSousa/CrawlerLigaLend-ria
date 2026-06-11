@@ -44,28 +44,43 @@ export async function GET(
     return NextResponse.json({ error: "Competition not found" }, { status: 404 });
   }
 
-  const [{ data: ct }, { data: players }, { data: fixtures }] =
-    await Promise.all([
-      supabase
-        .from("competition_teams")
-        .select("team_id, active, source_url, team:teams(id,name,slug,logo_url,source_url)")
-        .eq("competition_id", id)
-        .eq("active", true),
-      supabase
-        .from("competition_player_details")
-        .select(
-          "player_id, player_name, age, position_group, position, position_code, club_name, team_id, team_name, shirt_number, photo_url, market_value_k, source_url, last_updated",
-        )
-        .eq("competition_id", id)
-        .eq("active", true),
-      supabase
-        .from("matches")
-        .select(
-          "id, round, played_on, status, minute, home_team_id, away_team_id, home_score, away_score, kickoff_at, url, scraped_at, updated_at",
-        )
-        .eq("competition_id", id)
-        .order("round", { ascending: true }),
-    ]);
+  const [{ data: ct }, { data: fixtures }] = await Promise.all([
+    supabase
+      .from("competition_teams")
+      .select("team_id, active, source_url, team:teams(id,name,slug,logo_url,source_url)")
+      .eq("competition_id", id)
+      .eq("active", true),
+    supabase
+      .from("matches")
+      .select(
+        "id, round, played_on, status, minute, home_team_id, away_team_id, home_score, away_score, kickoff_at, url, scraped_at, updated_at",
+      )
+      .eq("competition_id", id)
+      .order("round", { ascending: true }),
+  ]);
+
+  // Players: page through PostgREST's ~1000-row cap. A 48-team World Cup has
+  // ~1250 active players; an unpaginated read returned only the first 1000 and
+  // silently dropped ~250 — whole teams. Those teams then had no squad in the
+  // snapshot, so the importing site (Liga Lendária) reported every fixture they
+  // appeared in as "unlinked club". Order explicitly so range() is deterministic.
+  const PAGE = 1000;
+  const players: any[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data: page } = await supabase
+      .from("competition_player_details")
+      .select(
+        "player_id, player_name, age, position_group, position, position_code, club_name, team_id, team_name, shirt_number, photo_url, market_value_k, source_url, last_updated",
+      )
+      .eq("competition_id", id)
+      .eq("active", true)
+      .order("team_id", { ascending: true })
+      .order("player_id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (!page || page.length === 0) break;
+    players.push(...page);
+    if (page.length < PAGE) break;
+  }
 
   const teams = ((ct ?? []) as any[]).map((r) => ({
     id: r.team?.id ?? r.team_id,
@@ -121,13 +136,13 @@ export async function GET(
       last_sync_at: comp.last_sync_at,
       counts: {
         teams: comp.teams_count ?? teams.length,
-        players: comp.players_count ?? (players ?? []).length,
+        players: comp.players_count ?? players.length,
         fixtures: (fixtures ?? []).length,
         stats: stats.length,
       },
     },
     teams,
-    players: ((players ?? []) as any[]).map((p) => ({
+    players: players.map((p) => ({
       id: p.player_id,
       name: p.player_name,
       age: p.age,
