@@ -54,7 +54,7 @@ export async function GET(
       supabase
         .from("competition_player_details")
         .select(
-          "player_id, player_name, age, position_group, position, position_code, club_name, team_id, team_name, shirt_number, photo_url, source_url, last_updated",
+          "player_id, player_name, age, position_group, position, position_code, club_name, team_id, team_name, shirt_number, photo_url, market_value_k, source_url, last_updated",
         )
         .eq("competition_id", id)
         .eq("active", true),
@@ -139,6 +139,7 @@ export async function GET(
       club_name: p.club_name,
       shirt_number: p.shirt_number,
       photo_url: p.photo_url,
+      market_value_k: p.market_value_k,
       source_url: p.source_url,
       last_updated: p.last_updated,
     })),
