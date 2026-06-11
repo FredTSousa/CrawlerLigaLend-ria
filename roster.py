@@ -159,8 +159,15 @@ def parse_team_logo(html: str, team_id: str) -> str | None:
     return url
 
 
-def team_url(team_id: str, epoca_id: str | None, slug: str = "x") -> str:
+def team_url(team_id: str, epoca_id: str | None, slug: str = "x", *,
+             edicao_id: str | None = None) -> str:
     u = f"{BASE}/equipa/{slug or 'x'}/{team_id}"
+    # National-team squads are scoped by competition EDITION (edicao_id) — the
+    # /equipa page's "Competição" dropdown — not by club season (epoca_id). When
+    # an edicao_id is given it wins: it pins the page to that tournament's squad,
+    # which stays correct even after the team's default squad later changes.
+    if edicao_id:
+        return u + f"?edicao_id={edicao_id}"
     return u + (f"?epoca_id={epoca_id}" if epoca_id else "")
 
 
@@ -202,16 +209,19 @@ def parse_team_squad(html: str) -> list[dict]:
     return list(players.values())
 
 
-def get_team_roster(epoca_id: str | None, team: dict, *, session=None,
+def get_team_roster(epoca_id: str | None, team: dict, *,
+                    edicao_id: str | None = None, session=None,
                     delay: float = 1.0) -> dict:
     """Stage B — the team's squad for this competition-season.
 
     `team` is {id, name, slug?}. Returns {team_id, source_url, players:[...]}.
     position_group comes from the roster grouping (authoritative per season);
     age & shirt number are read inline; the detailed position is filled by C.
+    Pass `edicao_id` for national-team competitions (see team_url).
     """
     session = session or crawler.new_session()
-    url = team_url(team["id"], epoca_id, team.get("slug") or "x")
+    url = team_url(team["id"], epoca_id, team.get("slug") or "x",
+                   edicao_id=edicao_id)
     html = crawler.fetch(session, url, delay=delay)
     players = parse_team_squad(html)
     logo_url = parse_team_logo(html, team["id"])
@@ -305,7 +315,11 @@ def crawl_competition_squads(comp: dict, teams: list[dict], *, full: bool = Fals
     session = crawler.new_session()
     comp = augment_competition(comp, session=session, delay=delay)
     epoca = comp.get("epoca_id")
-    print(f"{comp.get('full_name') or comp.get('name')} (época {epoca}): "
+    # National-team competitions have no epoca_id; address their squads by the
+    # competition edition instead (see team_url).
+    edicao = comp.get("id_edicao") if not epoca else None
+    print(f"{comp.get('full_name') or comp.get('name')} "
+          f"({'edição ' + edicao if edicao else 'época ' + str(epoca)}): "
           f"{len(teams)} team(s).", file=sys.stderr)
 
     out_teams: list[dict] = []
@@ -315,11 +329,13 @@ def crawl_competition_squads(comp: dict, teams: list[dict], *, full: bool = Fals
         jobstatus.report(f"Fetching squad — {t.get('name') or t['id']}",
                          current=i, total=len(teams))
         try:
-            squad = get_team_roster(epoca, t, session=session, delay=delay)
+            squad = get_team_roster(epoca, t, edicao_id=edicao,
+                                    session=session, delay=delay)
         except Exception as err:  # noqa: BLE001 - skip a bad team, keep going
             print(f"  ! roster failed for {t.get('name') or t['id']}: {err}",
                   file=sys.stderr)
-            squad = {"team_id": t["id"], "source_url": team_url(t["id"], epoca),
+            squad = {"team_id": t["id"],
+                     "source_url": team_url(t["id"], epoca, edicao_id=edicao),
                      "players": [], "logo_url": None}
         t = dict(t)
         t["players"] = squad["players"]
@@ -376,7 +392,9 @@ def main() -> int:
               file=sys.stderr)
         return 2
 
-    roster = get_team_roster(comp.get("epoca_id"), {"id": args.team},
+    epoca = comp.get("epoca_id")
+    edicao = comp.get("id_edicao") if not epoca else None
+    roster = get_team_roster(epoca, {"id": args.team}, edicao_id=edicao,
                              delay=args.delay)
     if args.full:
         for p in roster["players"]:
