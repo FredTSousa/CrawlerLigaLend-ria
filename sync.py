@@ -519,14 +519,15 @@ def _maybe_fetch_round_reporters(games: list[dict], *, round_no: int | None,
 
 
 def _fetch_missing_reporters(sb: Supabase, competition_id: str, *,
-                              github_run_id: str | None, delay: float) -> None:
+                              github_run_id: str | None, delay: float) -> int:
     """Fetch reporter scores for any finished match in this competition that
     still has unlinked players. Runs after a manual crawl so predraft games
-    (and any other gaps) get filled in automatically."""
+    (and any other gaps) get filled in automatically. Returns the number of
+    matches it attempted to fetch (0 when nothing was missing)."""
     try:
         match_ids = sb.unscored_finished_matches(competition_id)
         if not match_ids:
-            return
+            return 0
         print(f"  reporter gap-fill: {len(match_ids)} match(es) with missing scores",
               file=sys.stderr)
         import reporter_sync  # lazy: reporter_sync imports sync (circular)
@@ -536,8 +537,10 @@ def _fetch_missing_reporters(sb: Supabase, competition_id: str, *,
                                   delay=delay)
             except Exception as err:  # noqa: BLE001
                 print(f"  ! reporter gap-fill failed for {mid}: {err}", file=sys.stderr)
+        return len(match_ids)
     except Exception as err:  # noqa: BLE001
         print(f"  ! reporter gap-fill scan failed: {err}", file=sys.stderr)
+        return 0
 
 
 def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
@@ -924,6 +927,48 @@ def run_scheduled(*, github_run_id: str | None, delay: float) -> dict:
             "deactivated": deactivated, "failed": failed}
 
 
+def run_reporter_sweep(*, github_run_id: str | None, delay: float) -> dict:
+    """Lightweight cron sweep: fetch reporter ratings for every FINAL match that
+    still lacks them, across active reporter-covered competitions. Unlike
+    run_scheduled this never crawls zerozero -- reporter_sync reads players from
+    the DB and scrapes only the rating source (A Bola / Goal.com) -- so it's safe
+    to run every 30 min. It closes the gap the live watcher leaves: the watcher
+    marks a match final but deliberately doesn't chain a reporter fetch, because
+    the crónica isn't published until hours later."""
+    sb = Supabase()
+    comps = sb.active_competitions()
+    print(f"Reporter sweep: {len(comps)} active competition(s).", file=sys.stderr)
+
+    filled = covered = skipped = failed = 0
+    for c in comps:
+        comp_id = c.get("id")
+        slug = c.get("slug")
+        name = c.get("name") or slug or comp_id or "?"
+        try:
+            if not comp_id or not _reporter_covered(sb, comp_id, slug):
+                skipped += 1
+                print(f"  - {name}: skip (no reporter coverage)", file=sys.stderr)
+                continue
+            covered += 1
+            n = _fetch_missing_reporters(sb, comp_id, github_run_id=github_run_id,
+                                         delay=delay)
+            if n:
+                jobstatus.report(f"{name}: filled {n} reporter score(s)")
+            else:
+                print(f"  - {name}: no missing reporter scores", file=sys.stderr)
+            filled += n
+        except Exception as err:  # noqa: BLE001 - one league must not stop others
+            failed += 1
+            print(f"  ! {name}: reporter sweep failed: {err}", file=sys.stderr)
+
+    summary = (f"Reporter sweep done: {filled} match(es) filled across "
+               f"{covered} covered league(s), {skipped} skipped, {failed} failed.")
+    print(summary, file=sys.stderr)
+    jobstatus.done("success", message=summary)
+    return {"filled": filled, "covered": covered,
+            "skipped": skipped, "failed": failed}
+
+
 def _env(*names: str) -> str | None:
     """First non-empty environment variable among names."""
     for n in names:
@@ -968,6 +1013,10 @@ def main() -> int:
                     help="Multi-league cron sweep: crawl only the rounds that "
                          "need an update across every active competition. This is "
                          "what the 6-hourly schedule runs.")
+    ap.add_argument("--reporter-sweep", action="store_true",
+                    help="Lightweight cron sweep: only fetch reporter ratings for "
+                         "FINAL matches that still lack them (never crawls "
+                         "zerozero). This is what the 30-minute schedule runs.")
     ap.add_argument("--run-id", type=int,
                     help="Existing crawl_runs row to update (else a new one is created).")
     ap.add_argument("--trigger", default="manual", choices=["manual", "schedule"],
@@ -1007,6 +1056,13 @@ def main() -> int:
     # backfill) still takes the targeted path below.
     no_targets = (jornada is None and match_url is None
                   and competition_url is None and not backfill)
+
+    # The 30-minute reporter sweep (its own workflow) sets IN_REPORTER_SWEEP, so
+    # it must be checked before the generic schedule->run_scheduled fallback.
+    if args.reporter_sweep or _flag(_env("IN_REPORTER_SWEEP")):
+        run_reporter_sweep(github_run_id=args.github_run_id, delay=args.delay)
+        return 0
+
     if args.scheduled or (trigger == "schedule" and no_targets):
         run_scheduled(github_run_id=args.github_run_id, delay=args.delay)
         return 0

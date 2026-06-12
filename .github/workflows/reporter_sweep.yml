@@ -1,0 +1,48 @@
+name: Reporter sweep
+
+# Fetch reporter ratings (A Bola / Goal.com) for any FINAL match that still
+# lacks them, across active reporter-covered competitions.
+#
+# Triggered every 30 minutes by Supabase pg_cron (dispatch_reporter_sweep ->
+# workflow_dispatch), NOT by a GitHub schedule -- see db/migration_reporter_sweep.sql.
+# GitHub's own cron is flaky and can stall for many minutes under load; the
+# Supabase scheduler that already drives the kickoff/watch dispatch is reliable.
+#
+# Unlike crawl.yml this NEVER crawls zerozero -- reporter_sync reads players
+# from the DB and scrapes only the rating source -- so it's safe to run often.
+# It closes the gap the live watcher leaves: live_watch.py marks a match final
+# but deliberately doesn't chain a reporter fetch, because the crónica isn't
+# published until hours after the final whistle. See sync.run_reporter_sweep.
+on:
+  workflow_dispatch:
+
+# No concurrency group on purpose (same reasoning as crawl.yml): the single
+# self-hosted runner already serializes jobs FIFO without cancelling, so this
+# sweep simply queues behind any in-flight crawl instead of racing it.
+
+permissions:
+  contents: read
+
+jobs:
+  reporter-sweep:
+    # Self-hosted runner on the user's machine (residential IP) -- the rating
+    # sources are less hostile than zerozero, but we keep it on the same runner
+    # so it serializes with the crawl/watch jobs.
+    runs-on: self-hosted
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Reporter sweep
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          JOB_KIND: Reporter sweep
+          IN_REPORTER_SWEEP: "1"
+        run: python sync.py --reporter-sweep
