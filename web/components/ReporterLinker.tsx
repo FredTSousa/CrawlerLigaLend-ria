@@ -9,6 +9,7 @@ type Rating = {
   player_name: string;
   player_id: string | null; // A Bola id (not zerozero)
   score: number | null;
+  raw_score?: number | null; // provider raw rating (Goal decimal); A Bola has none
   is_mvp: boolean;
   zz_player_id?: string | null; // matched zerozero id (set by sync)
 };
@@ -88,6 +89,9 @@ export default function ReporterLinker({
         p_abola_norm: norm(entry.player_name),
         p_team_id: teamId,
         p_abola_id: entry.player_id ?? null,
+        // Carry the provider raw rating (Goal decimal) so the player shows up on
+        // the goal-ratings page; null for A Bola, which has no raw value.
+        p_raw_score: entry.raw_score ?? null,
       },
       { key, playerId: player.player_id },
     );
