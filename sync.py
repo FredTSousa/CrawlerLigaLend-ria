@@ -178,7 +178,7 @@ class Supabase:
         resp = self._rest(
             "GET",
             f"matches?id=in.({inlist})"
-            "&select=id,status,competition_id,home_team_id,away_team_id")
+            "&select=id,status,competition_id,home_team_id,away_team_id,round")
         return {r["id"]: r for r in resp.json()}
 
     def competition_rounds_status(self, competition_id: str) -> dict[int, list[str]]:
@@ -383,6 +383,13 @@ def write_games(sb: Supabase, games: list[dict], *,
         for side in ("home_team_id", "away_team_id"):
             if r.get(side) is None and prev.get(side):
                 r[side] = prev[side]
+        # Never null out a known round. A direct match-URL crawl and the live
+        # watcher both pass round_no=None (they don't know the fixture number);
+        # without this guard that None overwrites the real round, orphaning the
+        # match. The subscriber then can't map it to a fixture and silently drops
+        # it on the next import (this is how México–África do Sul disappeared).
+        if r.get("round") is None and prev.get("round") is not None:
+            r["round"] = prev["round"]
 
     sb.upsert("matches", match_rows, "id")
 

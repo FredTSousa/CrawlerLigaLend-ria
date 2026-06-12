@@ -455,17 +455,60 @@ def parse_game_header(html: str) -> dict:
     return {"home_team": home, "away_team": away, "result": score}
 
 
+# JSON-LD SportsEvent kickoff, ISO-8601 with offset (e.g.
+# "2026-06-11T20:00:00+01:00") — the one reliable server-rendered time on a
+# match page, present for scheduled and played alike.
+_LD_START_RE = re.compile(r'"startDate"\s*:\s*"([^"]+)"')
+# A match is only declared final once it's well past the longest plausible
+# running time (90' + half-time + stoppage + margin), so a still-running match
+# (score already shown, kickoff recent) is never finalised early.
+_FINAL_AFTER_MIN = 150
+
+
 def parse_game_status(html: str, result: dict | None) -> dict:
     """Best-effort match state: {status, minute, kickoff_at}.
 
-    Conservative on purpose: zerozero renders "0-0" pre-game and injects the
-    live minute client-side, so the static HTML can't reliably distinguish
-    pre-game / live / final. We therefore default to 'scheduled' here and let
-    round crawls infer 'final' from the fixtures score (see sync._match_row).
-    Live/final detection from an in-progress page is wired in during a live
-    match, when the real markup can be inspected.
+    Only the plain single-match / backfill crawl path consults this: live
+    watching reads the dedicated live feed and sets the status itself (see
+    live_watch.py), and round crawls carry the fixtures-table status / let
+    sync._match_row infer 'final'. So the job here is just: a played match reads
+    'final' (with its score), a future one 'scheduled'.
+
+    zerozero exposes no server-side status code and injects the live minute
+    client-side, so we infer from what IS static: whether the header shows a
+    score yet, and how long ago kickoff was. The header score cell reads "vs"
+    until there's a result (parse_game_header then yields result=None); once a
+    score appears we treat it as final, unless kickoff is recent enough that the
+    match may still be running, in which case we report 'live' (never a
+    premature 'final', which the forward-only guard in write_games would make
+    permanent). We can't recover the live minute here.
     """
-    return {"status": "scheduled", "minute": None, "kickoff_at": None}
+    m = _LD_START_RE.search(html)
+    kickoff_at = m.group(1) if m else None
+
+    has_score = (bool(result)
+                 and result.get("home") is not None
+                 and result.get("away") is not None)
+    if not has_score:
+        return {"status": "scheduled", "minute": None, "kickoff_at": kickoff_at}
+
+    kickoff_dt = None
+    if kickoff_at:
+        try:
+            kickoff_dt = datetime.fromisoformat(kickoff_at)
+        except ValueError:
+            kickoff_dt = None
+    if kickoff_dt is not None:
+        if kickoff_dt.tzinfo is None and _LISBON is not None:
+            kickoff_dt = kickoff_dt.replace(tzinfo=_LISBON)
+        elapsed_min = (datetime.now(timezone.utc) - kickoff_dt).total_seconds() / 60
+        if elapsed_min < 0:
+            # Kickoff still in the future but a score is shown (zerozero's
+            # pre-game 0-0): not actually played yet.
+            return {"status": "scheduled", "minute": None, "kickoff_at": kickoff_at}
+        if elapsed_min < _FINAL_AFTER_MIN:
+            return {"status": "live", "minute": None, "kickoff_at": kickoff_at}
+    return {"status": "final", "minute": None, "kickoff_at": kickoff_at}
 
 
 # ----------------------------------------------------------------------------
