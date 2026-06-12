@@ -390,12 +390,24 @@ def parse_round_games(html: str) -> list[dict]:
 # ----------------------------------------------------------------------------
 
 
+def _abs_url(url: str) -> str:
+    """Normalise a zerozero image URL: protocol-relative -> https, root-relative
+    -> absolute against BASE, leave already-absolute URLs untouched."""
+    if url.startswith("//"):
+        return "https:" + url
+    if url.startswith("/"):
+        return BASE + url
+    return url
+
+
 def parse_game_header(html: str) -> dict:
-    """Extract home/away team {name,id} and the final score from a game page.
+    """Extract home/away team {name,id,logo_url} and the final score from a page.
 
     Works even when a team's link omits the numeric id (e.g. big clubs):
     the name comes from the result <h1> (home = "right", away = "left") and
     the id from the header crest image filename (logos/equipas/<id>_...).
+    logo_url is the team's badge in its header container — a /logos/equipas
+    crest for clubs, a /img/bandeiras flag for national teams (the World Cup).
     """
     h1 = re.search(r'<h1 class="match-header-result">(.*?)</h1>', html, re.S)
     block = h1.group(1) if h1 else html
@@ -411,10 +423,22 @@ def parse_game_header(html: str) -> dict:
                       html, re.S)
         return m.group(1) if m else None
 
+    # The team's badge is the first <img> inside its header container — a club
+    # crest (/logos/equipas) or, for national teams (World Cup), a flag
+    # (/img/bandeiras). Either way it's that team's logo. The flag filename is
+    # keyed by country code (NOT the team id), so it can't be matched by id;
+    # taking it from the side-specific container keeps it pinned to home/away.
+    def header_logo(container: str) -> str | None:
+        m = re.search(r'class="' + container + r'".*?<img[^>]*\bsrc="([^"]+)"',
+                      html, re.S)
+        return _abs_url(m.group(1)) if m else None
+
     # The home crest sits in .match-header-left, the away crest in
     # .match-header-right (the team-NAME blocks are right=home, left=away).
     home_name, away_name = team_name("right"), team_name("left")
     home_id, away_id = crest_id("match-header-left"), crest_id("match-header-right")
+    home_logo, away_logo = (header_logo("match-header-left"),
+                            header_logo("match-header-right"))
 
     # National-team pages (e.g. the World Cup) show flags instead of club crests,
     # so crest_id() finds nothing. The numeric ids live only in the head-to-head
@@ -437,13 +461,14 @@ def parse_game_header(html: str) -> dict:
     if away_id == PLACEHOLDER_TEAM_ID:
         away_id = None
 
-    def team(name: str | None, tid: str | None) -> dict | None:
+    def team(name: str | None, tid: str | None,
+             logo: str | None) -> dict | None:
         if not name:
             return None
-        return {"name": name, "id": tid}
+        return {"name": name, "id": tid, "logo_url": logo}
 
-    home = team(home_name, home_id)
-    away = team(away_name, away_id)
+    home = team(home_name, home_id, home_logo)
+    away = team(away_name, away_id, away_logo)
 
     score = None
     vs = re.search(r'<div class="match-header-vs"[^>]*>(.*?)</div>', block, re.S)
@@ -863,6 +888,24 @@ def get_fixture(competition: dict | str | int, jornada: int | str, *,
     return {"round": int(jornada), "url": url, "games": games}
 
 
+def _merge_team(seed_t: dict | None, header_t: dict | None) -> dict | None:
+    """Combine the fixture-table team (``seed_t``) with the match-page header
+    (``header_t``), preferring the seed but filling any missing id or logo from
+    the header. National-team fixtures carry only a name in the round table
+    (no crest id, no flag), so without this per-field merge the id and flag the
+    header *does* resolve would be dropped (the seed dict wins wholesale).
+    Clubs are unaffected — their seed already carries id + name."""
+    if not seed_t:
+        return header_t
+    if not header_t:
+        return seed_t
+    return {
+        "name": seed_t.get("name") or header_t.get("name"),
+        "id": seed_t.get("id") or header_t.get("id"),
+        "logo_url": seed_t.get("logo_url") or header_t.get("logo_url"),
+    }
+
+
 def get_match(game: dict | str, *,
               session: requests.Session | None = None,
               delay: float = 1.0) -> dict:
@@ -879,8 +922,8 @@ def get_match(game: dict | str, *,
     html = fetch(session, url, delay=delay)
     header = parse_game_header(html)
 
-    home = seed.get("home_team") or header["home_team"]
-    away = seed.get("away_team") or header["away_team"]
+    home = _merge_team(seed.get("home_team"), header["home_team"])
+    away = _merge_team(seed.get("away_team"), header["away_team"])
     result = seed.get("result") or header.get("result")
     if not home or not away:
         raise RuntimeError(f"Could not determine teams for {url}")

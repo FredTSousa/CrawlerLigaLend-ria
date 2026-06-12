@@ -244,26 +244,52 @@ def _competition_row(comp: dict) -> dict:
     }
 
 
-def _collect_entities(games: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Dedupe all teams and players that appear across the given games."""
+def _collect_entities(
+        games: list[dict]) -> tuple[list[dict], list[dict], dict[str, str]]:
+    """Dedupe all teams and players across the given games.
+
+    Returns ``(teams, players, logos)``. Team rows stay uniform (id, name,
+    updated_at) for the bulk upsert; per-team logos are returned separately and
+    written by :func:`_persist_team_logos` — a heterogeneous upsert would null
+    the badge of any team we saw without a logo this run (see roster_sync)."""
     teams: dict[str, dict] = {}
     players: dict[str, dict] = {}
+    logos: dict[str, str] = {}
     now = _now()
+
+    def add_team(t: dict) -> None:
+        teams[t["id"]] = {"id": t["id"], "name": t["name"], "updated_at": now}
+        if t.get("logo_url"):
+            logos[t["id"]] = t["logo_url"]
+
     for g in games:
         for tkey in ("home_team", "away_team"):
             t = g.get(tkey)
             if t and t.get("id"):
-                teams[t["id"]] = {"id": t["id"], "name": t["name"],
-                                  "updated_at": now}
+                add_team(t)
         for p in g.get("players", []):
             if p.get("id"):
                 players[p["id"]] = {"id": p["id"], "name": p["name"],
                                     "updated_at": now}
             pt = p.get("team")
             if pt and pt.get("id"):
-                teams[pt["id"]] = {"id": pt["id"], "name": pt["name"],
-                                   "updated_at": now}
-    return list(teams.values()), list(players.values())
+                add_team(pt)
+    return list(teams.values()), list(players.values()), logos
+
+
+def _persist_team_logos(sb: "Supabase", logos: dict[str, str]) -> None:
+    """PATCH teams.logo_url only for teams whose badge we captured this run, so a
+    crawl that didn't see a team's logo never wipes an existing one. The teams
+    were just upserted, so the rows exist; PATCH avoids an insert missing the
+    NOT NULL teams.name. Mirrors roster_sync._persist_team_logos."""
+    now = _now()
+    for tid, logo in logos.items():
+        try:
+            sb.update("teams", f"id=eq.{tid}",
+                      {"logo_url": logo, "updated_at": now})
+        except Exception as err:  # noqa: BLE001 - non-fatal, keep syncing
+            print(f"  ! logo update failed for team {tid}: {err}",
+                  file=sys.stderr)
 
 
 def _match_row(game: dict, *, competition_id: str | None, round_no: int | None,
@@ -352,8 +378,9 @@ def write_games(sb: Supabase, games: list[dict], *,
         sb.upsert("competitions", [_competition_row(competition)], "id")
         competition_id = competition.get("id_edicao")
 
-    teams, players = _collect_entities(games)
+    teams, players, logos = _collect_entities(games)
     sb.upsert("teams", teams, "id")
+    _persist_team_logos(sb, logos)
     sb.upsert("players", players, "id")
 
     match_rows = [_match_row(g, competition_id=competition_id,
