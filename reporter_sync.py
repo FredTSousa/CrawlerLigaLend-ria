@@ -22,8 +22,8 @@ import sys
 
 import abola
 import jobstatus  # best-effort progress heartbeat for the runner tray
-import percentile
 import providers
+import rating_map
 import sync
 
 BIG_THREE = ("benfica", "sporting", "porto")
@@ -232,57 +232,14 @@ def _store_and_link(sb, match_id, home_team_id, away_team_id, data) -> tuple[int
     return linked, total
 
 
-def convert_competition(sb, competition_id: str, mapping: dict | None) -> int:
-    """Convert raw Goal ratings to 0-10 scores across a whole competition.
-
-    The percentile of each raw rating is taken over the competition's full stored
-    distribution (match_players.reporter_raw_score), then mapped through the
-    competition's configured ranges (percentile.py). Recomputing every match keeps
-    earlier games consistent as the distribution grows. Also refreshes the
-    converted `score` inside each matches_reporter_link JSONB so the match page and
-    the Goal-ratings viewer show converted values. Returns the rows updated."""
-    if not competition_id:
-        return 0
-    rows = sb._rest(
-        "GET",
-        "match_players?select=match_id,player_id,reporter_raw_score,"
-        f"matches!inner(competition_id)&matches.competition_id=eq.{competition_id}"
-        "&reporter_raw_score=not.is.null&reporter_manual=eq.false",
-    ).json()
-    dist = [r["reporter_raw_score"] for r in rows if r.get("reporter_raw_score") is not None]
-    if not dist:
-        return 0
-
-    updated = 0
-    for r in rows:
-        score = percentile.convert(r["reporter_raw_score"], dist, mapping)
-        sb.update("match_players",
-                  f"match_id=eq.{r['match_id']}&player_id=eq.{r['player_id']}",
-                  {"reporter_score": score})
-        updated += 1
-
-    # Refresh the converted score inside each match's stored ratings JSONB so the
-    # UI (which reads matches_reporter_link) reflects the same conversion.
-    match_ids = sorted({r["match_id"] for r in rows})
-    if match_ids:
-        inlist = ",".join(match_ids)
-        links = sb._rest(
-            "GET",
-            f"matches_reporter_link?match_id=in.({inlist})"
-            "&select=match_id,home_ratings,away_ratings",
-        ).json()
-        for link in links:
-            patch = {}
-            for key in ("home_ratings", "away_ratings"):
-                ratings = link.get(key) or []
-                for rt in ratings:
-                    raw = rt.get("raw_score")
-                    if raw is not None:
-                        rt["score"] = percentile.convert(raw, dist, mapping)
-                patch[key] = ratings
-            sb.update("matches_reporter_link",
-                      f"match_id=eq.{link['match_id']}", patch)
-    return updated
+def _apply_goal_mapping(data: dict, mapping: dict | None) -> None:
+    """Fill each Goal rating's 0-10 `score` from its raw value via the
+    competition's configured raw-score ranges (rating_map.py). Per-rating and
+    independent -- no distribution needed -- so a single match converts on its
+    own. Mutates `data` in place before it's stored/linked."""
+    for key in ("home_team_ratings", "away_team_ratings"):
+        for r in data.get(key) or []:
+            r["score"] = rating_map.convert(r.get("raw_score"), mapping)
 
 
 def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
@@ -315,10 +272,10 @@ def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
         goal_url, goal_id = _cached_goal_link(sb, match_id)
         data = provider.scrape_match(match, delay=delay,
                                      goal_url=goal_url, goal_id=goal_id)
+        if provider.source == "goal":
+            _apply_goal_mapping(data, cfg["rating_mapping"])
         linked, total = _store_and_link(sb, match_id, m["home_team_id"],
                                         m["away_team_id"], data)
-        if provider.source == "goal":
-            convert_competition(sb, m.get("competition_id"), cfg["rating_mapping"])
         sync._finish_run(sb, run_id, status="success", games_count=total)
         jobstatus.done("success",
                        message=f"{total} ratings ({linked} linked).")
@@ -412,10 +369,10 @@ def run_round(games: list[dict], *, round_no: int | None = None,
             if data.get("error"):
                 print(f"  ! reporter {gid}: {data['error']}", file=sys.stderr)
                 continue
+            if provider.source == "goal":
+                _apply_goal_mapping(data, cfg["rating_mapping"])
             _, n = _store_and_link(sb, gid, hid, aid, data)
             total += n
-        if provider.source == "goal":
-            convert_competition(sb, competition_id, cfg["rating_mapping"])
         sync._finish_run(sb, run_id, status="success", games_count=len(matches))
         jobstatus.done("success", message=f"{total} ratings across "
                        f"{len(matches)} finished game(s).")

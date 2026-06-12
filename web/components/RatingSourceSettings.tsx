@@ -7,16 +7,16 @@ import { createClient } from "@/lib/supabase/client";
 // Backoffice editor for a competition's reporter-rating source. ABOLA keeps the
 // existing A Bola scraper. GOAL discovers the match on Goal.com from the
 // configured fixtures URL and converts each raw Goal rating to a 0-10 score via
-// the editable percentile -> score mapping below. reporter_sync reads these when
-// fetching reporter scores. Keep DEFAULT_MAPPING in sync with percentile.py.
+// the editable raw-score-range -> score mapping below (configured per season).
+// reporter_sync reads these when fetching scores. Keep in sync with rating_map.py.
 const DEFAULT_MAPPING: Record<string, number> = {
-  "0-20": 4,
-  "20-40": 5,
-  "40-50": 6,
-  "50-70": 7,
-  "70-85": 8,
-  "85-95": 9,
-  "95-100": 10,
+  "0-5": 4,
+  "5-6": 5,
+  "6-6.5": 6,
+  "6.5-7": 7,
+  "7-7.5": 8,
+  "7.5-8": 9,
+  "8-10": 10,
 };
 
 type Row = { range: string; score: string };
@@ -149,13 +149,13 @@ export default function RatingSourceSettings({
       {isGoal && (
         <div>
           <div className="muted" style={{ fontSize: 13, marginBottom: 4 }}>
-            Percentile → score mapping (raw Goal ratings are ranked across this
-            competition’s stored ratings, then mapped):
+            Raw Goal rating → reporter score. Each row maps a raw-score range
+            (e.g. 6.5–7) to a 0–10 score:
           </div>
           <table style={{ width: "auto" }}>
             <thead>
               <tr>
-                <th>Percentile range</th>
+                <th>Raw score range</th>
                 <th className="num">Score</th>
                 <th></th>
               </tr>
@@ -166,7 +166,7 @@ export default function RatingSourceSettings({
                   <td>
                     <input
                       value={r.range}
-                      placeholder="70-85"
+                      placeholder="6.5-7"
                       disabled={busy}
                       style={{ width: 100 }}
                       onChange={(e) => setRow(i, { range: e.target.value })}

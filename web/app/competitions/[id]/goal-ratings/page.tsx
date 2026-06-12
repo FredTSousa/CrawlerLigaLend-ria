@@ -3,15 +3,15 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-// Default percentile -> score mapping. Mirrors percentile.py / RatingSourceSettings.
+// Default raw-score -> reporter score mapping. Mirrors rating_map.py / RatingSourceSettings.
 const DEFAULT_MAPPING: Record<string, number> = {
-  "0-20": 4,
-  "20-40": 5,
-  "40-50": 6,
-  "50-70": 7,
-  "70-85": 8,
-  "85-95": 9,
-  "95-100": 10,
+  "0-5": 4,
+  "5-6": 5,
+  "6-6.5": 6,
+  "6.5-7": 7,
+  "7-7.5": 8,
+  "7.5-8": 9,
+  "8-10": 10,
 };
 
 type Bucket = { lo: number; hi: number; score: number };
@@ -27,17 +27,20 @@ function buckets(mapping: Record<string, number> | null): Bucket[] {
     .sort((a, b) => a.lo - b.lo);
 }
 
+// Percentile is informational only (shown to help judge where to set ranges); it
+// is NOT used for conversion — the reporter score is mapped from the raw value.
 function percentile(raw: number, dist: number[]): number {
   if (!dist.length) return 0;
   const le = dist.filter((d) => d <= raw).length;
   return (100 * le) / dist.length;
 }
 
-function mapScore(p: number, bs: Bucket[]): number | null {
+// Map a RAW Goal rating to its reporter score via the configured raw-score ranges.
+function mapScore(raw: number, bs: Bucket[]): number | null {
   if (!bs.length) return null;
   const topHi = bs[bs.length - 1].hi;
   for (const b of bs) {
-    if ((p >= b.lo && p < b.hi) || (b.hi >= topHi && p === b.hi)) return b.score;
+    if ((raw >= b.lo && raw < b.hi) || (b.hi >= topHi && raw === b.hi)) return b.score;
   }
   return null;
 }
@@ -91,8 +94,7 @@ export default async function GoalRatingsPage({ params }: { params: { id: string
   const enriched = rows
     .map((r) => {
       const raw = Number(r.reporter_raw_score);
-      const p = percentile(raw, dist);
-      return { ...r, raw, pct: p, mapped: mapScore(p, bs) };
+      return { ...r, raw, pct: percentile(raw, dist), mapped: mapScore(raw, bs) };
     })
     .sort((a, b) => b.raw - a.raw);
 
@@ -103,18 +105,22 @@ export default async function GoalRatingsPage({ params }: { params: { id: string
           <div>
             <h2 style={{ marginBottom: 4 }}>Goal ratings — {compLabel}</h2>
             <div className="muted" style={{ fontSize: 13 }}>
-              {dist.length} stored rating{dist.length === 1 ? "" : "s"} · percentiles computed
-              over this competition’s full stored distribution
+              {dist.length} stored rating{dist.length === 1 ? "" : "s"}
+              {dist.length > 0 && (
+                <> · raw min {Math.min(...dist).toFixed(2)} · max {Math.max(...dist).toFixed(2)} ·
+                  avg {(dist.reduce((a, b) => a + b, 0) / dist.length).toFixed(2)}</>
+              )}{" "}
+              · percentile shown for context only (score is mapped from the raw value)
             </div>
           </div>
           <Link href={`/competitions/${id}`} className="round-chip">← competition</Link>
         </div>
 
-        {/* Mapping legend */}
+        {/* Mapping legend — raw score range → reporter score */}
         <div className="row" style={{ gap: 6, marginTop: 10, flexWrap: "wrap" }}>
           {bs.map((b) => (
-            <span key={`${b.lo}-${b.hi}`} className="round-chip" title="percentile → score">
-              {b.lo}–{b.hi}% → {b.score}
+            <span key={`${b.lo}-${b.hi}`} className="round-chip" title="raw range → score">
+              {b.lo}–{b.hi} → {b.score}
             </span>
           ))}
         </div>
