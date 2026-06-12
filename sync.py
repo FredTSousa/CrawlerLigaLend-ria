@@ -226,6 +226,38 @@ class Supabase:
                 out.append(mid)
         return out
 
+    def active_competitions(self) -> list[dict]:
+        """Competitions the scheduled sweep should consider (crawl_active=true).
+        Falls back to every competition if the crawl_active column doesn't exist
+        yet (pre-migration), so the sweep keeps working until the migration runs."""
+        try:
+            resp = self._rest(
+                "GET", "competitions?crawl_active=is.true&select=id,slug,name")
+            return resp.json()
+        except Exception:  # noqa: BLE001 - missing column -> treat all as active
+            resp = self._rest("GET", "competitions?select=id,slug,name")
+            return resp.json()
+
+    def round_status(self, competition_id: str, round_no: int) -> list[dict]:
+        """Status + kickoff_at for every game in one round of a competition, so
+        the scheduled sweep can decide whether the round needs a (re)crawl
+        without scraping zerozero."""
+        resp = self._rest(
+            "GET",
+            f"matches?competition_id=eq.{competition_id}&round=eq.{round_no}"
+            "&select=status,kickoff_at")
+        return resp.json()
+
+    def set_crawl_active(self, competition_id: str, active: bool) -> None:
+        """Flip the scheduled-sweep flag. Best-effort: a pre-migration DB (no
+        crawl_active column) simply logs and moves on."""
+        try:
+            self.update("competitions", f"id=eq.{competition_id}",
+                        {"crawl_active": active})
+        except Exception as err:  # noqa: BLE001 - non-fatal (e.g. pre-migration)
+            print(f"  ! crawl_active={active} update failed for {competition_id}: "
+                  f"{err}", file=sys.stderr)
+
 
 # ----------------------------------------------------------------------------
 # Row builders
@@ -599,6 +631,10 @@ def run_backfill(*, competition_url: str, run_id: int | None, trigger: str,
         # write_games() also upserts it per round, but it bails on empty games.
         if comp_id:
             sb.upsert("competitions", [_competition_row(comp)], "id")
+            # A manual backfill is an explicit "keep this league fresh" signal:
+            # re-arm the scheduled sweep in case a prior season-complete sweep
+            # had deactivated this same edition.
+            sb.set_crawl_active(comp_id, True)
 
         existing = sb.competition_rounds_status(comp_id) if comp_id else {}
         all_rounds = comp.get("rounds") or []
@@ -701,6 +737,184 @@ def run_backfill(*, competition_url: str, run_id: int | None, trigger: str,
         raise
 
 
+# ----------------------------------------------------------------------------
+# Scheduled multi-league sweep
+# ----------------------------------------------------------------------------
+#
+# The 6-hourly cron used to crawl one hardcoded league's current round every
+# time, re-scraping unchanged fixtures (and every match page they route through)
+# even when nothing could have changed. Instead, sweep every active competition
+# and only crawl a round that actually needs an update:
+#   - SKIP if the current round's games are all scheduled, in the future, and
+#     already carry a precise kickoff_at (nothing to refine until one starts).
+#   - CRAWL if a kickoff time is still unknown (date-only), a game is live, or a
+#     kickoff is due/past (results to capture), or the round isn't captured yet.
+#   - DEACTIVATE (and stop sweeping) once the season is complete (all rounds
+#     final). A manual backfill re-activates the league.
+
+_SKIP, _CRAWL, _DEACTIVATE = "skip", "crawl", "deactivate"
+
+
+def _parse_iso(value: str | None) -> datetime | None:
+    """Parse a stored ISO timestamp to an aware UTC datetime (None on failure).
+    A naive value is assumed UTC so comparisons against now() never crash."""
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _decide_round(sb: Supabase, comp_id: str,
+                  comp: dict) -> tuple[str, int | None, str]:
+    """Decide what the sweep should do for one competition: (_SKIP|_CRAWL|
+    _DEACTIVATE, target_round, human reason). Reads only the DB (the cheap
+    landing page was already fetched to get current_round/rounds)."""
+    cr = comp.get("current_round")
+    rounds = comp.get("rounds") or []
+    is_last = bool(rounds) and cr is not None and cr >= max(rounds)
+
+    if cr is None:
+        return (_CRAWL, None, "no current round resolved")
+
+    games = sb.round_status(comp_id, cr)
+    if not games:
+        return (_CRAWL, cr, f"round {cr} not captured yet")
+
+    non_final = [g for g in games if g.get("status") != "final"]
+    if non_final:
+        if any(g.get("status") == "live" for g in non_final):
+            return (_CRAWL, cr, f"round {cr} has live game(s)")
+        now = datetime.now(timezone.utc)
+        known_future = all(
+            (ko := _parse_iso(g.get("kickoff_at"))) is not None and ko > now
+            for g in non_final)
+        if known_future:
+            return (_SKIP, cr,
+                    f"round {cr}: all {len(non_final)} kickoff(s) known & upcoming")
+        return (_CRAWL, cr, f"round {cr}: kickoff unknown or a match is due")
+
+    # Current round fully final. If any earlier round still has an open game
+    # (e.g. a postponed fixture), refresh that one; otherwise the league is done.
+    status_map = sb.competition_rounds_status(comp_id)
+    open_rounds = sorted(
+        rd for rd, statuses in status_map.items()
+        if any(s != "final" for s in statuses))
+    if open_rounds:
+        return (_CRAWL, open_rounds[0], f"round {open_rounds[0]} still open")
+    if is_last:
+        return (_DEACTIVATE, cr, "season complete (all rounds final)")
+    return (_CRAWL, cr, f"round {cr} final but not last; advancing")
+
+
+def _reporter_covered(sb: Supabase, comp_id: str | None, slug: str | None) -> bool:
+    """Whether this competition has a reporter-rating source that actually covers
+    it, so the sweep only runs the (per-match) reporter fetch where it will find
+    something. Goal.com needs a configured fixtures URL; A Bola covers only the
+    Portuguese top flight."""
+    try:
+        import providers  # lazy
+        import reporter_sync  # lazy: reporter_sync imports sync (circular)
+        cfg = reporter_sync._competition_cfg(sb, comp_id)
+        src = (cfg.get("rating_source") or providers.ABOLA).upper()
+        if src == providers.GOAL:
+            return bool(cfg.get("goal_fixtures_url"))
+        if src == providers.ABOLA:
+            return slug == COMPETITION_SLUG
+        return False
+    except Exception:  # noqa: BLE001 - default to today's A Bola coverage
+        return slug == COMPETITION_SLUG
+
+
+def _scheduled_crawl_league(sb: Supabase, comp: dict, round_no: int, *,
+                            slug: str | None, comp_id: str | None,
+                            github_run_id: str | None, delay: float) -> int:
+    """Crawl & sync one round of one league for the scheduled sweep, logging its
+    own crawl_runs row. Chains the reporter gap-fill (covered leagues only).
+    Returns the number of games synced."""
+    run_id = _begin_run(sb, run_id=None, trigger="schedule", kind="round",
+                        target=str(round_no), github_run_id=github_run_id)
+    try:
+        data = crawler.crawl_round(jornada=round_no, competition=comp, delay=delay)
+        games = data["games"]
+        write_games(sb, games, competition=comp, round_no=data["round"],
+                    scraped_at=data.get("scraped_at"))
+        _finish_run(sb, run_id, status="success", games_count=len(games))
+        print(f"    round {data['round']}: synced {len(games)} game(s). "
+              f"crawl_run #{run_id}", file=sys.stderr)
+        # Reporter ratings for any finished game that still lacks them (the
+        # gap-fill only touches unscored finished matches, so re-crawls of a
+        # round across a matchday don't re-scrape already-rated games).
+        if comp_id and _reporter_covered(sb, comp_id, slug):
+            _fetch_missing_reporters(sb, comp_id, github_run_id=github_run_id,
+                                     delay=delay)
+        return len(games)
+    except Exception as err:  # noqa: BLE001
+        _finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        print(f"ERROR in scheduled crawl_run #{run_id}: {err}", file=sys.stderr)
+        raise
+
+
+def run_scheduled(*, github_run_id: str | None, delay: float) -> dict:
+    """Sweep every active competition: crawl the rounds that need an update, skip
+    the rest, and deactivate finished leagues. This is the scheduled (cron)
+    entry point; manual/dispatch runs still go through run()/run_backfill()."""
+    sb = Supabase()
+    comps = sb.active_competitions()
+    print(f"Scheduled sweep: {len(comps)} active competition(s).", file=sys.stderr)
+
+    crawled = skipped = deactivated = failed = 0
+    for c in comps:
+        comp_id = c.get("id")
+        slug = c.get("slug")
+        name = c.get("name") or slug or comp_id or "?"
+        url = _competition_url(slug) or crawler.COMPETITION_URL
+        try:
+            comp = crawler.get_competition(url, delay=delay)
+        except Exception as err:  # noqa: BLE001 - one bad league must not stop others
+            failed += 1
+            print(f"  ! {name}: competition page failed: {err}", file=sys.stderr)
+            continue
+
+        try:
+            action, target, reason = _decide_round(sb, comp_id, comp)
+        except Exception as err:  # noqa: BLE001
+            failed += 1
+            print(f"  ! {name}: decision failed: {err}", file=sys.stderr)
+            continue
+
+        if action == _SKIP:
+            skipped += 1
+            print(f"  - {name}: skip ({reason})", file=sys.stderr)
+            continue
+        if action == _DEACTIVATE:
+            sb.set_crawl_active(comp_id, False)
+            deactivated += 1
+            print(f"  x {name}: deactivated ({reason})", file=sys.stderr)
+            continue
+
+        jobstatus.report(f"{name}: crawl round {target}")
+        print(f"  > {name}: crawl round {target} ({reason})", file=sys.stderr)
+        try:
+            _scheduled_crawl_league(sb, comp, target, slug=slug, comp_id=comp_id,
+                                    github_run_id=github_run_id, delay=delay)
+            crawled += 1
+        except Exception as err:  # noqa: BLE001 - keep sweeping the other leagues
+            failed += 1
+            print(f"  ! {name}: crawl failed: {err}", file=sys.stderr)
+
+    summary = (f"Sweep done: {crawled} crawled, {skipped} skipped, "
+               f"{deactivated} deactivated, {failed} failed.")
+    print(summary, file=sys.stderr)
+    jobstatus.done("success", message=summary)
+    return {"crawled": crawled, "skipped": skipped,
+            "deactivated": deactivated, "failed": failed}
+
+
 def _env(*names: str) -> str | None:
     """First non-empty environment variable among names."""
     for n in names:
@@ -741,6 +955,10 @@ def main() -> int:
                          "complete (missing or with non-final games).")
     ap.add_argument("--force", action="store_true",
                     help="With --backfill, re-crawl every round even if final.")
+    ap.add_argument("--scheduled", action="store_true",
+                    help="Multi-league cron sweep: crawl only the rounds that "
+                         "need an update across every active competition. This is "
+                         "what the 6-hourly schedule runs.")
     ap.add_argument("--run-id", type=int,
                     help="Existing crawl_runs row to update (else a new one is created).")
     ap.add_argument("--trigger", default="manual", choices=["manual", "schedule"],
@@ -773,6 +991,16 @@ def main() -> int:
     competition_url = _competition_url(args.competition or _env("IN_COMPETITION"))
     backfill = args.backfill or _flag(_env("IN_BACKFILL"))
     force = args.force or _flag(_env("IN_FORCE"))
+
+    # The cron fires with no inputs: sweep every active league and crawl only the
+    # rounds that need it, instead of always re-crawling one league's current
+    # round. A dispatch that *does* carry inputs (jornada/match/competition/
+    # backfill) still takes the targeted path below.
+    no_targets = (jornada is None and match_url is None
+                  and competition_url is None and not backfill)
+    if args.scheduled or (trigger == "schedule" and no_targets):
+        run_scheduled(github_run_id=args.github_run_id, delay=args.delay)
+        return 0
 
     if backfill:
         run_backfill(competition_url=competition_url or crawler.COMPETITION_URL,

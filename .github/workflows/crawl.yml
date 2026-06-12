@@ -1,7 +1,11 @@
 name: Crawl & sync
 
 # Runs the zerozero crawler and upserts into Supabase.
-#  - on a 6-hour schedule (trigger = schedule, crawls the current round)
+#  - on a 6-hour schedule (trigger = schedule): sweeps every active competition
+#    and crawls only the rounds that need an update (sync.py --scheduled). A
+#    league whose current round is fully scheduled in the future with known
+#    kickoff times is skipped; a finished season is deactivated and skipped from
+#    then on. See sync.run_scheduled / migration_crawl_active.sql.
 #  - on demand from the website / manually (trigger = manual, with inputs)
 on:
   schedule:
