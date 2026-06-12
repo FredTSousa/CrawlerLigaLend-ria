@@ -7,8 +7,8 @@ export default function ReporterRunsPage() {
   return (
     <>
       <div className="panel">
-        <h2>Reporter crawl runs — A Bola</h2>
-        <RunsPanel limit={50} source="abola" />
+        <h2>Reporter crawl runs — A Bola &amp; Goal</h2>
+        <RunsPanel limit={50} kind="reporter" />
       </div>
       <p>
         <Link href="/">← Dashboard</Link>

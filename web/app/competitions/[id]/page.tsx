@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SquadSyncButton from "@/components/SquadSyncButton";
 import TmSettings from "@/components/TmSettings";
+import RatingSourceSettings from "@/components/RatingSourceSettings";
 import EmulationControl from "@/components/EmulationControl";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export default async function CompetitionDetails({
   const { data: comp } = await supabase
     .from("competitions")
     .select(
-      "id, name, full_name, slug, season, fase, epoca_id, teams_count, players_count, last_sync_at, source_url, tm_competition_code, tm_saison_id",
+      "id, name, full_name, slug, season, fase, epoca_id, teams_count, players_count, last_sync_at, source_url, tm_competition_code, tm_saison_id, rating_source, goal_fixtures_url, rating_mapping",
     )
     .eq("id", id)
     .maybeSingle();
@@ -122,6 +123,23 @@ export default async function CompetitionDetails({
             saison={comp.tm_saison_id ?? null}
             season={comp.season ?? null}
           />
+        </div>
+
+        {/* Reporter rating source (A Bola / Goal.com) + percentile mapping. */}
+        <div style={{ marginTop: 12 }}>
+          <RatingSourceSettings
+            competitionId={comp.id}
+            ratingSource={comp.rating_source ?? null}
+            goalFixturesUrl={comp.goal_fixtures_url ?? null}
+            ratingMapping={comp.rating_mapping ?? null}
+          />
+          {(comp.rating_source ?? "").toUpperCase() === "GOAL" && (
+            <div style={{ marginTop: 8 }}>
+              <Link href={`/competitions/${id}/goal-ratings`} className="round-chip">
+                View stored Goal ratings & percentiles →
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Live replay — rehearse a round on an accelerated, configurable clock. */}

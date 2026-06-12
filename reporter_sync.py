@@ -22,6 +22,8 @@ import sys
 
 import abola
 import jobstatus  # best-effort progress heartbeat for the runner tray
+import percentile
+import providers
 import sync
 
 BIG_THREE = ("benfica", "sporting", "porto")
@@ -51,11 +53,54 @@ def _load_team_aliases(sb) -> None:
 def _fetch_match(sb: sync.Supabase, match_id: str) -> dict | None:
     rows = sb._rest(
         "GET",
-        f"matches?id=eq.{match_id}&select=id,played_on,home_team_id,away_team_id,"
+        f"matches?id=eq.{match_id}&select=id,played_on,competition_id,"
+        "home_team_id,away_team_id,"
         "home:teams!matches_home_team_id_fkey(name),"
         "away:teams!matches_away_team_id_fkey(name)",
     ).json()
     return rows[0] if rows else None
+
+
+def _competition_cfg(sb: sync.Supabase, competition_id: str | None) -> dict:
+    """Reporter config for a competition: which rating source to use and the Goal
+    settings. Defaults to A Bola (today's behaviour) when there's no competition
+    or no row -- single-match/live crawls that carry no competition stay on A Bola."""
+    default = {"rating_source": providers.ABOLA, "goal_fixtures_url": None,
+               "rating_mapping": None}
+    if not competition_id:
+        return default
+    try:
+        rows = sb._rest(
+            "GET",
+            f"competitions?id=eq.{competition_id}"
+            "&select=rating_source,goal_fixtures_url,rating_mapping",
+        ).json()
+    except Exception:  # noqa: BLE001 - missing columns (pre-migration) -> A Bola
+        return default
+    if not rows:
+        return default
+    r = rows[0]
+    return {
+        "rating_source": r.get("rating_source") or providers.ABOLA,
+        "goal_fixtures_url": r.get("goal_fixtures_url"),
+        "rating_mapping": r.get("rating_mapping"),
+    }
+
+
+def _cached_goal_link(sb: sync.Supabase, match_id: str) -> tuple[str | None, str | None]:
+    """Previously-discovered Goal URL/id for a match (from matches_reporter_link),
+    so a re-crawl reuses it instead of re-searching the fixtures page."""
+    try:
+        rows = sb._rest(
+            "GET",
+            f"matches_reporter_link?match_id=eq.{match_id}"
+            "&select=goal_match_url,goal_match_id",
+        ).json()
+    except Exception:  # noqa: BLE001
+        return None, None
+    if not rows:
+        return None, None
+    return rows[0].get("goal_match_url"), rows[0].get("goal_match_id")
 
 
 def _last(name: str) -> str:
@@ -116,8 +161,8 @@ def _link_scores(sb, match_id, team_id, ratings):
     sb.update("match_players",
               f"match_id=eq.{match_id}&team_id=eq.{team_id}"
               "&reporter_manual=eq.false",
-              {"reporter_score": None, "reporter_is_mvp": False,
-               "reporter_linked": False})
+              {"reporter_score": None, "reporter_raw_score": None,
+               "reporter_is_mvp": False, "reporter_linked": False})
 
     aliases = {a["abola_norm"]: a["player_id"] for a in sb._rest(
         "GET",
@@ -155,7 +200,8 @@ def _link_scores(sb, match_id, team_id, ratings):
             continue  # human-set: keep their score, just record the link
         sb.update("match_players",
                   f"match_id=eq.{match_id}&player_id=eq.{pid}",
-                  {"reporter_score": r["score"],
+                  {"reporter_score": r.get("score"),
+                   "reporter_raw_score": r.get("raw_score"),
                    "reporter_is_mvp": bool(r["is_mvp"]),
                    "reporter_linked": True})
         if r.get("player_id"):
@@ -166,19 +212,77 @@ def _link_scores(sb, match_id, team_id, ratings):
 def _store_and_link(sb, match_id, home_team_id, away_team_id, data) -> tuple[int, int]:
     """Persist one match's scraped reporter data + link it to zerozero players.
     Returns (linked, total_ratings). Links first so each rating is annotated
-    with its zz_player_id before we store it."""
+    with its zz_player_id before we store it. The Goal URL/id (when discovered)
+    are cached on the row so a re-crawl skips the fixtures search."""
     linked = _link_scores(sb, match_id, home_team_id, data["home_team_ratings"])
     linked += _link_scores(sb, match_id, away_team_id, data["away_team_ratings"])
-    sb.upsert("matches_reporter_link", [{
+    row = {
         "match_id": match_id,
         "format_detected": data["format_detected"],
         "urls": data["urls_used"],
         "home_ratings": data["home_team_ratings"],
         "away_ratings": data["away_team_ratings"],
         "fetched_at": sync._now(),
-    }], "match_id")
+    }
+    if data.get("goal_match_url"):
+        row["goal_match_url"] = data["goal_match_url"]
+        row["goal_match_id"] = data.get("goal_match_id")
+    sb.upsert("matches_reporter_link", [row], "match_id")
     total = len(data["home_team_ratings"]) + len(data["away_team_ratings"])
     return linked, total
+
+
+def convert_competition(sb, competition_id: str, mapping: dict | None) -> int:
+    """Convert raw Goal ratings to 0-10 scores across a whole competition.
+
+    The percentile of each raw rating is taken over the competition's full stored
+    distribution (match_players.reporter_raw_score), then mapped through the
+    competition's configured ranges (percentile.py). Recomputing every match keeps
+    earlier games consistent as the distribution grows. Also refreshes the
+    converted `score` inside each matches_reporter_link JSONB so the match page and
+    the Goal-ratings viewer show converted values. Returns the rows updated."""
+    if not competition_id:
+        return 0
+    rows = sb._rest(
+        "GET",
+        "match_players?select=match_id,player_id,reporter_raw_score,"
+        f"matches!inner(competition_id)&matches.competition_id=eq.{competition_id}"
+        "&reporter_raw_score=not.is.null&reporter_manual=eq.false",
+    ).json()
+    dist = [r["reporter_raw_score"] for r in rows if r.get("reporter_raw_score") is not None]
+    if not dist:
+        return 0
+
+    updated = 0
+    for r in rows:
+        score = percentile.convert(r["reporter_raw_score"], dist, mapping)
+        sb.update("match_players",
+                  f"match_id=eq.{r['match_id']}&player_id=eq.{r['player_id']}",
+                  {"reporter_score": score})
+        updated += 1
+
+    # Refresh the converted score inside each match's stored ratings JSONB so the
+    # UI (which reads matches_reporter_link) reflects the same conversion.
+    match_ids = sorted({r["match_id"] for r in rows})
+    if match_ids:
+        inlist = ",".join(match_ids)
+        links = sb._rest(
+            "GET",
+            f"matches_reporter_link?match_id=in.({inlist})"
+            "&select=match_id,home_ratings,away_ratings",
+        ).json()
+        for link in links:
+            patch = {}
+            for key in ("home_ratings", "away_ratings"):
+                ratings = link.get(key) or []
+                for rt in ratings:
+                    raw = rt.get("raw_score")
+                    if raw is not None:
+                        rt["score"] = percentile.convert(raw, dist, mapping)
+                patch[key] = ratings
+            sb.update("matches_reporter_link",
+                      f"match_id=eq.{link['match_id']}", patch)
+    return updated
 
 
 def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
@@ -199,12 +303,22 @@ def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
         if not home or not away:
             raise RuntimeError("match has no teams yet (crawl it first)")
 
+        cfg = _competition_cfg(sb, m.get("competition_id"))
+        provider = providers.get_provider(
+            cfg["rating_source"], goal_fixtures_url=cfg["goal_fixtures_url"])
+        if provider.source != "abola":
+            sb.update("crawl_runs", f"id=eq.{run_id}", {"source": provider.source})
+
         match = {"home_team": home, "away_team": away,
                  "game_date": m["played_on"],
                  "is_big_three_match": _is_big_three(home, away)}
-        data = abola.scrape_match(match, delay=delay)
+        goal_url, goal_id = _cached_goal_link(sb, match_id)
+        data = provider.scrape_match(match, delay=delay,
+                                     goal_url=goal_url, goal_id=goal_id)
         linked, total = _store_and_link(sb, match_id, m["home_team_id"],
                                         m["away_team_id"], data)
+        if provider.source == "goal":
+            convert_competition(sb, m.get("competition_id"), cfg["rating_mapping"])
         sync._finish_run(sb, run_id, status="success", games_count=total)
         jobstatus.done("success",
                        message=f"{total} ratings ({linked} linked).")
@@ -219,13 +333,45 @@ def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
         raise
 
 
+def _round_competition(sb: sync.Supabase, match_ids: list[str]) -> str | None:
+    """The competition a round's matches belong to (first non-null), so a batch
+    fetch can resolve one rating source for the whole round."""
+    if not match_ids:
+        return None
+    for r in sb.match_existing(match_ids).values():
+        if r.get("competition_id"):
+            return r["competition_id"]
+    return None
+
+
+def _attach_cached_goal_links(sb: sync.Supabase, matches: list[dict]) -> None:
+    """Fill each match dict with any previously-discovered Goal URL/id (keyed by
+    game_id) so a re-crawl reuses it instead of re-searching the fixtures page."""
+    ids = [m["game_id"] for m in matches if m.get("game_id")]
+    if not ids:
+        return
+    inlist = ",".join(ids)
+    rows = sb._rest(
+        "GET",
+        f"matches_reporter_link?match_id=in.({inlist})"
+        "&select=match_id,goal_match_url,goal_match_id",
+    ).json()
+    cache = {r["match_id"]: r for r in rows}
+    for m in matches:
+        hit = cache.get(m.get("game_id"))
+        if hit:
+            m["goal_match_url"] = hit.get("goal_match_url")
+            m["goal_match_id"] = hit.get("goal_match_id")
+
+
 def run_round(games: list[dict], *, round_no: int | None = None,
               run_id: int | None = None, github_run_id: str | None = None,
               delay: float = 1.5) -> list[dict]:
     """Batch reporter fetch for a freshly-crawled round. Takes the crawler's
-    game dicts (game_id, home_team/away_team {id,name}, result, date), scrapes
-    A Bola for the FINISHED ones in a single pass (abola.scrape_matches collects
-    each crónica once), then stores + links each. One reporter crawl_runs row."""
+    game dicts (game_id, home_team/away_team {id,name}, result, date), picks the
+    round's competition rating source (A Bola or Goal), scrapes the FINISHED ones
+    in a single pass, then stores + links each. For GOAL, a final pass converts
+    raw ratings to 0-10 via the competition mapping. One reporter crawl_runs row."""
     sync._load_dotenv()
     sb = sync.Supabase()
     _load_team_aliases(sb)
@@ -243,14 +389,24 @@ def run_round(games: list[dict], *, round_no: int | None = None,
                     or not g.get("date") or not home or not away:
                 continue  # only finished games with teams + a date
             matches.append({"home_team": home, "away_team": away,
-                            "game_date": g["date"],
+                            "game_date": g["date"], "game_id": g["game_id"],
                             "is_big_three_match": _is_big_three(home, away)})
             meta.append((g["game_id"], (g.get("home_team") or {}).get("id"),
                          (g.get("away_team") or {}).get("id")))
 
+        # The round is one competition -> resolve its config + provider once.
+        competition_id = _round_competition(sb, [gid for gid, _, _ in meta])
+        cfg = _competition_cfg(sb, competition_id)
+        provider = providers.get_provider(
+            cfg["rating_source"], goal_fixtures_url=cfg["goal_fixtures_url"])
+        if provider.source != "abola":
+            sb.update("crawl_runs", f"id=eq.{run_id}", {"source": provider.source})
+        if provider.source == "goal":
+            _attach_cached_goal_links(sb, matches)
+
         jobstatus.report(f"Reporter ratings: round {round_no} "
                          f"({len(matches)} game(s))")
-        results = abola.scrape_matches(matches, delay=delay) if matches else []
+        results = provider.scrape_matches(matches, delay=delay) if matches else []
         total = 0
         for (gid, hid, aid), data in zip(meta, results):
             if data.get("error"):
@@ -258,6 +414,8 @@ def run_round(games: list[dict], *, round_no: int | None = None,
                 continue
             _, n = _store_and_link(sb, gid, hid, aid, data)
             total += n
+        if provider.source == "goal":
+            convert_competition(sb, competition_id, cfg["rating_mapping"])
         sync._finish_run(sb, run_id, status="success", games_count=len(matches))
         jobstatus.done("success", message=f"{total} ratings across "
                        f"{len(matches)} finished game(s).")

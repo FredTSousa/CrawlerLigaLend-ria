@@ -41,6 +41,11 @@ export default async function MatchPage({
   const rep = reporter as any;
   const ps = (players ?? []) as any[];
 
+  // Which reporter source produced this match's ratings (Goal carries a
+  // goal_match_url; everything else is A Bola). Drives labels + raw display.
+  const isGoal = !!rep?.goal_match_url;
+  const sourceLabel = isGoal ? "Goal" : "A Bola";
+
   const coverage = (teamId: string) => {
     const t = ps.filter((p) => p.team_id === teamId);
     return { linked: t.filter((p) => p.reporter_linked).length, total: t.length };
@@ -100,7 +105,7 @@ export default async function MatchPage({
       {rep && (
         <div className="panel">
           <div className="row" style={{ justifyContent: "space-between" }}>
-            <h2 style={{ margin: 0 }}>Reporter linking — A Bola</h2>
+            <h2 style={{ margin: 0 }}>Reporter linking — {sourceLabel}</h2>
             <span className="row" style={{ gap: 6 }}>
               <CovChip label={m.home_team?.name} c={homeCov} />
               <CovChip label={m.away_team?.name} c={awayCov} />
@@ -122,17 +127,19 @@ export default async function MatchPage({
       )}
 
       <div className="panel">
-        <h2>Reporter ratings — A Bola (as scraped)</h2>
+        <h2>Reporter ratings — {sourceLabel} (as scraped)</h2>
         {rep ? (
           <>
-            <ReporterTable title={m.home_team?.name} rows={rep.home_ratings || []} />
-            <ReporterTable title={m.away_team?.name} rows={rep.away_ratings || []} />
+            <ReporterTable title={m.home_team?.name} rows={rep.home_ratings || []} showRaw={isGoal} />
+            <ReporterTable title={m.away_team?.name} rows={rep.away_ratings || []} showRaw={isGoal} />
             <p className="muted" style={{ fontSize: 13, marginTop: 10 }}>
               Source{(rep.urls || []).length > 1 ? "s" : ""}:{" "}
               {(rep.urls || []).map((u: string, i: number) => (
                 <span key={u}>
                   {i > 0 ? " · " : ""}
-                  <a href={u} target="_blank" rel="noreferrer">A Bola article {i + 1}</a>
+                  <a href={u} target="_blank" rel="noreferrer">
+                    {isGoal ? "Goal match page" : `A Bola article ${i + 1}`}
+                  </a>
                 </span>
               ))}
               {rep.fetched_at && (
@@ -168,7 +175,7 @@ function CovChip({ label, c }: { label?: string; c: { linked: number; total: num
   );
 }
 
-function ReporterTable({ title, rows }: { title: string; rows: any[] }) {
+function ReporterTable({ title, rows, showRaw }: { title: string; rows: any[]; showRaw?: boolean }) {
   if (!rows?.length) return null;
   return (
     <div style={{ marginBottom: 14 }}>
@@ -177,6 +184,7 @@ function ReporterTable({ title, rows }: { title: string; rows: any[] }) {
         <thead>
           <tr>
             <th>Player</th>
+            {showRaw && <th className="num">Raw</th>}
             <th className="num">Score</th>
             <th></th>
           </tr>
@@ -185,6 +193,9 @@ function ReporterTable({ title, rows }: { title: string; rows: any[] }) {
           {rows.map((r, i) => (
             <tr key={r.player_id || r.player_name || i}>
               <td>{r.player_name}</td>
+              {showRaw && (
+                <td className="num">{r.raw_score != null ? Number(r.raw_score).toFixed(2) : "–"}</td>
+              )}
               <td className="num score">{r.score ?? "–"}</td>
               <td>{r.is_mvp ? <span className="live-badge">MVP</span> : ""}</td>
             </tr>

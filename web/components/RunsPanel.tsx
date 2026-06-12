@@ -24,9 +24,11 @@ const HEARTBEAT_STALE_SEC = 180;
 export default function RunsPanel({
   limit = 15,
   source,
+  kind,
 }: {
   limit?: number;
   source?: string;
+  kind?: string;
 }) {
   const [runs, setRuns] = useState<Run[]>([]);
   // Ticks every second so live heartbeat ages count up between data reloads.
@@ -42,6 +44,7 @@ export default function RunsPanel({
         .order("created_at", { ascending: false })
         .limit(limit);
       if (source) q = q.eq("source", source);
+      if (kind) q = q.eq("kind", kind);
       const { data } = await q;
       if (active && data) setRuns(data as Run[]);
     };
@@ -51,7 +54,7 @@ export default function RunsPanel({
       active = false;
       clearInterval(t);
     };
-  }, [limit, source]);
+  }, [limit, source, kind]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
