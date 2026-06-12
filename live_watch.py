@@ -148,8 +148,21 @@ def light_update(sb, gid, *, minute, gc, gf):
     })
 
 
+def heartbeat(sb, run_id):
+    """Bump crawl_runs.last_seen_at so the kickoff cron can tell this daemon is
+    alive and must NOT re-dispatch (which would cancel it). Best-effort: a failed
+    beat is logged, not fatal — but if it keeps failing the cron will eventually
+    treat the watcher as dead and restart it."""
+    if run_id is None:
+        return
+    try:
+        sb.update("crawl_runs", f"id=eq.{run_id}", {"last_seen_at": sync._now()})
+    except Exception as e:  # noqa: BLE001
+        print(f"  heartbeat failed: {e}", file=sys.stderr)
+
+
 def watch_loop(sb, session, match_url, *, light_interval, full_interval,
-               max_minutes):
+               max_minutes, run_id=None):
     gid = game_id_from(match_url)
     referer = match_url
     print(f"Watching match {gid}: {match_url}", file=sys.stderr)
@@ -161,6 +174,7 @@ def watch_loop(sb, session, match_url, *, light_interval, full_interval,
     started = time.time()
 
     while True:
+        heartbeat(sb, run_id)
         if (time.time() - started) / 60 > max_minutes:
             print("Max watch time reached — finalizing.", file=sys.stderr)
             break
@@ -201,7 +215,7 @@ def watch_loop(sb, session, match_url, *, light_interval, full_interval,
 
 
 def daemon_loop(sb, session, *, light_interval, full_interval, max_minutes,
-                idle_exit_cycles=6):
+                idle_exit_cycles=6, run_id=None):
     """Follow every match flagged watch=true in the DB, all in one poll.
     Exits when nothing is left to watch (frees the runner)."""
     referer = "https://www.zerozero.pt/"
@@ -210,6 +224,7 @@ def daemon_loop(sb, session, *, light_interval, full_interval, max_minutes,
     idle = 0
 
     while True:
+        heartbeat(sb, run_id)
         if (time.time() - started) / 60 > max_minutes:
             print("Max watch time reached — stopping daemon.", file=sys.stderr)
             break
@@ -303,7 +318,7 @@ def main() -> int:
         try:
             daemon_loop(sb, session, light_interval=args.light_interval,
                         full_interval=args.full_interval,
-                        max_minutes=args.max_minutes)
+                        max_minutes=args.max_minutes, run_id=run_id)
             sync._finish_run(sb, run_id, status="success")
         except KeyboardInterrupt:
             print("\nInterrupted.", file=sys.stderr)
@@ -326,7 +341,7 @@ def main() -> int:
         watch_loop(sb, session, match_url,
                    light_interval=args.light_interval,
                    full_interval=args.full_interval,
-                   max_minutes=args.max_minutes)
+                   max_minutes=args.max_minutes, run_id=run_id)
         sync._finish_run(sb, run_id, status="success", games_count=1)
     except KeyboardInterrupt:
         print("\nInterrupted — finalizing.", file=sys.stderr)

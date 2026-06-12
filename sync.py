@@ -434,8 +434,8 @@ def write_games(sb: Supabase, games: list[dict], *,
 def _begin_run(sb: Supabase, *, run_id: int | None, trigger: str, kind: str,
                target: str, github_run_id: str | None,
                source: str = "zerozero") -> int | None:
-    patch = {"status": "running", "started_at": _now(), "kind": kind,
-             "target": target, "trigger": trigger,
+    patch = {"status": "running", "started_at": _now(), "last_seen_at": _now(),
+             "kind": kind, "target": target, "trigger": trigger,
              "github_run_id": github_run_id, "source": source}
     if run_id is not None:
         sb.update("crawl_runs", f"id=eq.{run_id}", patch)

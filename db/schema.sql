@@ -108,7 +108,8 @@ create table if not exists public.crawl_runs (
     github_run_id  text,                         -- link back to the Actions run
     created_at     timestamptz not null default now(),
     started_at     timestamptz,
-    finished_at    timestamptz
+    finished_at    timestamptz,
+    last_seen_at   timestamptz                   -- watcher heartbeat (live_watch.py)
 );
 
 create index if not exists crawl_runs_created_idx on public.crawl_runs (created_at desc);
