@@ -7,8 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       match:
-        description: "Match URL to watch live"
-        required: true
+        # Vestigial: the job always runs in --daemon mode and follows every
+        # match flagged watch=true in the DB, so it never reads this input.
+        # Must stay optional — the kickoff cron dispatches with only {ref},
+        # and a required input here makes GitHub reject that with HTTP 422
+        # ("Required input 'match' not provided"), so no watcher ever starts.
+        description: "Match URL to watch live (unused; daemon follows the DB watch list)"
+        required: false
         type: string
       run_id:
         description: "crawl_runs id to update (set by the website)"
