@@ -39,10 +39,14 @@ on:
         required: false
         type: string
 
-# Never let two crawls run at once.
-concurrency:
-  group: crawl-sync
-  cancel-in-progress: false
+# No GitHub concurrency group here on purpose. A concurrency group caps the
+# queue at one running + one *pending* run: dispatch a third crawl while one is
+# running and one pending, and GitHub silently CANCELS the pending one — its
+# pre-created crawl_runs row (status='queued') is then orphaned forever, because
+# sync.py never runs to finish it. The single self-hosted runner already
+# serializes jobs (it executes one at a time and queues the rest FIFO without
+# cancelling), so dropping the group lets every dispatched crawl actually run.
+# (Assumes one runner; add a real DB-backed queue before scaling to several.)
 
 permissions:
   contents: read

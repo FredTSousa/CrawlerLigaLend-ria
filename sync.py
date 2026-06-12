@@ -488,14 +488,15 @@ def _finish_run(sb: Supabase, run_id: int | None, *, status: str,
 
 def _maybe_fetch_reporter(game: dict, *, github_run_id: str | None,
                           delay: float) -> None:
-    """After a finished single-match crawl, fetch A Bola reporter ratings too.
-    A direct match crawl can't tell live from final (the static page doesn't
-    say), so 'finished' is taken as a complete final score. Failures are logged,
-    never fatal -- the match sync already succeeded and the reporter fetch
+    """After a *finished* single-match crawl, fetch A Bola reporter ratings too.
+    Only a match the crawler reports as 'final' is rated -- a scheduled game has
+    no score and a live one has no completed crónica yet, so chaining a reporter
+    fetch for either just queues a run that finds nothing. parse_game_status
+    already distinguishes scheduled/live/final from the static page. Failures are
+    logged, never fatal -- the match sync already succeeded and the reporter fetch
     records its own crawl_runs row."""
-    result = game.get("result") or {}
-    if result.get("home") is None or result.get("away") is None:
-        return  # no final score yet -> nothing for A Bola to have rated
+    if game.get("status") != "final":
+        return  # not finished -> nothing for A Bola to have rated yet
     try:
         import reporter_sync  # lazy: reporter_sync imports sync (circular)
         reporter_sync.run(game["game_id"], run_id=None,
@@ -583,22 +584,30 @@ def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
         # post-match. The live watcher uses write_games directly, so it's exempt.
         if trigger == "manual":
             if match_url:
-                _maybe_fetch_reporter(games[0], github_run_id=github_run_id,
-                                      delay=delay)
+                # Only chain reporter work for a *finished* single match. A
+                # scheduled or still-live match has no A Bola ratings to pull
+                # yet, so skip both the direct fetch and the comp gap-fill rather
+                # than queue reporter runs that find nothing.
+                if games and games[0].get("status") == "final":
+                    _maybe_fetch_reporter(games[0], github_run_id=github_run_id,
+                                          delay=delay)
+                    existing = sb.match_existing([games[0].get("game_id", "")])
+                    comp_id = next(iter(existing.values()), {}).get("competition_id")
+                    if comp_id:
+                        _fetch_missing_reporters(sb, comp_id,
+                                                 github_run_id=github_run_id,
+                                                 delay=delay)
             else:
                 _maybe_fetch_round_reporters(games, round_no=round_no,
                                              github_run_id=github_run_id,
                                              delay=delay)
-            # Gap-fill: fetch reporter scores for any finished match in this
-            # competition that still has unlinked players (e.g. predraft games).
-            comp_id = competition["id_edicao"] if competition else None
-            if not comp_id and games:
-                existing = sb.match_existing([games[0].get("game_id", "")])
-                row = next(iter(existing.values()), {})
-                comp_id = row.get("competition_id")
-            if comp_id:
-                _fetch_missing_reporters(sb, comp_id, github_run_id=github_run_id,
-                                         delay=delay)
+                # Gap-fill: fetch reporter scores for any finished match in this
+                # competition that still has unlinked players (e.g. predraft).
+                comp_id = competition["id_edicao"] if competition else None
+                if comp_id:
+                    _fetch_missing_reporters(sb, comp_id,
+                                             github_run_id=github_run_id,
+                                             delay=delay)
         return {"run_id": run_id, "games": len(games)}
     except Exception as err:  # noqa: BLE001
         _finish_run(sb, run_id, status="error", error=str(err)[:2000])
