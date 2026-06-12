@@ -14,7 +14,12 @@ type Run = {
   error: string | null;
   created_at: string;
   finished_at: string | null;
+  last_seen_at: string | null;
 };
+
+// The kickoff cron treats a live watcher as dead after 3 min without a
+// heartbeat (crawl_runs.last_seen_at), so mirror that threshold here.
+const HEARTBEAT_STALE_SEC = 180;
 
 export default function RunsPanel({
   limit = 15,
@@ -24,6 +29,8 @@ export default function RunsPanel({
   source?: string;
 }) {
   const [runs, setRuns] = useState<Run[]>([]);
+  // Ticks every second so live heartbeat ages count up between data reloads.
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     const supabase = createClient();
@@ -46,6 +53,11 @@ export default function RunsPanel({
     };
   }, [limit, source]);
 
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
   if (!runs.length) return <p className="muted">No crawl runs yet.</p>;
 
   return (
@@ -67,6 +79,7 @@ export default function RunsPanel({
             <td title={r.target || ""}>{targetCell(r)}</td>
             <td>
               <span className={`pill ${r.status}`}>{r.status}</span>
+              {heartbeatBadge(r, now)}
               {r.error && <span className="tag-red badge" title={r.error}>err</span>}
             </td>
             <td className="num">{r.games_count ?? "—"}</td>
@@ -80,6 +93,31 @@ export default function RunsPanel({
 function fmt(iso: string) {
   const d = new Date(iso);
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtAge(sec: number) {
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return s ? `${m}m ${s}s` : `${m}m`;
+}
+
+// Liveness indicator for the live-match watcher. Only watch runs heartbeat each
+// loop (crawl_runs.last_seen_at), so the badge is meaningful only there: green
+// while beating, red once it goes past the cron's 3-min "presumed dead" cutoff —
+// the point at which the watcher gets restarted (or expired to error).
+function heartbeatBadge(r: Run, now: number) {
+  if (r.kind !== "watch") return null;
+  if (r.status !== "running" && r.status !== "queued") return null;
+  if (!r.last_seen_at) return null;
+  const ageSec = Math.max(0, Math.round((now - new Date(r.last_seen_at).getTime()) / 1000));
+  const stale = ageSec > HEARTBEAT_STALE_SEC;
+  const cls = stale ? "tag-red" : "tag-green";
+  const label = stale ? `no beat ${fmtAge(ageSec)}` : `♥ ${fmtAge(ageSec)}`;
+  const title = stale
+    ? `No heartbeat for ${fmtAge(ageSec)} — watcher presumed dead; the kickoff cron will restart it.`
+    : `Live watcher heartbeat ${fmtAge(ageSec)} ago.`;
+  return <span className={`${cls} badge`} title={title}>{label}</span>;
 }
 function targetCell(r: Run) {
   const t = r.target;
