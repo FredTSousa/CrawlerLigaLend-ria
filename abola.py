@@ -55,6 +55,13 @@ SEARCH_URL = "https://www.abola.pt/pesquisar?q="
 ARTICLE_RE = re.compile(
     r'href="((?:https://www\.abola\.pt)?/(?:futebol/)?noticias/[a-z0-9\-]+-\d{12,})"')
 
+# Search results are title-only and newest-first, so a match's ratings page sinks
+# deeper as later games spawn their own "as notas do X" pages. Backfilling an old
+# match therefore needs to page well past the first results; the until_date walk
+# stops the moment a page predates the match, so this cap is only ever hit when
+# the window genuinely can't be reached. Generous so a months-old game is found.
+MAX_SEARCH_PAGES = 50
+
 
 def abola_search(query: str, pages: int = 1,
                  until_date: date | None = None) -> list[tuple[date, str]]:
@@ -389,7 +396,12 @@ def find_team_notas(team: str, game_date: date) -> str | None:
         # A Bola titles the ratings page "as notas do X" or "os destaques do X".
         for q in (f"as notas do {term}", f"notas {term}",
                   f"os destaques do {term}", f"destaques {term}"):
-            cands = [(d, u) for d, u in abola_search(q, pages=2)
+            # Page back (newest-first) until results predate the match, so an old
+            # game's ratings page is reached and not just the first ~2 pages of
+            # recent ones -- the until_date walk stops as soon as the window is
+            # covered, so this rarely fetches anywhere near MAX_SEARCH_PAGES.
+            cands = [(d, u) for d, u in abola_search(
+                         q, pages=MAX_SEARCH_PAGES, until_date=game_date)
                      if _in_window(d, game_date)
                      and ("notas" in u or "destaques" in u)
                      and any(t in u.lower() for t in tokens)]
@@ -420,7 +432,7 @@ def find_cronica(home: str, away: str, game_date: date) -> str | None:
     ht, at = _team_tokens(home), _team_tokens(away)
     ch, ca = _clean_team(home), _clean_team(away)
     cands: dict[str, date] = {}
-    for d, u in abola_search("crónica", pages=15, until_date=game_date):
+    for d, u in abola_search("crónica", pages=MAX_SEARCH_PAGES, until_date=game_date):
         if "cronica" in u and _in_window(d, game_date):
             cands[u] = d
     for q in (f"{ch} {ca}", f"{ca} {ch}"):
