@@ -136,7 +136,7 @@ begin
        and coalesce(watch, false) = false
        and kickoff_at is not null
        and kickoff_at <= now() + interval '5 minutes'
-       and kickoff_at >= now() - interval '15 minutes';
+       and kickoff_at >= now() - interval '90 minutes';
     get diagnostics v_promoted = row_count;
 
     select exists(

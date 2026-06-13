@@ -261,6 +261,17 @@ def daemon_loop(sb, session, *, light_interval, full_interval, max_minutes,
             row = rows.get(str(gid))
             st = state.setdefault(gid, {"last_score": None, "last_full": 0.0})
             if not row:
+                # Feed has no data yet (pre-kickoff or delayed). Seed the lineup
+                # on first encounter and keep the match page fresh every
+                # full_interval so postponements/delays are caught early.
+                no_feed_due = (time.time() - st["last_full"]) >= full_interval
+                if no_feed_due:
+                    try:
+                        full_crawl(sb, session, url, status="scheduled")
+                        st["last_full"] = time.time()
+                    except Exception as e:  # noqa: BLE001
+                        print(f"  pre-kickoff crawl error for {gid}: {e}",
+                              file=sys.stderr)
                 continue
             result = str(_field(row, 1) or "")
             minute = _fmt_minute(_field(row, 2))
