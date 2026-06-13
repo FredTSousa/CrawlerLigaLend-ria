@@ -57,6 +57,48 @@ Per player who played: `team`, shirt `number`, `captain`, `starter`, the
 - Python 3.10+
 - `requests`  (`pip install -r requirements.txt`)
 
+## Job queue & parallel workers
+
+Work is a **DB-backed queue** (`jobs` table, `db/migration_job_queue.sql`) so
+several workers can run **different** jobs at the same time — e.g. the live-watch
+daemon on one worker while a backfill or reporter sync runs on another.
+
+- The website (`/api/crawl`) **enqueues** a job (`enqueue_job` RPC, deduped by a
+  `dedupe_key`) and wakes a worker by dispatching `worker.yml`.
+- `worker.py` loops: `claim_job` (`FOR UPDATE SKIP LOCKED`) → run it (re-using
+  `sync.py` / `reporter_sync.py` / `roster_sync.py` / `live_watch.py`) →
+  `finish_job` → repeat, then exits when the queue is idle. A background thread
+  heartbeats the job's lease; `reclaim_jobs()` (pg_cron backstop) returns a dead
+  worker's job to the queue.
+- **SKIP LOCKED** guarantees two workers never claim the same job, and the
+  partial unique index on `dedupe_key` stops the same target being queued twice
+  while one is in flight (the collision safety the single runner gave implicitly).
+
+Live watching stays a **singleton** job (`dedupe_key = watch:daemon`): one daemon
+polls every match flagged `watch=true` in a single request — one IP footprint
+against zerozero — so it covers many live games at once on one worker.
+
+### Run more workers (one PC, more parallelism)
+
+Each extra self-hosted runner = one more worker. Register additional runners
+(same labels) so GitHub fans `worker.yml` runs across the idle ones:
+
+```cmd
+:: in a fresh folder, e.g. %USERPROFILE%\actions-runner-2
+config.cmd --url https://github.com/<owner>/<repo> --token <reg-token> ^
+           --name runner-2 --labels self-hosted --runasservice
+```
+
+Each worker namespaces its tray status file by `WORKER_ID` (set to `runner.name`
+in `worker.yml`), so parallel workers don't clobber each other. Remember they
+share **one residential IP**: more workers parallelise independent jobs but do
+**not** give more request throughput against zerozero.
+
+> **Pending migration:** run `db/migration_job_queue.sql` once in the Supabase
+> SQL editor, and (optionally) schedule the `reclaim_jobs()` pg_cron backstop.
+> The old per-kind workflows (`crawl/reporter/squads/watch.yml`) remain as a
+> manual fallback during rollout.
+
 ## Command-line usage
 
 ```bash

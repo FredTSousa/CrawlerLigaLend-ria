@@ -1,0 +1,58 @@
+name: Queue worker
+
+# Generic queue worker. Drains the `jobs` table (db/migration_job_queue.sql):
+# claims the next pending job with FOR UPDATE SKIP LOCKED, runs it (re-using
+# sync.py / reporter_sync.py / roster_sync.py / live_watch.py), marks it done,
+# repeats — then exits once the queue is idle, freeing the runner.
+#
+# Woken by dispatch_worker() (db/migration_cron_queue.sql) — a workflow_dispatch
+# POSTed by the website on enqueue, and by the per-minute pg_cron 'queue-tick'
+# whenever jobs are pending. pg_cron also runs reclaim_jobs() so a crashed
+# worker's job is retried. (No GitHub `schedule:` here: GitHub's cron is flaky
+# under load, which is why this project drives all scheduling from Supabase
+# pg_cron instead.)
+#
+# DELIBERATELY no concurrency group: parallelism is the whole point. With several
+# self-hosted runners registered, GitHub fans these runs out across the idle ones
+# and each runs a worker; SKIP LOCKED guarantees they pick up DIFFERENT jobs.
+on:
+  workflow_dispatch:
+    inputs:
+      kinds:
+        description: "Restrict this worker to these job kinds (comma-separated; blank = any)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    # Self-hosted runner on the user's machine (residential IP) — zerozero.pt
+    # blocks datacenter IPs. Register more runners (same labels) to get more
+    # workers running in parallel; each runs one of these.
+    runs-on: self-hosted
+    timeout-minutes: 330
+    defaults:
+      run:
+        # cmd, not PowerShell: a Restricted PS execution policy on the runner
+        # blocks the per-step temp .ps1 scripts. cmd has no such restriction.
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run queue worker
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Namespaces this worker's status file (tools/runner_tray.py) so
+          # parallel workers on one PC don't clobber each other. Use the stable
+          # runner name (each runner runs one job at a time) so the file is reused
+          # across runs instead of accumulating one per run_id.
+          WORKER_ID: ${{ runner.name }}
+          IN_KINDS: ${{ github.event.inputs.kinds }}
+        # Pass the optional kinds filter through only when it's set (cmd if/else).
+        run: if not "%IN_KINDS%"=="" (python worker.py --kinds %IN_KINDS%) else (python worker.py)

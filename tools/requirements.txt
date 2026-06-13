@@ -2,3 +2,4 @@
 # Only needed on the machine that runs the self-hosted runner, NOT in CI.
 pystray>=0.19
 pillow>=10.0
+psutil>=5.9        # per-runner liveness (map Runner.Listener.exe -> its folder)

@@ -25,8 +25,15 @@ import os
 import time
 
 # The exact path the tray watches (same folder the runner + live_watch use).
+# When several workers run on one PC (one per self-hosted runner), each must
+# write its OWN status file or they clobber each other — so we suffix the file
+# with WORKER_ID when set. A single-runner setup (no WORKER_ID) keeps the legacy
+# unsuffixed name, and the tray globs _job_status*.json to find them all.
+_WORKER = "".join(c if (c.isalnum() or c in "-_") else "_"
+                  for c in os.environ.get("WORKER_ID", ""))
+_FILENAME = f"_job_status_{_WORKER}.json" if _WORKER else "_job_status.json"
 STATUS_FILE = os.path.join(
-    os.environ.get("USERPROFILE", "."), "actions-runner", "_job_status.json")
+    os.environ.get("USERPROFILE", "."), "actions-runner", _FILENAME)
 
 # Human label for the kind of job, set by the workflow step (JOB_KIND); the tray
 # shows it so you know which job is running. Falls back to a generic word.
@@ -43,17 +50,21 @@ def _write(payload: dict) -> None:
         pass
 
 
+# Which worker (runner) produced this status, so the tray can label it per runner.
+WORKER = os.environ.get("WORKER_ID") or ""
+
+
 def report(stage: str, *, current: int | None = None,
            total: int | None = None) -> None:
     """Heartbeat: what the job is doing now, with optional i/total progress."""
-    _write({"updated": time.time(), "job": JOB, "phase": "running",
-            "stage": stage, "current": current, "total": total,
-            "started": _started})
+    _write({"updated": time.time(), "job": JOB, "worker": WORKER,
+            "phase": "running", "stage": stage, "current": current,
+            "total": total, "started": _started})
 
 
 def done(result: str, *, message: str | None = None) -> None:
     """Final outcome. `result` is 'success' or 'error'; `message` is a short
     summary or the error text (the tray surfaces it so a failure is explained)."""
-    _write({"updated": time.time(), "job": JOB, "phase": "done",
-            "result": result, "message": (message or "")[:600],
+    _write({"updated": time.time(), "job": JOB, "worker": WORKER,
+            "phase": "done", "result": result, "message": (message or "")[:600],
             "finished": time.time(), "started": _started})

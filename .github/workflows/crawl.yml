@@ -1,15 +1,13 @@
 name: Crawl & sync
 
 # Runs the zerozero crawler and upserts into Supabase.
-#  - on a 6-hour schedule (trigger = schedule): sweeps every active competition
-#    and crawls only the rounds that need an update (sync.py --scheduled). A
-#    league whose current round is fully scheduled in the future with known
-#    kickoff times is skipped; a finished season is deactivated and skipped from
-#    then on. See sync.run_scheduled / migration_crawl_active.sql.
-#  - on demand from the website / manually (trigger = manual, with inputs)
+#
+# The 6-hourly scheduled sweep now goes through the job queue: pg_cron's
+# enqueue_scheduled_sweep() queues a 'scheduled' job and a worker runs it
+# (db/migration_cron_queue.sql), so the GitHub `schedule:` trigger is gone from
+# here. This workflow remains a MANUAL fallback (workflow_dispatch) — e.g. to
+# crawl a specific round/match/competition straight from the UI or GitHub.
 on:
-  schedule:
-    - cron: "0 */6 * * *"          # every 6 hours (UTC)
   workflow_dispatch:
     inputs:
       jornada:

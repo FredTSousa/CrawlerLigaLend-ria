@@ -14,6 +14,7 @@ It manages the runner installed at  %USERPROFILE%\\actions-runner  (run.cmd).
 from __future__ import annotations
 
 import ctypes
+import glob
 import json
 import os
 import re
@@ -24,12 +25,17 @@ import time
 import pystray
 from PIL import Image, ImageDraw
 
+try:
+    import psutil  # per-runner liveness; optional (falls back to tray-launched only)
+except ImportError:  # pragma: no cover
+    psutil = None
+
 APP_NAME = "Crawler LLP"
 RUNNER_DIR = os.path.join(os.environ.get("USERPROFILE", ""), "actions-runner")
-RUN_CMD = os.path.join(RUNNER_DIR, "run.cmd")
-LOG_FILE = os.path.join(RUNNER_DIR, "_tray_run.log")
 WATCH_STATUS = os.path.join(RUNNER_DIR, "_watch_status.json")
-JOB_STATUS = os.path.join(RUNNER_DIR, "_job_status.json")  # written by jobstatus.py
+# Each worker writes its own _job_status_<worker>.json (a single-runner setup
+# keeps the legacy _job_status.json); the glob matches both.
+JOB_STATUS_GLOB = os.path.join(RUNNER_DIR, "_job_status*.json")
 LISTENER = "Runner.Listener.exe"
 WORKER = "Runner.Worker.exe"  # exists only while a job (e.g. a live watch) runs
 
@@ -41,12 +47,30 @@ BLUE = (60, 140, 240, 255)
 GREY = (120, 120, 120, 255)
 RED = (210, 60, 60, 255)
 
-_proc: subprocess.Popen | None = None
+# Processes we launched, keyed by runner folder. The tray manages the primary
+# actions-runner folder plus any actions-runner-* siblings (e.g. the second
+# runner "LLPCrawler Second runner" in actions-runner-2), so several workers run
+# in parallel. Their job-status files all land in the primary folder (jobstatus.py
+# writes to %USERPROFILE%\actions-runner), which the tray already globs.
+_procs: dict[str, subprocess.Popen] = {}
 
 
 # ----------------------------------------------------------------------------
 # Runner state + control
 # ----------------------------------------------------------------------------
+
+
+def _runner_dirs() -> list[str]:
+    """Every runner folder to manage: the primary one, then actions-runner-*
+    siblings, each identified by containing a run.cmd."""
+    base = os.environ.get("USERPROFILE", "")
+    dirs: list[str] = []
+    if os.path.exists(os.path.join(RUNNER_DIR, "run.cmd")):
+        dirs.append(RUNNER_DIR)
+    for path in sorted(glob.glob(os.path.join(base, "actions-runner-*"))):
+        if os.path.isdir(path) and os.path.exists(os.path.join(path, "run.cmd")):
+            dirs.append(path)
+    return dirs
 
 
 def _proc_running(image: str) -> bool:
@@ -59,11 +83,55 @@ def _proc_running(image: str) -> bool:
         return False
 
 
-def _runner_up() -> bool:
-    """True if the runner listener process is alive (started by us or not)."""
-    if _proc_running(LISTENER):
+def _runner_name(d: str) -> str:
+    """The GitHub runner's display name (from its .runner config), so the tray
+    shows 'LLPCrawler Second runner' rather than the folder name."""
+    try:
+        # .runner is written with a UTF-8 BOM, so decode with utf-8-sig.
+        with open(os.path.join(d, ".runner"), encoding="utf-8-sig") as fh:
+            name = json.load(fh).get("agentName")
+        if name:
+            return name
+    except Exception:
+        pass
+    return os.path.basename(d)
+
+
+def _listener_dirs() -> set[str]:
+    """Runner folders that currently have a live Runner.Listener.exe — detected
+    by the process's exe path, so it works no matter who started the runner."""
+    if psutil is None:
+        return set()
+    dirs = {os.path.normpath(d).lower(): d for d in _runner_dirs()}
+    live: set[str] = set()
+    for proc in psutil.process_iter(["name", "exe"]):
+        try:
+            if (proc.info["name"] or "").lower() != LISTENER.lower():
+                continue
+            exe = os.path.normpath(proc.info["exe"] or "").lower()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, Exception):
+            continue
+        for key, orig in dirs.items():
+            if exe.startswith(key + os.sep):  # <dir>\bin\Runner.Listener.exe
+                live.add(orig)
+    return live
+
+
+def _runner_dir_up(d: str) -> bool:
+    """True if this specific runner folder is running (live listener, or a tray-
+    launched process for it)."""
+    if d in _listener_dirs():
         return True
-    return _proc is not None and _proc.poll() is None
+    p = _procs.get(d)
+    return p is not None and p.poll() is None
+
+
+def _runner_up() -> bool:
+    """True if any runner is running."""
+    if any(_runner_dir_up(d) for d in _runner_dirs()):
+        return True
+    # Fallback when psutil is unavailable and nothing is tray-launched.
+    return psutil is None and _proc_running(LISTENER)
 
 
 def _job_running() -> bool:
@@ -89,13 +157,30 @@ def _match_label(m: dict) -> str:
     return f"{slug} {m.get('minute') or ''}".strip()
 
 
+def _job_statuses() -> list[dict]:
+    """All workers' job heartbeats (one file per worker). Each dict gets a
+    '_path' so callers can act on the specific file (e.g. dismiss an error)."""
+    out: list[dict] = []
+    for path in glob.glob(JOB_STATUS_GLOB):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                d = json.load(fh)
+            d["_path"] = path
+            out.append(d)
+        except Exception:
+            pass
+    return out
+
+
 def _job_status() -> dict | None:
-    """The crawl/roster/reporter job heartbeat (written by jobstatus.py)."""
-    try:
-        with open(JOB_STATUS, encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception:
+    """The single most relevant job heartbeat: prefer a currently-running one,
+    and among ties the most recently updated."""
+    items = _job_statuses()
+    if not items:
         return None
+    running = [d for d in items if d.get("phase") == "running"]
+    pool = running or items
+    return max(pool, key=lambda d: float(d.get("updated", 0)))
 
 
 def _fmt_age(seconds: float) -> str:
@@ -113,11 +198,13 @@ def _progress(js: dict) -> str:
 
 
 def _last_error() -> str | None:
-    """Full text of the last job's error, if the last finished job failed."""
-    js = _job_status()
-    if js and js.get("phase") == "done" and js.get("result") == "error":
-        return js.get("message") or "(no detail recorded)"
-    return None
+    """Full text of a failed job's error, across all workers (most recent)."""
+    failed = [d for d in _job_statuses()
+              if d.get("phase") == "done" and d.get("result") == "error"]
+    if not failed:
+        return None
+    js = max(failed, key=lambda d: float(d.get("updated", 0)))
+    return js.get("message") or "(no detail recorded)"
 
 
 def show_last_error(icon=None, item=None) -> None:
@@ -140,13 +227,14 @@ def show_last_error(icon=None, item=None) -> None:
 
 
 def dismiss_error(icon=None, item=None) -> None:
-    """Clear the last-error indicator (red icon + status). The next job will
-    write a fresh status anyway; this just acknowledges the current one."""
-    try:
-        if os.path.exists(JOB_STATUS):
-            os.remove(JOB_STATUS)
-    except Exception:
-        pass
+    """Clear the last-error indicator (red icon + status) by removing the failed
+    workers' status files. The next job writes a fresh status anyway."""
+    for d in _job_statuses():
+        if d.get("phase") == "done" and d.get("result") == "error":
+            try:
+                os.remove(d["_path"])
+            except Exception:
+                pass
     if icon is not None:
         icon.update_menu()
 
@@ -158,26 +246,30 @@ def stop_job(icon=None, item=None) -> None:
 
 
 def start_runner(icon=None, item=None) -> None:
-    global _proc
-    if _runner_up() or not os.path.exists(RUN_CMD):
-        return
-    log = open(LOG_FILE, "a", encoding="utf-8", errors="replace")
-    _proc = subprocess.Popen(
-        ["cmd", "/c", RUN_CMD], cwd=RUNNER_DIR,
-        stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-        creationflags=_NO_WINDOW)
+    """Start every runner folder we aren't already running (one process each)."""
+    for d in _runner_dirs():
+        if _runner_dir_up(d):
+            continue  # already running (by us or externally) — don't double-start
+        run_cmd = os.path.join(d, "run.cmd")
+        if not os.path.exists(run_cmd):
+            continue
+        log = open(os.path.join(d, "_tray_run.log"), "a",
+                   encoding="utf-8", errors="replace")
+        _procs[d] = subprocess.Popen(
+            ["cmd", "/c", run_cmd], cwd=d,
+            stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+            creationflags=_NO_WINDOW)
 
 
 def stop_runner(icon=None, item=None) -> None:
-    global _proc
-    if _proc is not None and _proc.poll() is None:
-        subprocess.run(["taskkill", "/F", "/T", "/PID", str(_proc.pid)],
-                       creationflags=_NO_WINDOW,
-                       capture_output=True)
-    # Also clear any listener started outside this app.
+    """Stop all runners we launched, plus any listener started outside the app."""
+    for p in list(_procs.values()):
+        if p.poll() is None:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)],
+                           creationflags=_NO_WINDOW, capture_output=True)
+    _procs.clear()
     subprocess.run(["taskkill", "/F", "/T", "/IM", LISTENER],
                    creationflags=_NO_WINDOW, capture_output=True)
-    _proc = None
 
 
 def open_folder(icon=None, item=None) -> None:
@@ -250,6 +342,15 @@ def _status_text(_=None) -> str:
     return f"Status: {_state_label()}"
 
 
+def _runners_text(_=None) -> str:
+    """One line naming every managed runner with a ● (up) / ○ (down) marker."""
+    dirs = _runner_dirs()
+    if not dirs:
+        return "Runners: none found"
+    parts = [f"{_runner_name(d)} {'●' if _runner_dir_up(d) else '○'}" for d in dirs]
+    return "Runners: " + "  ·  ".join(parts)
+
+
 def _on_exit(icon, item) -> None:
     stop_runner(icon)
     icon.stop()
@@ -279,9 +380,11 @@ def _setup(icon: pystray.Icon) -> None:
 def main() -> None:
     menu = pystray.Menu(
         pystray.MenuItem(_status_text, None, enabled=False),
+        pystray.MenuItem(_runners_text, None, enabled=False),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Start runner", start_runner,
-                         visible=lambda i: not _runner_up()),
+                         visible=lambda i: any(not _runner_dir_up(d)
+                                               for d in _runner_dirs())),
         pystray.MenuItem("Show last error…", show_last_error,
                          visible=lambda i: _last_error() is not None),
         pystray.MenuItem("Dismiss last error", dismiss_error,

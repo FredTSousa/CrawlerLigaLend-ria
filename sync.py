@@ -168,6 +168,46 @@ class Supabase:
         self._rest("PATCH", f"{table}?{match}", prefer="return=minimal",
                    json=patch)
 
+    def rpc(self, fn: str, args: dict | None = None):
+        """Call a Postgres function via PostgREST (/rpc/<fn>). Returns the parsed
+        JSON body, or None for an empty (204) response."""
+        resp = self._rest("POST", f"rpc/{fn}", json=args or {})
+        if resp.status_code == 204 or not resp.text:
+            return None
+        return resp.json()
+
+    # ---- job queue (see db/migration_job_queue.sql) -------------------------
+    # These wrap the SECURITY DEFINER RPCs; workers call them with service_role.
+
+    def claim_job(self, worker: str, *, lease_seconds: int = 120,
+                  kinds: list[str] | None = None) -> dict | None:
+        """Atomically claim the next pending job (FOR UPDATE SKIP LOCKED), or
+        None if the queue is empty for the requested kinds. kinds=None = any."""
+        return self.rpc("claim_job", {
+            "p_worker": worker, "p_lease_seconds": lease_seconds,
+            "p_kinds": kinds})
+
+    def heartbeat_job(self, job_id: int, worker: str, *,
+                      lease_seconds: int = 120) -> bool:
+        """Extend the lease; False means we lost it (job reclaimed) -> stop."""
+        return bool(self.rpc("heartbeat_job", {
+            "p_id": job_id, "p_worker": worker,
+            "p_lease_seconds": lease_seconds}))
+
+    def finish_job(self, job_id: int, status: str,
+                   error: str | None = None) -> None:
+        self.rpc("finish_job",
+                 {"p_id": job_id, "p_status": status, "p_error": error})
+
+    def enqueue_job(self, kind: str, params: dict | None = None, *,
+                    dedupe_key: str | None = None, priority: int = 100) -> int:
+        return self.rpc("enqueue_job", {
+            "p_kind": kind, "p_params": params or {},
+            "p_dedupe_key": dedupe_key, "p_priority": priority})
+
+    def reclaim_jobs(self) -> int:
+        return self.rpc("reclaim_jobs", {}) or 0
+
     def match_existing(self, ids: list[str]) -> dict[str, dict]:
         """Current status + competition_id of the given match ids, so a crawl can
         keep status moving forward only and never null out an already-known
@@ -1063,7 +1103,8 @@ def main() -> int:
         run_reporter_sweep(github_run_id=args.github_run_id, delay=args.delay)
         return 0
 
-    if args.scheduled or (trigger == "schedule" and no_targets):
+    if (args.scheduled or _flag(_env("IN_SCHEDULED"))
+            or (trigger == "schedule" and no_targets)):
         run_scheduled(github_run_id=args.github_run_id, delay=args.delay)
         return 0
 

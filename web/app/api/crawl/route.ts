@@ -71,87 +71,96 @@ export async function POST(request: Request) {
     }
   }
 
-  // 2) Dispatch the workflow with the run id + crawl target.
+  // 2) Build the job params (mirroring the old workflow inputs) + a dedupe key.
+  //    The dedupe key collapses a duplicate request for the same target while
+  //    one is already pending/running (the partial unique index in
+  //    db/migration_job_queue.sql), which is the collision safety the old
+  //    single-runner FIFO gave us implicitly. params.run_id ties the job back to
+  //    the crawl_runs row above so the worker updates it (status polling works).
+  //    Lower priority = claimed sooner; live watching jumps the queue.
+  const params: Record<string, unknown> = { run_id: run.id };
+  let dedupe: string;
+  let priority = 100;
+  if (kind === "watch") {
+    // One singleton daemon follows every match flagged watch=true, so repeated
+    // "Watch live" clicks just (re)flag a match and reuse the same job.
+    dedupe = "watch:daemon";
+    priority = 10;
+  } else if (kind === "reporter") {
+    params.match_id = target;
+    const abolaUrl = String(body.abolaUrl ?? "").trim();
+    if (abolaUrl) params.abola_url = abolaUrl;
+    dedupe = `reporter:${target}`;
+    priority = 60;
+  } else if (kind === "match") {
+    params.match = target;
+    dedupe = `match:${target}`;
+    priority = 50;
+  } else if (kind === "backfill") {
+    params.competition = target; // comp slug/URL; crawl every open round
+    if (body.force) params.force = true;
+    dedupe = `backfill:${target}`;
+    priority = 90;
+  } else if (isSquad) {
+    // Squad syncs (roster_sync.py): teams/comp_full/comp_players/roster/players.
+    if (kind === "players") {
+      params.player = target;
+      dedupe = `players:${target}`;
+    } else {
+      const comp = body.competition || target;
+      params.competition = comp;
+      if (kind === "comp_full") params.full = true;
+      if (kind === "comp_players") params.players_only = true;
+      if (kind === "roster" && body.team) params.team = body.team;
+      if (body.force) params.force = true;
+      dedupe = `${kind}:${comp}${body.team ? `:${body.team}` : ""}`;
+    }
+    priority = 70;
+  } else {
+    // round
+    params.jornada = target;
+    if (body.competition) params.competition = body.competition;
+    dedupe = `round:${body.competition || "default"}:${target}`;
+    priority = 50;
+  }
+
+  // 3) Enqueue the job (deduped). Workers pull it via claim_job (SKIP LOCKED).
+  const { data: jobId, error: enqErr } = await supabase.rpc("enqueue_job", {
+    p_kind: kind,
+    p_params: params,
+    p_dedupe_key: dedupe,
+    p_priority: priority,
+  });
+  if (enqErr) {
+    await supabase
+      .from("crawl_runs")
+      .update({ status: "error", error: `enqueue: ${enqErr.message}`.slice(0, 1000) })
+      .eq("id", run.id);
+    return NextResponse.json({ error: enqErr.message }, { status: 500 });
+  }
+
+  // 4) Wake a worker now for low latency. This is best-effort: the job is already
+  //    queued, and the worker workflow's scheduled backstop will pick it up even
+  //    if this dispatch fails, so a failure here is non-fatal.
   const repo = process.env.GH_REPO;
-  const workflow =
-    kind === "watch"
-      ? process.env.GH_WATCH_WORKFLOW || "watch.yml"
-      : kind === "reporter"
-        ? process.env.GH_REPORTER_WORKFLOW || "reporter.yml"
-        : isSquad
-          ? process.env.GH_SQUADS_WORKFLOW || "squads.yml"
-          : process.env.GH_WORKFLOW || "crawl.yml";
+  const workflow = process.env.GH_WORKER_WORKFLOW || "worker.yml";
   const ref = process.env.GH_REF || "main";
   const token = process.env.GH_DISPATCH_TOKEN;
-
-  if (!repo || !token) {
-    await supabase
-      .from("crawl_runs")
-      .update({ status: "error", error: "Server missing GH_REPO / GH_DISPATCH_TOKEN" })
-      .eq("id", run.id);
-    return NextResponse.json(
-      { error: "Server not configured for dispatch" },
-      { status: 500 },
-    );
-  }
-
-  const inputs: Record<string, string> = { run_id: String(run.id) };
-  if (kind === "reporter") {
-    inputs.match_id = target;
-    // Optional override: pin a specific A Bola page when discovery picked the
-    // wrong one (e.g. a club that played twice in the date window).
-    const abolaUrl = String(body.abolaUrl ?? "").trim();
-    if (abolaUrl) inputs.abola_url = abolaUrl;
-  }
-  else if (kind === "match" || kind === "watch") inputs.match = target;
-  else if (kind === "backfill") {
-    // target is the competition slug or landing-page URL; crawl every
-    // not-yet-complete round of that league.
-    inputs.competition = target;
-    inputs.backfill = "true";
-    if (body.force) inputs.force = "true";
-  } else if (isSquad) {
-    // Squad syncs (squads.yml -> roster_sync.py).
-    //  teams:     fast sync of a whole competition (target = comp slug/URL)
-    //  comp_full: full sync incl. player detail pages (target = comp slug/URL)
-    //  roster:    one team's roster (target = comp; body.team = team id)
-    //  players:   enrich one player (target = player id)
-    if (kind === "players") inputs.player = target;
-    else {
-      inputs.competition = body.competition || target;
-      if (kind === "comp_full") inputs.full = "true";
-      // comp_players: refresh Transfermarkt positions over existing DB rosters.
-      if (kind === "comp_players") inputs.players_only = "true";
-      if (kind === "roster" && body.team) inputs.team = body.team;
-      if (body.force) inputs.force = "true";
-    }
-  } else inputs.jornada = target;
-
-  const ghRes = await fetch(
-    `https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Content-Type": "application/json",
+  if (repo && token) {
+    await fetch(
+      `https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ref }),
       },
-      body: JSON.stringify({ ref, inputs }),
-    },
-  );
-
-  if (!ghRes.ok) {
-    const text = await ghRes.text();
-    await supabase
-      .from("crawl_runs")
-      .update({ status: "error", error: `dispatch ${ghRes.status}: ${text}`.slice(0, 1000) })
-      .eq("id", run.id);
-    return NextResponse.json(
-      { error: `GitHub dispatch failed (${ghRes.status})` },
-      { status: 502 },
-    );
+    ).catch(() => {/* backstop cron will start a worker */});
   }
 
-  return NextResponse.json({ run_id: run.id });
+  return NextResponse.json({ run_id: run.id, job_id: jobId });
 }
