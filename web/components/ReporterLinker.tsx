@@ -113,6 +113,16 @@ export default function ReporterLinker({
     call("reporter_unlink", { p_match_id: matchId, p_player_id: player.player_id });
   }
 
+  // Crown a player the match's MVP (clearing any prior MVP across both teams),
+  // or pass makeMvp=false to clear it. Both rows are frozen (reporter_manual)
+  // server-side so a re-sync keeps the choice -- see db/migration_set_mvp.sql.
+  function setMvp(player: Player, makeMvp: boolean) {
+    call("reporter_set_mvp", {
+      p_match_id: matchId,
+      p_player_id: makeMvp ? player.player_id : null,
+    });
+  }
+
   function section(team: Team, ratings: Rating[]) {
     const roster = players.filter((p) => p.team_id === team.id).sort(order);
     // An entry is a leftover unless the player it's linked to (this session, or
@@ -152,10 +162,7 @@ export default function ReporterLinker({
               <span className="score" style={{ width: 24, textAlign: "center" }}>
                 {p.reporter_linked ? p.reporter_score ?? "–" : ""}
               </span>
-              <span className="pname">
-                {p.player_name}
-                {p.reporter_is_mvp && <span className="badge">MVP</span>}
-              </span>
+              <span className="pname">{p.player_name}</span>
               <span className={`st ${st[0]}`}>{st[1]}</span>
               {!p.reporter_linked && leftovers.length > 0 && (
                 <select
@@ -188,6 +195,14 @@ export default function ReporterLinker({
                   </option>
                 ))}
               </select>
+              <button
+                className={`btn secondary mvpbtn${p.reporter_is_mvp ? " on" : ""}`}
+                disabled={busy}
+                title={p.reporter_is_mvp ? "Clear MVP" : "Set as MVP"}
+                onClick={() => setMvp(p, !p.reporter_is_mvp)}
+              >
+                {p.reporter_is_mvp ? "★ MVP" : "☆ MVP"}
+              </button>
               {p.reporter_linked && (
                 <button className="btn secondary" disabled={busy} onClick={() => unlink(p)}>
                   unlink

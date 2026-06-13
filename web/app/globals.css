@@ -83,6 +83,8 @@ tr:hover td { background: var(--panel-2); }
 .btn:hover { filter: brightness(1.08); }
 .btn:disabled { opacity: .55; cursor: default; }
 .btn.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+.mvpbtn { padding: 4px 10px; font-size: 12px; }
+.mvpbtn.on { color: var(--yellow); border-color: var(--yellow); font-weight: 700; }
 
 input, select {
   background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
