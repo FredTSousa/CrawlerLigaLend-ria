@@ -43,8 +43,12 @@ HEADERS = {
     "Accept-Language": "pt-PT,pt;q=0.9,en;q=0.8",
 }
 
-# Allow same-day or up to a few days after the match for the article to appear.
-MAX_DATE_LAG_DAYS = 4
+# Allow same-day or the next couple of days for the article to appear. Kept
+# tight (2) on purpose: a club's NEXT game is at least ~3 days off (a midweek
+# cup/Europe game plus the weekend league game), so a wider window would let a
+# later game's "as notas do <team>" page -- which names only that one team, so
+# its date is the only thing tying it to a match -- be mistaken for this game's.
+MAX_DATE_LAG_DAYS = 2
 
 
 # ----------------------------------------------------------------------------
@@ -364,84 +368,37 @@ def walk_team_feed(team: str, game_date: date):
             break
 
 
-def _page_team_refs(soup) -> set[str]:
-    """Distinctive tokens of every team an A Bola article is TAGGED with -- read
-    from its team autolinks / team-page links (/futebol/<id>) and the header team
-    chips. This is how a single-team 'as notas do X' page is tied to the RIGHT
-    match when the club plays twice inside the date window: only the page tagged
-    with our opponent is ours. Robust to the related-news sidebar, which names
-    other teams in prose but adds them as neither a tag, a link, nor a chip -- so
-    a plain full-text scan would false-match (the Qarabag notas page mentions
-    'Santa Clara' only in its sidebar), while this does not."""
-    refs: set[str] = set()
-    def add(text):
-        refs.update(_team_tokens(text))
-    for a in soup.find_all("a", attrs={"data-resource-type": "team"}):
-        add(a.get_text(strip=True))
-    for a in soup.find_all("a", href=True):
-        path = re.sub(r"^https?://(?:www\.)?abola\.pt", "", a["href"]).split("?")[0]
-        if _TEAM_PAGE_RE.match(path):
-            add(a.get_text(strip=True))
-    # Header team "chips" (skewed pills). A Bola tags both clubs of the match here
-    # without the fixed FC Porto/Sporting/Seleção nav links, so for a non-big-three
-    # opponent this carries exactly {home, away}; player chips simply don't overlap
-    # a team's tokens.
-    for a in soup.find_all("a", class_=True):
-        if any("skew" in c for c in a["class"]):
-            add(a.get_text(strip=True))
-    return refs
-
-
-def _mentions_opponent(soup, opponent: str) -> bool:
-    """True if the article is tagged with `opponent` (or carries no team tags at
-    all, so there's nothing to judge by -- we don't reject on absence of tags)."""
-    refs = _page_team_refs(soup)
-    return not refs or bool(_team_tokens(opponent) & refs)
-
-
-def _has_team_ratings(url: str, team: str, *, default_team: str | None = None,
-                      opponent: str | None = None) -> bool:
+def _has_team_ratings(url: str, team: str, *, default_team: str | None = None) -> bool:
     """True if `url` parses to a full ratings list for `team` (>= a near-XI). The
     verification that separates a real notas/destaques page from a passing mention
     -- and that stops a generic token (e.g. 'casa' in '...chaves-de-casa...') from
-    accepting an unrelated team's page. When `opponent` is given, the page must
-    also be tagged with it, so a later same-team game's notas page (within the
-    date window) isn't mistaken for this match's."""
+    accepting an unrelated team's page."""
     try:
-        html = fetch(url)
-        page = parse_page(html, default_team=default_team)
+        page = parse_page(fetch(url), default_team=default_team)
     except Exception:  # noqa: BLE001
         return False
-    if len(_pick_team(page["teams"], team)) < MIN_FEED_RATINGS:
-        return False
-    return opponent is None or _mentions_opponent(BeautifulSoup(html, "lxml"), opponent)
+    return len(_pick_team(page["teams"], team)) >= MIN_FEED_RATINGS
 
 
-def _team_ratings_page(team: str, game_date: date,
-                       opponent: str | None = None) -> str | None:
+def _team_ratings_page(team: str, game_date: date) -> str | None:
     """Open in-window feed candidates and return the first that parses to a full
-    team-ratings list for `team` (a real notas/destaques page, not a mention) and
-    -- when given -- is tagged with `opponent`, so a later same-team game's notas
-    page isn't returned for this match."""
+    team-ratings list for `team` (a real notas/destaques page, not a mention)."""
     for u in walk_team_feed(team, game_date):
-        if _has_team_ratings(u, team, default_team=team, opponent=opponent):
+        if _has_team_ratings(u, team, default_team=team):
             return u
     return None
 
 
-def find_team_notas(team: str, game_date: date,
-                    opponent: str | None = None) -> str | None:
+def find_team_notas(team: str, game_date: date) -> str | None:
     """Find the 'as notas do <team>' page for a match on/just after game_date.
     A Bola's name for a team may differ from zerozero's ('AFS' -> 'Aves SAD'),
     so we SEARCH with the team's aliases too -- not just filter results by them
     (the bug that hid AFS: the query asked for 'AFS', which A Bola doesn't index,
     while the page is 'as notas do Aves SAD').
 
-    `opponent`, when given, disambiguates a club that plays twice inside the date
-    window: a single-team notas page names only `team`, so its date alone can't
-    tell the two games apart (Benfica's Champions League notas fall in the window
-    of its earlier league game). We therefore require the page to be tagged with
-    `opponent` before accepting it."""
+    A single-team notas page names only `team`, so its DATE is all that ties it to
+    a match -- which is why MAX_DATE_LAG_DAYS is kept tight (2): a wider window
+    could reach the team's NEXT game and return that game's notas instead."""
     tokens = _team_tokens(team)
     for term in _search_terms(team):
         # A Bola titles the ratings page "as notas do X" or "os destaques do X".
@@ -461,14 +418,11 @@ def find_team_notas(team: str, game_date: date,
             # '...chaves-de-casa...as-notas-do-benfica'), so confirm the page
             # really carries this team's ratings before trusting it.
             for _d, u in cands:
-                if _has_team_ratings(u, team, opponent=opponent):
+                if _has_team_ratings(u, team):
                     return u
     # Fallback: a creatively-titled ratings page (search can't see it) -- page the
-    # team's own A Bola feed back to the match window and open-verify. This is also
-    # the path that recovers the RIGHT page after the opponent check above rejects
-    # a later same-team game's notas (e.g. a Champions League page whose title, not
-    # the league game's, is the one search surfaces inside the window).
-    return _team_ratings_page(team, game_date, opponent=opponent)
+    # team's own A Bola feed back to the match window and open-verify.
+    return _team_ratings_page(team, game_date)
 
 
 def find_cronica(home: str, away: str, game_date: date) -> str | None:
@@ -1132,10 +1086,10 @@ def scrape_match(match: dict, *, single_url: str | None = None,
         # Two separate "as notas" pages; MVP ('melhor' beats 'figura') spans
         # both, so combine their teams + boxes and resolve once.
         if home_url is None and single_url is None:
-            home_url = find_team_notas(home, gdate, opponent=away)
+            home_url = find_team_notas(home, gdate)
             time.sleep(delay)
         if away_url is None and single_url is None:
-            away_url = find_team_notas(away, gdate, opponent=home)
+            away_url = find_team_notas(away, gdate)
         teams, boxes = _parse_team_pages(
             [(home_url, home), (away_url, away)], out["urls_used"], delay)
         apply_mvp(teams, boxes)
@@ -1166,10 +1120,10 @@ def scrape_match(match: dict, *, single_url: str | None = None,
                 and (not out["home_team_ratings"] or not out["away_team_ratings"]):
             pairs = []
             if not out["home_team_ratings"]:
-                pairs.append((find_team_notas(home, gdate, opponent=away), home))
+                pairs.append((find_team_notas(home, gdate), home))
                 time.sleep(delay)
             if not out["away_team_ratings"]:
-                pairs.append((find_team_notas(away, gdate, opponent=home), away))
+                pairs.append((find_team_notas(away, gdate), away))
             teams2, boxes2 = _parse_team_pages(pairs, out["urls_used"], delay)
             if teams2:
                 apply_mvp(teams2, boxes2)
