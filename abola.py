@@ -799,12 +799,49 @@ def _mvp_narrative(node, title: str) -> str | None:
     return None
 
 
+# A Bola's newer "as notas" layout drops the "O melhor em campo" label entirely:
+# the standout player sits alone in a coloured highlight card (a yellow CSS
+# linear-gradient box) whose bold line is "(score) Name" with the narrative
+# beside it. There's no label text to match and the card is a <div>/<span> the
+# ratings walk (h1-h6/<p> only) never visits, so without this the highlighted
+# player -- usually the match's best (e.g. "(7) Pedro Gonçalves" in "...as notas
+# do Sporting") -- is dropped completely. Find the card by its gradient styling.
+_GRADIENT_RE = re.compile(r"linear-gradient", re.I)
+_BOLD_CLASS_RE = re.compile(r"font-bold", re.I)
+
+
+def _highlight_cards(soup) -> list[dict]:
+    """Standout-player highlight cards (no 'melhor em campo' label) -> figura
+    boxes. A card is a gradient-backed box whose bold line reads '(score) Name';
+    the rest of the box text is the narrative. Same-gradient promo cards (related
+    news, headed '// Nacional // …') are skipped -- their bold line isn't a
+    '(score) Name' rating, so the leading-parenthesis match fails."""
+    out = []
+    for box in soup.find_all(True, class_=_GRADIENT_RE):
+        bold = box.find(["strong", "b"]) or box.find("span", class_=_BOLD_CLASS_RE)
+        if not bold:
+            continue
+        head = bold.get_text(" ", strip=True)
+        m = re.match(r"\(\s*(" + _RATING + r")\s*\)\s*(.+)", head)
+        if not m:
+            continue
+        name = _player_name(m.group(2))
+        if not name:
+            continue
+        full = box.get_text(" ", strip=True)
+        desc = full.split(head, 1)[1].strip(" :—–-") if head in full else ""
+        out.append({"kind": "figura", "team": None, "name": name,
+                    "score": _score(m.group(1)), "description": desc or None})
+    return out
+
+
 def _mvp_boxes(soup) -> list[dict]:
     """Find 'O melhor em campo' / 'A figura' boxes -> name, score, team, text.
-    Three layouts: label-first ("O melhor em campo: Name (7)"), label-last
-    ("Prestianni (7) — o melhor em campo"), and the visual "square" where the
-    label and the player line ("7 - Francisco Trincão — …") sit in separate
-    spans of one box."""
+    Three labelled layouts: label-first ("O melhor em campo: Name (7)"),
+    label-last ("Prestianni (7) — o melhor em campo"), and the visual "square"
+    where the label and the player line ("7 - Francisco Trincão — …") sit in
+    separate spans of one box -- plus the unlabelled gradient highlight card
+    (_highlight_cards), A Bola's newer way of flagging the standout player."""
     boxes, seen = [], set()
     for node in soup.find_all(string=re.compile(r"melhor em campo|a figura", re.I)):
         lbl = re.search(r"(?:o\s+)?melhor em campo|a figura", node, re.I)
@@ -844,6 +881,13 @@ def _mvp_boxes(soup) -> list[dict]:
             "kind": "melhor" if (lbl and "melhor" in lbl.group(0).lower()) else "figura",
             "team": team, "name": name, "score": score, "description": narrative,
         })
+    # Unlabelled gradient highlight cards (newer layout). Deduped against the
+    # labelled boxes above so a page carrying both never lists the player twice.
+    for card in _highlight_cards(soup):
+        key = _norm(card["name"])
+        if key not in seen:
+            seen.add(key)
+            boxes.append(card)
     return boxes
 
 
