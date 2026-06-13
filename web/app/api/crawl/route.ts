@@ -20,6 +20,7 @@ export async function POST(request: Request) {
     full?: boolean;
     competition?: string;
     team?: string;
+    abolaUrl?: string;
   };
   try {
     body = await request.json();
@@ -95,7 +96,13 @@ export async function POST(request: Request) {
   }
 
   const inputs: Record<string, string> = { run_id: String(run.id) };
-  if (kind === "reporter") inputs.match_id = target;
+  if (kind === "reporter") {
+    inputs.match_id = target;
+    // Optional override: pin a specific A Bola page when discovery picked the
+    // wrong one (e.g. a club that played twice in the date window).
+    const abolaUrl = String(body.abolaUrl ?? "").trim();
+    if (abolaUrl) inputs.abola_url = abolaUrl;
+  }
   else if (kind === "match" || kind === "watch") inputs.match = target;
   else if (kind === "backfill") {
     // target is the competition slug or landing-page URL; crawl every

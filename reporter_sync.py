@@ -34,6 +34,25 @@ def _is_big_three(home: str, away: str) -> bool:
     return any(k in blob for k in BIG_THREE)
 
 
+def _route_abola_url(url: str, home: str, away: str) -> dict:
+    """Map an explicit A Bola page (a UI override for when discovery picked the
+    wrong one) to abola.scrape_match kwargs: a combined crónica that carries BOTH
+    teams' ratings -> single_url; a single-team 'as notas do X' page -> home_url
+    or away_url for whichever side it actually carries. This auto-routing keeps
+    the override to one paste-box -- no need to ask which team the page is for."""
+    try:
+        teams = abola.parse_page(abola.fetch(url))["teams"]
+    except Exception:  # noqa: BLE001
+        return {"single_url": url}
+    has_home = len(abola._pick_team(teams, home)) >= abola.MIN_FEED_RATINGS
+    has_away = len(abola._pick_team(teams, away)) >= abola.MIN_FEED_RATINGS
+    if has_home and not has_away:
+        return {"home_url": url}
+    if has_away and not has_home:
+        return {"away_url": url}
+    return {"single_url": url}
+
+
 def _load_team_aliases(sb) -> None:
     """Populate abola.TEAM_ALIAS_NAMES from the team_aliases table, so A Bola is
     searched with the names it actually uses (e.g. 'AFS' -> 'Aves SAD'). Best
@@ -243,7 +262,7 @@ def _apply_goal_mapping(data: dict, mapping: dict | None) -> None:
 
 
 def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
-        delay: float) -> dict:
+        delay: float, abola_url: str | None = None) -> dict:
     sync._load_dotenv()
     sb = sync.Supabase()
     _load_team_aliases(sb)
@@ -270,8 +289,14 @@ def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
                  "game_date": m["played_on"],
                  "is_big_three_match": _is_big_three(home, away)}
         goal_url, goal_id = _cached_goal_link(sb, match_id)
+        # A pasted A Bola URL (from the match page's override field) pins the page
+        # so discovery is bypassed -- the fix for a wrong auto-matched page that
+        # search/feed can no longer reach. Only A Bola pages route this way; a Goal
+        # competition ignores it.
+        override = (_route_abola_url(abola_url, home, away)
+                    if abola_url and provider.source == "abola" else {})
         data = provider.scrape_match(match, delay=delay,
-                                     goal_url=goal_url, goal_id=goal_id)
+                                     goal_url=goal_url, goal_id=goal_id, **override)
         if provider.source == "goal":
             _apply_goal_mapping(data, cfg["rating_mapping"])
         linked, total = _store_and_link(sb, match_id, m["home_team_id"],
@@ -390,6 +415,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--match-id", help="zerozero match id (or env IN_MATCH_ID)")
     ap.add_argument("--run-id", type=int, help="crawl_runs row to update (or IN_RUN_ID)")
+    ap.add_argument("--abola-url", help="pin the A Bola page, skip search (or IN_ABOLA_URL)")
     ap.add_argument("--delay", type=float, default=1.5)
     args = ap.parse_args()
 
@@ -402,7 +428,7 @@ def main() -> int:
     run_id = args.run_id or (int(rid_env) if rid_env else None)
 
     run(match_id, run_id=run_id, github_run_id=os.environ.get("GITHUB_RUN_ID"),
-        delay=args.delay)
+        delay=args.delay, abola_url=args.abola_url or sync._env("IN_ABOLA_URL"))
     return 0
 
 

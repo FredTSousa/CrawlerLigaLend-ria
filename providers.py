@@ -57,8 +57,15 @@ def _with_raw_equal_score(data: dict) -> dict:
 class ABolaRatingProvider(RatingProvider):
     source = "abola"
 
-    def scrape_match(self, match: dict, *, delay: float = 1.0, **kw) -> dict:
-        return _with_raw_equal_score(abola.scrape_match(match, delay=delay))
+    def scrape_match(self, match: dict, *, delay: float = 1.0,
+                     home_url: str | None = None, away_url: str | None = None,
+                     single_url: str | None = None, **kw) -> dict:
+        # home_url/away_url/single_url let a caller pin the exact A Bola page(s)
+        # (a UI override when discovery picked the wrong one); an unset side is
+        # still discovered normally inside abola.scrape_match.
+        return _with_raw_equal_score(abola.scrape_match(
+            match, delay=delay, home_url=home_url, away_url=away_url,
+            single_url=single_url))
 
     def scrape_matches(self, matches: list[dict], *, delay: float = 1.0,
                        **kw) -> list[dict]:

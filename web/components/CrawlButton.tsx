@@ -15,6 +15,10 @@ export default function CrawlButton({ kind, target, label }: Props) {
   const router = useRouter();
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Reporter only: pin a specific A Bola page when discovery matched the wrong
+  // one (e.g. a club that played twice inside the date window).
+  const [showUrl, setShowUrl] = useState(false);
+  const [abolaUrl, setAbolaUrl] = useState("");
 
   async function trigger() {
     setBusy(true);
@@ -23,7 +27,11 @@ export default function CrawlButton({ kind, target, label }: Props) {
       const res = await fetch("/api/crawl", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind, target }),
+        body: JSON.stringify({
+          kind,
+          target,
+          abolaUrl: abolaUrl.trim() || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to trigger");
@@ -90,12 +98,33 @@ export default function CrawlButton({ kind, target, label }: Props) {
   }
 
   return (
-    <span className="row">
+    <span className="row" style={{ flexWrap: "wrap", gap: 6 }}>
       <button className="btn" onClick={trigger} disabled={busy}>
         {busy ? "Crawling…" : text}
       </button>
       {status && (
         <span className={`pill ${pillClass(status)}`}>{status}</span>
+      )}
+      {kind === "reporter" && (
+        <button
+          type="button"
+          className="btn secondary"
+          onClick={() => setShowUrl((v) => !v)}
+          disabled={busy}
+          title="Pin a specific A Bola page if the wrong one was matched"
+        >
+          {showUrl ? "Hide override" : "Override page"}
+        </button>
+      )}
+      {kind === "reporter" && showUrl && (
+        <input
+          type="url"
+          placeholder="https://www.abola.pt/noticias/…"
+          value={abolaUrl}
+          onChange={(e) => setAbolaUrl(e.target.value)}
+          disabled={busy}
+          style={{ flex: 1, minWidth: 240, padding: "4px 8px" }}
+        />
       )}
     </span>
   );

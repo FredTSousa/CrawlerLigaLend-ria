@@ -13,6 +13,10 @@ on:
         description: "crawl_runs id to update (set by the website)"
         required: false
         type: string
+      abola_url:
+        description: "pin a specific A Bola page (override when discovery picked wrong)"
+        required: false
+        type: string
 
 concurrency:
   group: reporter-${{ github.event.inputs.match_id }}
@@ -41,4 +45,5 @@ jobs:
           JOB_KIND: Reporter ratings
           IN_MATCH_ID: ${{ github.event.inputs.match_id }}
           IN_RUN_ID: ${{ github.event.inputs.run_id }}
+          IN_ABOLA_URL: ${{ github.event.inputs.abola_url }}
         run: python reporter_sync.py
