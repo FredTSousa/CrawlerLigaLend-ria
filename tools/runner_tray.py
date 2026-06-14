@@ -309,33 +309,43 @@ def _state_label() -> str:
 
     js = _job_status()
     age = (time.time() - float(js.get("updated", 0))) if js else None
+    worker_alive = _proc_running(WORKER)
 
-    if _job_running():
-        # A job is executing. If the heartbeat is live, show exactly what stage
-        # it's on + progress + how long since the last update (so you can see it
-        # moving, and spot a stall). Otherwise fall back to the generic label.
-        if js and js.get("phase") == "running":
-            return (f"{js.get('job', 'Job')}: {js.get('stage', '…')}"
-                    f"{_progress(js)} · {_fmt_age(age)}")
-        return "Working (job running)"
+    # A task is genuinely executing only when a job heartbeat reports it running
+    # AND the worker process is alive. The queue worker (worker.py) stays up
+    # idle-polling the jobs table between tasks, so a live worker process alone is
+    # NOT a running task — show exactly what stage it's on only when one reports.
+    if worker_alive and js and js.get("phase") == "running":
+        return (f"{js.get('job', 'Job')}: {js.get('stage', '…')}"
+                f"{_progress(js)} · {_fmt_age(age)}")
 
-    # No job running: report the outcome of the last one so a failure is visible.
+    # No task is running. Surface the last job's outcome (so a failure stays
+    # visible), then fall back to idle.
     if js and js.get("phase") == "done":
         res = js.get("result", "done")
         msg = js.get("message") or ""
         when = _fmt_age(age) if age is not None else ""
         tail = f" — {msg}" if msg else ""
         return f"Last {js.get('job', 'job')}: {res}{tail} ({when})"
-    if js and js.get("phase") == "running":
+    if js and js.get("phase") == "running" and not worker_alive:
         # Heartbeat left mid-run but no worker alive -> the job was interrupted.
         return (f"Last {js.get('job', 'job')}: interrupted at "
                 f"{js.get('stage', '?')} ({_fmt_age(age)})")
+    # A worker process that's alive but not reporting a running job is just
+    # draining/polling the queue — idle, not "Working".
+    if worker_alive:
+        return "Online (worker idle)"
     return "Online (idle)"
 
 
 def _active() -> bool:
-    """A job or a live watch is in progress (icon goes blue)."""
-    return _job_running() or bool(_watch_matches())
+    """A real task is in progress (icon goes blue): an actively-reporting job or
+    a live watch. An idle queue worker process polling the jobs table is NOT
+    active, so the icon stays green (online) rather than blue (working)."""
+    if _watch_matches():
+        return True
+    js = _job_status()
+    return bool(_proc_running(WORKER) and js and js.get("phase") == "running")
 
 
 def _status_text(_=None) -> str:
