@@ -86,6 +86,7 @@ create table if not exists public.match_players (
     penalties_missed    int  not null default 0,
     penalties_defended  int  not null default 0,
     played_under_20m    boolean not null default false,
+    did_not_play        boolean not null default false,
     updated_at          timestamptz not null default now(),
     primary key (match_id, player_id)
 );
