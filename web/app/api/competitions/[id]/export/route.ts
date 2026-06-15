@@ -102,7 +102,7 @@ export async function GET(
       supabase
         .from("match_player_details")
         .select(
-          "match_id, round, player_id, player_name, team_id, team_name, order_index, shirt_number, is_captain, is_starter, entered_min, left_min, goals, assists, yellow_cards, red_card, own_goals, penalties_scored, penalties_missed, penalties_defended, played_under_20m, reporter_score, reporter_is_mvp, reporter_linked, reporter_manual",
+          "match_id, round, player_id, player_name, team_id, team_name, order_index, shirt_number, is_captain, is_starter, entered_min, left_min, goals, assists, yellow_cards, red_card, own_goals, penalties_scored, penalties_missed, penalties_defended, played_under_20m, did_not_play, reporter_score, reporter_is_mvp, reporter_linked, reporter_manual",
         )
         .in("match_id", chunk25)
         .order("match_id", { ascending: true })
@@ -184,6 +184,7 @@ export async function GET(
       penalties_missed: s.penalties_missed,
       penalties_defended: s.penalties_defended,
       played_under_20m: s.played_under_20m,
+      did_not_play: s.did_not_play,
       reporter_score: s.reporter_score,
       reporter_is_mvp: s.reporter_is_mvp,
       reporter_linked: s.reporter_linked,
