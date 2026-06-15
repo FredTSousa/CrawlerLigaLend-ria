@@ -247,8 +247,12 @@ class Supabase:
         self.update("matches", f"id=eq.{match_id}", {"watch": on})
 
     def unscored_finished_matches(self, competition_id: str) -> list[str]:
-        """Match IDs in this competition that are final but have at least one
-        player with reporter_linked=false (reporter scores not yet fetched)."""
+        """Match IDs in this competition that are final, have at least one
+        player with reporter_linked=false, and have never had a reporter fetch
+        attempted (no matches_reporter_link row). This last condition prevents
+        the gap-fill from re-fetching matches that run_round() just processed:
+        unlinked players after an attempted fetch are manual-linking gaps, not
+        missing fetches."""
         resp = self._rest(
             "GET",
             f"match_players?select=match_id,matches!inner(competition_id,status)"
@@ -259,13 +263,20 @@ class Supabase:
         )
         rows = resp.json()
         seen: set[str] = set()
-        out: list[str] = []
+        candidates: list[str] = []
         for r in rows:
             mid = r.get("match_id")
             if mid and mid not in seen:
                 seen.add(mid)
-                out.append(mid)
-        return out
+                candidates.append(mid)
+        if not candidates:
+            return []
+        inlist = ",".join(candidates)
+        already = {r["match_id"] for r in self._rest(
+            "GET",
+            f"matches_reporter_link?match_id=in.({inlist})&select=match_id",
+        ).json()}
+        return [mid for mid in candidates if mid not in already]
 
     def active_competitions(self) -> list[dict]:
         """Competitions the scheduled sweep should consider (crawl_active=true).
