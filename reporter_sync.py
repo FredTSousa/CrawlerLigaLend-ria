@@ -171,6 +171,7 @@ def _link_scores(sb, match_id, team_id, ratings):
     roster = sb._rest(
         "GET",
         f"match_player_details?match_id=eq.{match_id}&team_id=eq.{team_id}"
+        "&did_not_play=eq.false"
         "&select=player_id,player_name,reporter_manual",
     ).json()
     zz = [(p["player_id"], p["player_name"]) for p in roster]

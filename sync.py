@@ -254,7 +254,8 @@ class Supabase:
             f"match_players?select=match_id,matches!inner(competition_id,status)"
             f"&matches.competition_id=eq.{competition_id}"
             f"&matches.status=eq.final"
-            f"&reporter_linked=eq.false",
+            f"&reporter_linked=eq.false"
+            f"&did_not_play=eq.false",
         )
         rows = resp.json()
         seen: set[str] = set()

@@ -214,7 +214,13 @@ select
     mp.penalties_scored,
     mp.penalties_missed,
     mp.penalties_defended,
-    mp.played_under_20m
+    mp.played_under_20m,
+    mp.did_not_play,
+    mp.reporter_score,
+    mp.reporter_raw_score,
+    mp.reporter_is_mvp,
+    mp.reporter_linked,
+    mp.reporter_manual
 from public.match_players mp
 join public.matches m on m.id = mp.match_id
 join public.players p on p.id = mp.player_id
