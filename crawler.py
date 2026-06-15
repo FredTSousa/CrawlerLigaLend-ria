@@ -747,8 +747,6 @@ def parse_lineups(html: str, home_team: dict, away_team: dict) -> list[dict]:
             p = parse_player_block(chunk)
             if not p:
                 continue
-            if p["inactive"]:
-                continue  # greyed-out: did not play
             players.append({
                 "name": p["name"],
                 "id": p["id"],
@@ -756,6 +754,7 @@ def parse_lineups(html: str, home_team: dict, away_team: dict) -> list[dict]:
                 "number": p["number"],
                 "captain": p["captain"],
                 "starter": is_starter,
+                "did_not_play": p["inactive"],
                 "minutes": {"entered": p["entered_min"], "left": p["left_min"]},
                 "stats": p["stats"],
                 "_unknown_events": p["unknown_events"],

@@ -427,6 +427,7 @@ def _match_player_rows(game: dict) -> list[dict]:
             "penalties_missed": s["penalties_missed"],
             "penalties_defended": s["penalties_defended"],
             "played_under_20m": s["played_under_20m"],
+            "did_not_play": p.get("did_not_play", False),
             "updated_at": now,
         })
     return rows
