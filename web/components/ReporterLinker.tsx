@@ -21,6 +21,7 @@ type Player = {
   shirt_number: number | null;
   is_starter: boolean;
   order_index: number | null;
+  did_not_play: boolean;
   reporter_score: number | null;
   reporter_is_mvp: boolean;
   reporter_linked: boolean;
@@ -124,7 +125,7 @@ export default function ReporterLinker({
   }
 
   function section(team: Team, ratings: Rating[]) {
-    const roster = players.filter((p) => p.team_id === team.id).sort(order);
+    const roster = players.filter((p) => p.team_id === team.id && !p.did_not_play).sort(order);
     // An entry is a leftover unless the player it's linked to (this session, or
     // from the last sync) is CURRENTLY linked -- so unlinking a player frees its
     // A Bola entry back into the dropdown.

@@ -18,6 +18,7 @@ type Player = {
   penalties_scored: number;
   penalties_missed: number;
   penalties_defended: number;
+  did_not_play: boolean;
   reporter_score: number | null;
   reporter_is_mvp: boolean;
   reporter_linked: boolean;
@@ -69,6 +70,7 @@ function StatIcons({ p }: { p: Player }) {
 // a real gap (⚠) rather than "not fetched yet".
 function RepScore({ p, show }: { p: Player; show: boolean }) {
   if (!show) return null;
+  if (p.did_not_play) return null;
   if (!p.reporter_linked) {
     return (
       <span className="repchip miss" title="No reporter rating linked">

@@ -47,7 +47,7 @@ export default async function MatchPage({
   const sourceLabel = isGoal ? "Goal" : "A Bola";
 
   const coverage = (teamId: string) => {
-    const t = ps.filter((p) => p.team_id === teamId);
+    const t = ps.filter((p) => p.team_id === teamId && !p.did_not_play);
     return { linked: t.filter((p) => p.reporter_linked).length, total: t.length };
   };
   const homeCov = coverage(m?.home_team_id);
