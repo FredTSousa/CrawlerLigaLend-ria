@@ -183,9 +183,15 @@ class Supabase:
                   kinds: list[str] | None = None) -> dict | None:
         """Atomically claim the next pending job (FOR UPDATE SKIP LOCKED), or
         None if the queue is empty for the requested kinds. kinds=None = any."""
-        return self.rpc("claim_job", {
+        result = self.rpc("claim_job", {
             "p_worker": worker, "p_lease_seconds": lease_seconds,
             "p_kinds": kinds})
+        # PostgREST serializes a composite NULL return as a dict with all-null
+        # fields rather than JSON null, so a plain `if not result` check misses
+        # it. Normalize to None so the worker's idle branch fires correctly.
+        if not result or result.get("id") is None:
+            return None
+        return result
 
     def heartbeat_job(self, job_id: int, worker: str, *,
                       lease_seconds: int = 120) -> bool:
@@ -291,13 +297,12 @@ class Supabase:
             return resp.json()
 
     def round_status(self, competition_id: str, round_no: int) -> list[dict]:
-        """Status + kickoff_at for every game in one round of a competition, so
-        the scheduled sweep can decide whether the round needs a (re)crawl
-        without scraping zerozero."""
+        """Status + kickoff_at + slug for every game in one round, so the sweep
+        can decide whether to crawl and which games to skip."""
         resp = self._rest(
             "GET",
             f"matches?competition_id=eq.{competition_id}&round=eq.{round_no}"
-            "&select=status,kickoff_at")
+            "&select=status,kickoff_at,slug")
         return resp.json()
 
     def set_crawl_active(self, competition_id: str, active: bool) -> None:
@@ -904,12 +909,36 @@ def _scheduled_crawl_league(sb: Supabase, comp: dict, round_no: int, *,
     run_id = _begin_run(sb, run_id=None, trigger="schedule", kind="round",
                         target=str(round_no), github_run_id=github_run_id)
     try:
-        data = crawler.crawl_round(jornada=round_no, competition=comp, delay=delay)
-        games = data["games"]
-        write_games(sb, games, competition=comp, round_no=data["round"],
-                    scraped_at=data.get("scraped_at"))
+        session = crawler.new_session()
+        fixture = crawler.get_fixture(comp, round_no, session=session, delay=delay)
+
+        # Skip games already final, or future games with a known precise kickoff.
+        db_status = {r["slug"]: r for r in sb.round_status(comp_id, round_no)
+                     } if comp_id else {}
+        now = datetime.now(timezone.utc)
+        needed: list[dict] = []
+        skipped_slugs: list[str] = []
+        for g in fixture["games"]:
+            row = db_status.get(g.get("slug", ""))
+            if row:
+                status = row.get("status")
+                ko = _parse_iso(row.get("kickoff_at"))
+                if status == "final" or (status != "live" and ko and ko > now):
+                    skipped_slugs.append(g.get("slug", g["url"]))
+                    continue
+            needed.append(g)
+        if skipped_slugs:
+            print(f"    skipping {len(skipped_slugs)} future game(s) with known "
+                  f"kickoff: {', '.join(skipped_slugs)}", file=sys.stderr)
+
+        scraped_at = datetime.now(timezone.utc).isoformat()
+        games = crawler._crawl_fixture_games(
+            session, {**fixture, "games": needed},
+            progress_label=f"Round {fixture['round']}", delay=delay)
+        write_games(sb, games, competition=comp, round_no=fixture["round"],
+                    scraped_at=scraped_at)
         _finish_run(sb, run_id, status="success", games_count=len(games))
-        print(f"    round {data['round']}: synced {len(games)} game(s). "
+        print(f"    round {fixture['round']}: synced {len(games)} game(s). "
               f"crawl_run #{run_id}", file=sys.stderr)
         # Reporter ratings for any finished game that still lacks them (the
         # gap-fill only touches unscored finished matches, so re-crawls of a

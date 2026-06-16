@@ -44,6 +44,7 @@ set search_path = public, vault
 as $$
 declare
     v_pending int;
+    v_running int;
     v_last    timestamptz;
     v_token   text;
     v_repo    text;
@@ -51,6 +52,15 @@ begin
     select count(*) into v_pending from public.jobs where status = 'pending';
     if v_pending = 0 then
         return;  -- nothing waiting; a running worker will claim future jobs
+    end if;
+
+    -- Active workers drain the queue in a loop; no need to spawn another one
+    -- until they all die or their leases expire (reclaim_jobs handles that).
+    select count(*) into v_running
+      from public.jobs
+     where status = 'running' and lease_expires_at > now();
+    if v_running > 0 then
+        return;
     end if;
 
     select last_worker_dispatch_at into v_last from public.queue_state where id;
