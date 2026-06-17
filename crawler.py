@@ -192,7 +192,8 @@ def fetch(session, url: str, *, retries: int = 3, delay: float = 1.0) -> str:
 
 GAME_LINK_RE = re.compile(r"/jogo/([0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+)/(\d+)")
 TEAM_LINK_RE = re.compile(r'/equipa/([a-z0-9-]+)/(\d+)')
-PLAYER_LINK_RE = re.compile(r'/jogador/([a-z0-9-]+)/(\d+)">([^<]+)</a>')
+PLAYER_LINK_RE = re.compile(r'/jogador/([a-z0-9-]+)(?:/(\d+))?"[^>]*>([^<]+)</a>')
+PLAYER_DATA_ID_RE = re.compile(r'data-player-id="(\d+)"')
 TAG_RE = re.compile(r"<[^>]+>")
 
 
@@ -673,7 +674,13 @@ def parse_player_block(chunk: str) -> dict | None:
     pl = PLAYER_LINK_RE.search(chunk)
     if not pl:
         return None
+    # group(2) is the numeric ID from the URL (may be absent on some profiles)
     player_id = pl.group(2)
+    if not player_id:
+        did_m = PLAYER_DATA_ID_RE.search(chunk)
+        player_id = did_m.group(1) if did_m else None
+    if not player_id:
+        return None
     name = clean_name(pl.group(3))
     captain = name.endswith("(C)")
     if captain:
