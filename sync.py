@@ -479,15 +479,19 @@ def write_games(sb: Supabase, games: list[dict], *,
                   for g in games]
 
     # Status moves forward only (scheduled -> live -> final): a stale crawl
-    # must never revert a finished match back to live/scheduled. Likewise, a
-    # live/single-match crawl carries no competition (competition_id is None) --
-    # preserve the league already on the row so subscription routing survives.
+    # must never revert a finished match back to live/scheduled. Exception:
+    # a round fixture crawl that explicitly marks a game "scheduled" (zerozero's
+    # class="vs" cell — the authoritative "not played yet" signal) is allowed to
+    # correct a previously wrong "final" so future matches aren't stuck final.
+    # Likewise, a live/single-match crawl carries no competition_id — preserve
+    # the league already on the row so subscription routing survives.
     rank = {"scheduled": 0, "live": 1, "final": 2, "postponed": 1}
     existing = sb.match_existing([r["id"] for r in match_rows])
     for r in match_rows:
         prev = existing.get(r["id"]) or {}
         cur = prev.get("status")
-        if cur and rank.get(cur, 0) > rank.get(r["status"], 0):
+        explicit_scheduled = r.get("status") == "scheduled" and round_no is not None
+        if cur and rank.get(cur, 0) > rank.get(r["status"], 0) and not explicit_scheduled:
             r["status"] = cur
         if r.get("competition_id") is None and prev.get("competition_id"):
             r["competition_id"] = prev["competition_id"]
