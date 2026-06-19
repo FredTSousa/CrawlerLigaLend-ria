@@ -824,8 +824,8 @@ def _competition_name(html: str) -> str | None:
 
 
 def _competition_slug(url: str) -> str | None:
-    """The zerozero slug from a competition URL (…/competicao/<slug>[?…])."""
-    m = re.search(r"/competicao/([a-z0-9-]+)", url)
+    """The zerozero slug from a competition URL (…/competicao/<slug> or …/edicao/<slug>/)."""
+    m = re.search(r"/(?:competicao|edicao)/([a-z0-9-]+)", url)
     return m.group(1) if m else None
 
 

@@ -1100,13 +1100,19 @@ def _flag(v: str | None) -> bool:
     return str(v).strip().lower() in ("1", "true", "yes", "on")
 
 
-def _competition_url(arg: str | None) -> str | None:
+def _competition_url(arg: str | None, sb: "Supabase | None" = None) -> str | None:
     """Resolve a competition CLI/env value to a landing-page URL. Accepts a
-    full URL or a bare zerozero slug (e.g. 'liga-portuguesa')."""
+    full URL, a bare zerozero slug (e.g. 'liga-portuguesa'), or a numeric
+    id_edicao (e.g. '176026') which is resolved via the DB to a slug."""
     if not arg:
         return None
     if arg.startswith("http"):
         return arg
+    if arg.isdigit() and sb is not None:
+        # Numeric id_edicao — look up the slug from the competitions table.
+        rows = sb._rest("GET", f"competitions?id=eq.{arg}&select=slug").json()
+        slug = (rows[0].get("slug") if rows else None) or arg
+        return f"{crawler.BASE}/competicao/{slug}"
     return f"{crawler.BASE}/competicao/{arg}"
 
 
@@ -1163,7 +1169,8 @@ def main() -> int:
     if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
         trigger = "schedule"
 
-    competition_url = _competition_url(args.competition or _env("IN_COMPETITION"))
+    competition_url = _competition_url(
+        args.competition or _env("IN_COMPETITION"), Supabase())
     backfill = args.backfill or _flag(_env("IN_BACKFILL"))
     force = args.force or _flag(_env("IN_FORCE"))
 

@@ -647,7 +647,7 @@ def main() -> int:
         run_player(player_id, delay=args.delay)
         return 0
 
-    url = sync._competition_url(competition) or crawler.COMPETITION_URL
+    url = sync._competition_url(competition, sync.Supabase()) or crawler.COMPETITION_URL
     if players_only:
         run_players(competition_url=url, run_id=run_id, trigger=trigger,
                     github_run_id=args.github_run_id, delay=args.delay)
