@@ -297,12 +297,12 @@ class Supabase:
             return resp.json()
 
     def round_status(self, competition_id: str, round_no: int) -> list[dict]:
-        """Status + kickoff_at + slug for every game in one round, so the sweep
+        """Status + kickoff_at + id for every game in one round, so the sweep
         can decide whether to crawl and which games to skip."""
         resp = self._rest(
             "GET",
             f"matches?competition_id=eq.{competition_id}&round=eq.{round_no}"
-            "&select=status,kickoff_at,slug")
+            "&select=status,kickoff_at,id")
         return resp.json()
 
     def set_crawl_active(self, competition_id: str, active: bool) -> None:
@@ -913,13 +913,13 @@ def _scheduled_crawl_league(sb: Supabase, comp: dict, round_no: int, *,
         fixture = crawler.get_fixture(comp, round_no, session=session, delay=delay)
 
         # Skip games already final, or future games with a known precise kickoff.
-        db_status = {r["slug"]: r for r in sb.round_status(comp_id, round_no)
+        db_status = {r["id"]: r for r in sb.round_status(comp_id, round_no)
                      } if comp_id else {}
         now = datetime.now(timezone.utc)
         needed: list[dict] = []
         skipped_slugs: list[str] = []
         for g in fixture["games"]:
-            row = db_status.get(g.get("slug", ""))
+            row = db_status.get(g.get("game_id", ""))
             if row:
                 status = row.get("status")
                 ko = _parse_iso(row.get("kickoff_at"))
