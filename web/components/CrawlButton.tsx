@@ -9,9 +9,10 @@ type Props = {
   // round number, match URL (match/watch), or match id (reporter)
   target: string | number;
   label?: string;
+  competition?: string;
 };
 
-export default function CrawlButton({ kind, target, label }: Props) {
+export default function CrawlButton({ kind, target, label, competition }: Props) {
   const router = useRouter();
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -30,6 +31,7 @@ export default function CrawlButton({ kind, target, label }: Props) {
         body: JSON.stringify({
           kind,
           target,
+          competition: competition || undefined,
           abolaUrl: abolaUrl.trim() || undefined,
         }),
       });
