@@ -70,6 +70,7 @@ KIND_LABEL = {
 PARAM_ENV = {
     "match": "IN_MATCH", "jornada": "IN_JORNADA", "competition": "IN_COMPETITION",
     "force": "IN_FORCE", "match_id": "IN_MATCH_ID", "abola_url": "IN_ABOLA_URL",
+    "goal_url": "IN_GOAL_URL",
     "team": "IN_TEAM", "player": "IN_PLAYER",
     # The website pre-creates a crawl_runs row and passes its id so the existing
     # entry point UPDATES that row (keeping the dashboard's status polling working)

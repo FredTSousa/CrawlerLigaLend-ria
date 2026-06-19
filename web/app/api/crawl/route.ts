@@ -89,7 +89,10 @@ export async function POST(request: Request) {
   } else if (kind === "reporter") {
     params.match_id = target;
     const abolaUrl = String(body.abolaUrl ?? "").trim();
-    if (abolaUrl) params.abola_url = abolaUrl;
+    if (abolaUrl) {
+      if (abolaUrl.includes("goal.com")) params.goal_url = abolaUrl;
+      else params.abola_url = abolaUrl;
+    }
     dedupe = `reporter:${target}`;
     priority = 60;
   } else if (kind === "match") {

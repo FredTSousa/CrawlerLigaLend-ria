@@ -263,7 +263,8 @@ def _apply_goal_mapping(data: dict, mapping: dict | None) -> None:
 
 
 def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
-        delay: float, abola_url: str | None = None) -> dict:
+        delay: float, abola_url: str | None = None,
+        goal_url: str | None = None) -> dict:
     sync._load_dotenv()
     sb = sync.Supabase()
     _load_team_aliases(sb)
@@ -289,15 +290,16 @@ def run(match_id: str, *, run_id: int | None, github_run_id: str | None,
         match = {"home_team": home, "away_team": away,
                  "game_date": m["played_on"],
                  "is_big_three_match": _is_big_three(home, away)}
-        goal_url, goal_id = _cached_goal_link(sb, match_id)
-        # A pasted A Bola URL (from the match page's override field) pins the page
-        # so discovery is bypassed -- the fix for a wrong auto-matched page that
-        # search/feed can no longer reach. Only A Bola pages route this way; a Goal
-        # competition ignores it.
+        cached_url, cached_id = _cached_goal_link(sb, match_id)
+        # --goal-url pins the Goal.com match page, bypassing fixtures discovery.
+        # --abola-url similarly pins the A Bola page for A Bola competitions.
+        effective_goal_url = goal_url or cached_url
+        effective_goal_id = None if goal_url else cached_id
         override = (_route_abola_url(abola_url, home, away)
                     if abola_url and provider.source == "abola" else {})
         data = provider.scrape_match(match, delay=delay,
-                                     goal_url=goal_url, goal_id=goal_id, **override)
+                                     goal_url=effective_goal_url,
+                                     goal_id=effective_goal_id, **override)
         if provider.source == "goal":
             _apply_goal_mapping(data, cfg["rating_mapping"])
         linked, total = _store_and_link(sb, match_id, m["home_team_id"],
@@ -417,6 +419,7 @@ def main() -> int:
     ap.add_argument("--match-id", help="zerozero match id (or env IN_MATCH_ID)")
     ap.add_argument("--run-id", type=int, help="crawl_runs row to update (or IN_RUN_ID)")
     ap.add_argument("--abola-url", help="pin the A Bola page, skip search (or IN_ABOLA_URL)")
+    ap.add_argument("--goal-url", help="pin the Goal.com match page, skip fixtures discovery")
     ap.add_argument("--delay", type=float, default=1.5)
     args = ap.parse_args()
 
@@ -429,7 +432,8 @@ def main() -> int:
     run_id = args.run_id or (int(rid_env) if rid_env else None)
 
     run(match_id, run_id=run_id, github_run_id=os.environ.get("GITHUB_RUN_ID"),
-        delay=args.delay, abola_url=args.abola_url or sync._env("IN_ABOLA_URL"))
+        delay=args.delay, abola_url=args.abola_url or sync._env("IN_ABOLA_URL"),
+        goal_url=args.goal_url or sync._env("IN_GOAL_URL"))
     return 0
 
 
