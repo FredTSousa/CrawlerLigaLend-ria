@@ -1000,6 +1000,41 @@ def run_scheduled(*, github_run_id: str | None, delay: float) -> dict:
         except Exception as err:  # noqa: BLE001 - keep sweeping the other leagues
             failed += 1
             print(f"  ! {name}: crawl failed: {err}", file=sys.stderr)
+            continue
+
+        # Proactively fetch kickoff times for upcoming rounds that are in the
+        # DB but still have null kickoff_at. Scan ascending (nearest first) and
+        # stop the moment a crawl yields no dates — further rounds are even
+        # less likely to have them yet.
+        if comp_id:
+            status_map = sb.competition_rounds_status(comp_id)
+            open_rounds = sorted(
+                rd for rd, statuses in status_map.items()
+                if rd != target and any(s != "final" for s in statuses))
+            upcoming = [
+                rd for rd in open_rounds
+                if all(r.get("kickoff_at") is None
+                       for r in sb.round_status(comp_id, rd))
+            ]
+            for rd in upcoming:
+                print(f"  > {name}: prefetch kickoffs round {rd}", file=sys.stderr)
+                try:
+                    _scheduled_crawl_league(sb, comp, rd, slug=slug, comp_id=comp_id,
+                                            github_run_id=github_run_id, delay=delay)
+                    crawled += 1
+                    # Check if we got any dates; if not, stop looking further.
+                    got_dates = any(
+                        r.get("kickoff_at") is not None
+                        for r in sb.round_status(comp_id, rd)
+                    )
+                    if not got_dates:
+                        print(f"    no dates yet for round {rd} — stopping lookahead",
+                              file=sys.stderr)
+                        break
+                except Exception as err:  # noqa: BLE001
+                    print(f"  ! {name}: prefetch round {rd} failed: {err}",
+                          file=sys.stderr)
+                    break
 
     summary = (f"Sweep done: {crawled} crawled, {skipped} skipped, "
                f"{deactivated} deactivated, {failed} failed.")
