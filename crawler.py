@@ -355,7 +355,7 @@ def parse_round_games(html: str) -> list[dict]:
         home = {"name": clean_name(names[0]), "id": hid}
         away = {"name": clean_name(names[1]), "id": aid}
 
-        date_m = re.match(r"(\d{4}-\d{2}-\d{2})", slug)
+        date_m = re.search(r"(\d{4}-\d{2}-\d{2})", slug)
         date = date_m.group(1) if date_m else None
 
         score = None
