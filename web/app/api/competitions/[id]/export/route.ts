@@ -96,9 +96,10 @@ export async function GET(
   const matchIds = ((fixtures ?? []) as any[]).map((f) => f.id);
   const stats: any[] = [];
   const reporterLinks: any[] = [];
+  const matchEvents: any[] = [];
   for (let i = 0; i < matchIds.length; i += 25) {
     const chunk25 = matchIds.slice(i, i + 25);
-    const [{ data: statChunk }, { data: reporterChunk }] = await Promise.all([
+    const [{ data: statChunk }, { data: reporterChunk }, { data: eventChunk }] = await Promise.all([
       supabase
         .from("match_player_details")
         .select(
@@ -111,14 +112,50 @@ export async function GET(
         .from("matches_reporter_link")
         .select("match_id, fetched_at, format_detected, urls, home_ratings, away_ratings")
         .in("match_id", chunk25),
+      // Per-event minute timeline (the subscriber annotates each goal/card with
+      // when it happened). Stored normalized in match_events; we fold it back to
+      // a per-player `events` array on each stat row below.
+      supabase
+        .from("match_events")
+        .select("match_id, player_id, event_type, minute, extra_time")
+        .in("match_id", chunk25),
     ]);
     if (statChunk) stats.push(...statChunk);
     if (reporterChunk) reporterLinks.push(...reporterChunk);
+    if (eventChunk) matchEvents.push(...eventChunk);
   }
 
   const reporterByMatchId = Object.fromEntries(
     reporterLinks.map((r) => [r.match_id, r]),
   );
+
+  // Fold match_events into a per-player `events: [{type,min,label}]` array keyed
+  // by match+player, in the vocabulary the subscriber's importer expects.
+  // Subs (sub_in/sub_out) are excluded — those minutes ride on entered_min/left_min.
+  const EVENT_TYPE_EXPORT: Record<string, string> = {
+    goal: "goal",
+    own_goal: "own_goal",
+    penalty_scored: "penalty_goal",
+    assist: "assist",
+    yellow_card: "yellow",
+    red_card: "red",
+    penalty_missed: "penalty_missed",
+    penalty_defended: "penalty_defended",
+  };
+  const eventsByPlayer = new Map<string, { type: string; min: number; label: string }[]>();
+  for (const e of matchEvents as any[]) {
+    const type = EVENT_TYPE_EXPORT[e.event_type];
+    if (!type) continue; // skip sub_in/sub_out and anything unmapped
+    const min = e.minute as number;
+    const label = e.extra_time != null ? `${min}+${e.extra_time}` : `${min}`;
+    const key = `${e.match_id}:${e.player_id}`;
+    const list = eventsByPlayer.get(key) ?? [];
+    list.push({ type, min, label });
+    eventsByPlayer.set(key, list);
+  }
+  for (const list of eventsByPlayer.values()) {
+    list.sort((a, b) => a.min - b.min);
+  }
 
   const snapshot = {
     schema_version: 2,
@@ -175,6 +212,7 @@ export async function GET(
       is_starter: s.is_starter,
       entered_min: s.entered_min,
       left_min: s.left_min,
+      events: eventsByPlayer.get(`${s.match_id}:${s.player_id}`) ?? [],
       goals: s.goals,
       assists: s.assists,
       yellow_cards: s.yellow_cards,
