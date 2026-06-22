@@ -29,24 +29,42 @@ export default async function RoundPage({
   if (comp) query = query.eq("competition_id", comp);
   const { data: matches } = await query.order("played_on", { ascending: true });
 
-  const { data: allPlayers } = await supabase
-    .from("match_player_details")
-    .select("*")
-    .eq("round", round);
+  const games = (matches ?? []) as any[];
+  const matchIds = games.map((g) => g.id);
 
-  const { data: linkStatus } = await supabase
-    .from("reporter_link_status")
-    .select("*")
-    .eq("round", round);
+  const [{ data: allPlayers }, { data: linkStatus }, { data: allEvents }] =
+    await Promise.all([
+      supabase.from("match_player_details").select("*").eq("round", round),
+      supabase.from("reporter_link_status").select("*").eq("round", round),
+      matchIds.length > 0
+        ? supabase
+            .from("match_events")
+            .select("match_id, player_id, event_type, minute, extra_time")
+            .in("match_id", matchIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
   const statusByMatch = new Map(
     ((linkStatus ?? []) as any[]).map((s) => [s.match_id, s]),
   );
 
-  const games = (matches ?? []) as any[];
+  // Group events by "matchId:playerId" for O(1) lookup.
+  const evByKey = new Map<string, any[]>();
+  for (const ev of (allEvents ?? []) as any[]) {
+    const key = `${ev.match_id}:${ev.player_id}`;
+    const arr = evByKey.get(key) ?? [];
+    arr.push(ev);
+    evByKey.set(key, arr);
+  }
+
   const byMatch = new Map<string, any[]>();
   for (const p of (allPlayers ?? []) as any[]) {
+    const key = `${p.match_id}:${p.player_id}`;
+    const evs = (evByKey.get(key) ?? []).sort(
+      (a: any, b: any) => a.minute - b.minute || (a.extra_time ?? 0) - (b.extra_time ?? 0),
+    );
     const arr = byMatch.get(p.match_id) ?? [];
-    arr.push(p);
+    arr.push({ ...p, events: evs });
     byMatch.set(p.match_id, arr);
   }
 

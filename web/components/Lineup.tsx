@@ -1,5 +1,11 @@
 import React from "react";
 
+type MatchEvent = {
+  event_type: string;
+  minute: number;
+  extra_time: number | null;
+};
+
 type Player = {
   player_id: string;
   player_name: string;
@@ -22,6 +28,7 @@ type Player = {
   reporter_score: number | null;
   reporter_is_mvp: boolean;
   reporter_linked: boolean;
+  events?: MatchEvent[];
 };
 
 type Team = { id: string; name: string };
@@ -40,28 +47,63 @@ function count(n: number) {
   return n > 1 ? <span className="n">{n}</span> : null;
 }
 
+function fmtMin(minute: number, extra: number | null): string {
+  return extra ? `${minute}+${extra}'` : `${minute}'`;
+}
+
+const EVENT_CHIP: Record<string, { icon: string; cls: string; title: string }> = {
+  goal:             { icon: "⚽",    cls: "chip",     title: "Goal" },
+  own_goal:         { icon: "OG",    cls: "chip og",  title: "Own goal" },
+  penalty_scored:   { icon: "PK ⚽", cls: "chip pen", title: "Penalty scored" },
+  assist:           { icon: "👟",    cls: "chip",     title: "Assist" },
+  yellow_card:      { icon: "🟨",    cls: "chip",     title: "Yellow card" },
+  red_card:         { icon: "🟥",    cls: "chip",     title: "Red card" },
+  penalty_missed:   { icon: "PK ✗", cls: "chip pen", title: "Penalty missed" },
+  penalty_defended: { icon: "PK 🧤", cls: "chip pen", title: "Penalty saved" },
+  sub_in:           { icon: "🔼",    cls: "chip in",  title: "Subbed in" },
+  sub_out:          { icon: "🔽",    cls: "chip out", title: "Subbed out" },
+};
+
 function StatIcons({ p }: { p: Player }) {
   const chips: React.ReactNode[] = [];
-  if (p.goals > 0)
-    chips.push(<span className="chip" title="Goals" key="g">⚽{count(p.goals)}</span>);
-  if (p.assists > 0)
-    chips.push(<span className="chip" title="Assists" key="a">👟{count(p.assists)}</span>);
-  if (p.yellow_cards > 0)
-    chips.push(<span className="chip" title="Yellow card" key="y">🟨{count(p.yellow_cards)}</span>);
-  if (p.red_card)
-    chips.push(<span className="chip" title="Red card" key="r">🟥</span>);
-  if (p.own_goals > 0)
-    chips.push(<span className="chip og" title="Own goal" key="og">OG{p.own_goals > 1 ? ` ${p.own_goals}` : ""}</span>);
-  if (p.penalties_scored > 0)
-    chips.push(<span className="chip pen" title="Penalty scored" key="ps">PK ⚽{p.penalties_scored > 1 ? ` ${p.penalties_scored}` : ""}</span>);
-  if (p.penalties_missed > 0)
-    chips.push(<span className="chip pen" title="Penalty missed" key="pm">PK ✗{p.penalties_missed > 1 ? ` ${p.penalties_missed}` : ""}</span>);
-  if (p.penalties_defended > 0)
-    chips.push(<span className="chip pen" title="Penalty saved" key="pd">PK 🧤{p.penalties_defended > 1 ? ` ${p.penalties_defended}` : ""}</span>);
-  if (p.entered_min != null)
-    chips.push(<span className="chip in" title="Subbed in" key="in">🔼 {p.entered_min}&#39;</span>);
-  if (p.left_min != null)
-    chips.push(<span className="chip out" title="Subbed out" key="out">🔽 {p.left_min}&#39;</span>);
+
+  if (p.events && p.events.length > 0) {
+    const sorted = [...p.events].sort(
+      (a, b) => a.minute - b.minute || (a.extra_time ?? 0) - (b.extra_time ?? 0),
+    );
+    sorted.forEach((ev, i) => {
+      const meta = EVENT_CHIP[ev.event_type];
+      if (!meta) return;
+      chips.push(
+        <span className={meta.cls} title={meta.title} key={`${ev.event_type}-${i}`}>
+          {meta.icon} ({fmtMin(ev.minute, ev.extra_time)})
+        </span>,
+      );
+    });
+  } else {
+    // Fallback when event timeline hasn't been crawled yet: show counts only.
+    if (p.goals > 0)
+      chips.push(<span className="chip" title="Goals" key="g">⚽{count(p.goals)}</span>);
+    if (p.assists > 0)
+      chips.push(<span className="chip" title="Assists" key="a">👟{count(p.assists)}</span>);
+    if (p.yellow_cards > 0)
+      chips.push(<span className="chip" title="Yellow card" key="y">🟨{count(p.yellow_cards)}</span>);
+    if (p.red_card)
+      chips.push(<span className="chip" title="Red card" key="r">🟥</span>);
+    if (p.own_goals > 0)
+      chips.push(<span className="chip og" title="Own goal" key="og">OG{p.own_goals > 1 ? ` ${p.own_goals}` : ""}</span>);
+    if (p.penalties_scored > 0)
+      chips.push(<span className="chip pen" title="Penalty scored" key="ps">PK ⚽{p.penalties_scored > 1 ? ` ${p.penalties_scored}` : ""}</span>);
+    if (p.penalties_missed > 0)
+      chips.push(<span className="chip pen" title="Penalty missed" key="pm">PK ✗{p.penalties_missed > 1 ? ` ${p.penalties_missed}` : ""}</span>);
+    if (p.penalties_defended > 0)
+      chips.push(<span className="chip pen" title="Penalty saved" key="pd">PK 🧤{p.penalties_defended > 1 ? ` ${p.penalties_defended}` : ""}</span>);
+    if (p.entered_min != null)
+      chips.push(<span className="chip in" title="Subbed in" key="in">🔼 {p.entered_min}&#39;</span>);
+    if (p.left_min != null)
+      chips.push(<span className="chip out" title="Subbed out" key="out">🔽 {p.left_min}&#39;</span>);
+  }
+
   return <span className="icons">{chips}</span>;
 }
 

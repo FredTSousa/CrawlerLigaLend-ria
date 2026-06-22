@@ -26,10 +26,13 @@ export default async function MatchPage({
     .eq("id", params.id)
     .maybeSingle();
 
-  const { data: players } = await supabase
-    .from("match_player_details")
-    .select("*")
-    .eq("match_id", params.id);
+  const [{ data: players }, { data: matchEvents }] = await Promise.all([
+    supabase.from("match_player_details").select("*").eq("match_id", params.id),
+    supabase
+      .from("match_events")
+      .select("player_id, event_type, minute, extra_time")
+      .eq("match_id", params.id),
+  ]);
 
   const { data: reporter } = await supabase
     .from("matches_reporter_link")
@@ -39,7 +42,20 @@ export default async function MatchPage({
 
   const m = match as any;
   const rep = reporter as any;
-  const ps = (players ?? []) as any[];
+
+  // Group match_events by player_id and attach to each player row.
+  const evByPlayer = new Map<string, any[]>();
+  for (const ev of (matchEvents ?? []) as any[]) {
+    const arr = evByPlayer.get(ev.player_id) ?? [];
+    arr.push(ev);
+    evByPlayer.set(ev.player_id, arr);
+  }
+  const ps = ((players ?? []) as any[]).map((p) => ({
+    ...p,
+    events: (evByPlayer.get(p.player_id) ?? []).sort(
+      (a: any, b: any) => a.minute - b.minute || (a.extra_time ?? 0) - (b.extra_time ?? 0),
+    ),
+  }));
 
   // Which reporter source produced this match's ratings (Goal carries a
   // goal_match_url; everything else is A Bola). Drives labels + raw display.
