@@ -227,6 +227,12 @@ def leading_minute(text: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
+def _parse_minute_token(tok: str) -> tuple[int, int | None]:
+    """'90+2' → (90, 2),  '67' → (67, None)."""
+    parts = tok.split("+")
+    return int(parts[0]), (int(parts[1]) if len(parts) > 1 else None)
+
+
 # ----------------------------------------------------------------------------
 # Competition (round) page -> list of game URLs
 # ----------------------------------------------------------------------------
@@ -571,6 +577,7 @@ def classify_events(events_html: str) -> dict:
     left_min: int | None = None
     raw_events: list[dict] = []
     unknown: list[dict] = []
+    events: list[dict] = []  # one entry per event occurrence, with minute
 
     # 1. Broadly check for any visual indicator of a red card
     if ('title="Vermelhos"' in events_html
@@ -623,31 +630,63 @@ def classify_events(events_html: str) -> dict:
         else:
             unknown.append({"title": title, "class": klass, "glyph": glyph})
 
-    # 3. Loop #3: Double-check complex text strings (ONLY for Goals and Subs)
+    # 3. Loop #3: Capture minutes for all event types (goals, cards, subs, etc.)
     for attrs, glyph, minute_text in EVENT_RE.findall(events_html):
         klass = (CLASS_RE.search(attrs).group(1) if CLASS_RE.search(attrs) else "").strip()
         title = (TITLE_RE.search(attrs).group(1) if TITLE_RE.search(attrs) else "").strip()
         minute = leading_minute(minute_text)
         title_l = title.lower()
-        
+
         if "zz-icn-fut" in klass or title == "Golos":
             tokens = MINUTE_TOKEN_RE.findall(minute_text) or [("", "")]
-            stats["goals"] = 0 
+            stats["goals"] = 0
             for _min, mann in tokens:
                 a = mann.lower()
                 if "p.b." in a or "auto" in a:
                     stats["own_goals"] += 1
+                    if _min:
+                        base, extra = _parse_minute_token(_min)
+                        events.append({"type": "own_goal", "minute": base, "extra": extra})
                 elif "g.p." in a or "grande penal" in a:
                     # Penalty goal: counted separately, NOT as an open-play goal.
                     stats["penalties_scored"] += 1
+                    if _min:
+                        base, extra = _parse_minute_token(_min)
+                        events.append({"type": "penalty_scored", "minute": base, "extra": extra})
                 else:
                     stats["goals"] += 1
-                        
+                    if _min:
+                        base, extra = _parse_minute_token(_min)
+                        events.append({"type": "goal", "minute": base, "extra": extra})
+
         elif title == "Entrou" or "entrou" in title_l:
             entered_min = minute
-            
+            if minute is not None:
+                events.append({"type": "sub_in", "minute": minute, "extra": None})
+
         elif not title and "grey" in klass and minute is not None:
             left_min = minute
+            events.append({"type": "sub_out", "minute": minute, "extra": None})
+
+        elif title == "Assistência" or "assist" in title_l:
+            if minute is not None:
+                events.append({"type": "assist", "minute": minute, "extra": None})
+
+        elif title == "Amarelos" or "yellow" in klass:
+            if minute is not None:
+                events.append({"type": "yellow_card", "minute": minute, "extra": None})
+
+        elif title == "Vermelhos" or "red" in klass:
+            if minute is not None:
+                events.append({"type": "red_card", "minute": minute, "extra": None})
+
+        elif title == "Penaltis Falhados" or "falhad" in title_l:
+            if minute is not None:
+                events.append({"type": "penalty_missed", "minute": minute, "extra": None})
+
+        elif title == "Penaltis Defendidos" or "defendid" in title_l or "defes" in title_l:
+            if minute is not None:
+                events.append({"type": "penalty_defended", "minute": minute, "extra": None})
 
     # Cascade rules
     if stats["yellow_cards"] >= 2:
@@ -663,6 +702,7 @@ def classify_events(events_html: str) -> dict:
         "stats": stats,
         "entered_min": entered_min,
         "left_min": left_min,
+        "events": events,
         "raw_events": raw_events,
         "unknown_events": unknown,
     }
@@ -764,6 +804,7 @@ def parse_lineups(html: str, home_team: dict, away_team: dict) -> list[dict]:
                 "did_not_play": p["inactive"],
                 "minutes": {"entered": p["entered_min"], "left": p["left_min"]},
                 "stats": p["stats"],
+                "events": p["events"],
                 "_unknown_events": p["unknown_events"],
             })
     return players

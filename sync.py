@@ -168,6 +168,14 @@ class Supabase:
         self._rest("PATCH", f"{table}?{match}", prefer="return=minimal",
                    json=patch)
 
+    def delete(self, table: str, match: str) -> None:
+        self._rest("DELETE", f"{table}?{match}", prefer="return=minimal")
+
+    def insert(self, table: str, rows: list[dict]) -> None:
+        if not rows:
+            return
+        self._rest("POST", table, prefer="return=minimal", json=rows)
+
     def rpc(self, fn: str, args: dict | None = None):
         """Call a Postgres function via PostgREST (/rpc/<fn>). Returns the parsed
         JSON body, or None for an empty (204) response."""
@@ -417,6 +425,26 @@ def _match_row(game: dict, *, competition_id: str | None, round_no: int | None,
     return row
 
 
+def _match_event_rows(game: dict) -> list[dict]:
+    now = _now()
+    rows = []
+    for p in game.get("players", []):
+        team_id = (p.get("team") or {}).get("id")
+        for ev in p.get("events", []):
+            if ev.get("minute") is None:
+                continue
+            rows.append({
+                "match_id": game["game_id"],
+                "player_id": p["id"],
+                "team_id": team_id,
+                "event_type": ev["type"],
+                "minute": ev["minute"],
+                "extra_time": ev.get("extra"),
+                "updated_at": now,
+            })
+    return rows
+
+
 def _match_player_rows(game: dict) -> list[dict]:
     now = _now()
     rows = []
@@ -518,6 +546,18 @@ def write_games(sb: Supabase, games: list[dict], *,
     for g in games:
         match_players.extend(_match_player_rows(g))
     sb.upsert("match_players", match_players, "match_id,player_id")
+
+    # Replace event timeline rows for every match that was just crawled.
+    # DELETE + INSERT is safe here: the table has no downstream FK references.
+    match_ids = [g["game_id"] for g in games if g.get("game_id")]
+    if match_ids:
+        for mid in match_ids:
+            sb.delete("match_events", f"match_id=eq.{mid}")
+        event_rows: list[dict] = []
+        for g in games:
+            event_rows.extend(_match_event_rows(g))
+        if event_rows:
+            sb.insert("match_events", event_rows)
 
 
 # ----------------------------------------------------------------------------
