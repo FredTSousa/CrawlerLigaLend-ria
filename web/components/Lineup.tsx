@@ -76,7 +76,9 @@ function StatIcons({ p }: { p: Player }) {
       if (!meta) return;
       chips.push(
         <span className={meta.cls} title={meta.title} key={`${ev.event_type}-${i}`}>
-          {meta.icon} ({fmtMin(ev.minute, ev.extra_time)})
+          {ev.event_type === "sub_in" || ev.event_type === "sub_out"
+            ? `${meta.icon} ${fmtMin(ev.minute, ev.extra_time)}`
+            : `${meta.icon} (${fmtMin(ev.minute, ev.extra_time)})`}
         </span>,
       );
     });
