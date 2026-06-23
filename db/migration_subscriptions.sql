@@ -183,6 +183,26 @@ as $$
                 'is_starter', mp.is_starter,
                 'entered_min', mp.entered_min,
                 'left_min', mp.left_min,
+                -- Per-event minute timeline, folded from match_events into the
+                -- subscriber's vocabulary (penalty_scored->penalty_goal,
+                -- yellow_card->yellow, red_card->red); subs excluded (they ride
+                -- on entered_min/left_min). Keeps stoppage in the label ("90+2").
+                'events', coalesce((
+                    select jsonb_agg(jsonb_build_object(
+                        'type', case me.event_type
+                                  when 'penalty_scored' then 'penalty_goal'
+                                  when 'yellow_card'    then 'yellow'
+                                  when 'red_card'       then 'red'
+                                  else me.event_type end,
+                        'min', me.minute,
+                        'label', me.minute::text ||
+                                 case when me.extra_time is not null
+                                      then '+' || me.extra_time::text else '' end)
+                        order by me.minute, me.extra_time nulls first)
+                    from public.match_events me
+                    where me.match_id = mp.match_id
+                      and me.player_id = mp.player_id
+                      and me.event_type not in ('sub_in','sub_out')), '[]'::jsonb),
                 'goals', mp.goals,
                 'assists', mp.assists,
                 'yellow_cards', mp.yellow_cards,

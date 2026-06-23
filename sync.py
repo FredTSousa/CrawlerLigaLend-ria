@@ -542,13 +542,12 @@ def write_games(sb: Supabase, games: list[dict], *,
 
     sb.upsert("matches", match_rows, "id")
 
-    match_players: list[dict] = []
-    for g in games:
-        match_players.extend(_match_player_rows(g))
-    sb.upsert("match_players", match_players, "match_id,player_id")
-
-    # Replace event timeline rows for every match that was just crawled.
-    # DELETE + INSERT is safe here: the table has no downstream FK references.
+    # Replace event timeline rows BEFORE match_players. The subscriber dispatch
+    # is enqueued by the match_players write trigger and build_match_event folds
+    # match_events into each player's `events`; writing events first means the
+    # very first live delivery already carries the per-minute timeline (no race
+    # where the webhook fires before the events land). FK-safe: match_events
+    # references matches/players/teams, all written above — not match_players.
     match_ids = [g["game_id"] for g in games if g.get("game_id")]
     if match_ids:
         for mid in match_ids:
@@ -558,6 +557,11 @@ def write_games(sb: Supabase, games: list[dict], *,
             event_rows.extend(_match_event_rows(g))
         if event_rows:
             sb.insert("match_events", event_rows)
+
+    match_players: list[dict] = []
+    for g in games:
+        match_players.extend(_match_player_rows(g))
+    sb.upsert("match_players", match_players, "match_id,player_id")
 
 
 # ----------------------------------------------------------------------------
