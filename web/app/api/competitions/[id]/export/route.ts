@@ -97,32 +97,47 @@ export async function GET(
   const stats: any[] = [];
   const reporterLinks: any[] = [];
   const matchEvents: any[] = [];
+  const STAT_COLS =
+    "match_id, round, player_id, player_name, team_id, team_name, order_index, shirt_number, is_captain, is_starter, entered_min, left_min, goals, assists, yellow_cards, red_card, own_goals, penalties_scored, penalties_missed, penalties_defended, played_under_20m, did_not_play, reporter_score, reporter_is_mvp, reporter_linked, reporter_manual";
   for (let i = 0; i < matchIds.length; i += 25) {
     const chunk25 = matchIds.slice(i, i + 25);
-    const [{ data: statChunk }, { data: reporterChunk }, { data: eventChunk }] = await Promise.all([
-      supabase
+    // match_player_details — range-page WITHIN the chunk. A single 25-match chunk
+    // can exceed PostgREST's 1000-row cap: national-team squads are ~26 each, so a
+    // match lists ~52 players and 25 matches ≈ 1300 rows. Without paging here the
+    // tail matches in each chunk — their players AND their event minutes — were
+    // silently truncated out of the snapshot (only the first 1000 rows returned).
+    for (let from = 0; ; from += PAGE) {
+      const { data } = await supabase
         .from("match_player_details")
-        .select(
-          "match_id, round, player_id, player_name, team_id, team_name, order_index, shirt_number, is_captain, is_starter, entered_min, left_min, goals, assists, yellow_cards, red_card, own_goals, penalties_scored, penalties_missed, penalties_defended, played_under_20m, did_not_play, reporter_score, reporter_is_mvp, reporter_linked, reporter_manual",
-        )
+        .select(STAT_COLS)
         .in("match_id", chunk25)
         .order("match_id", { ascending: true })
-        .order("order_index", { ascending: true }),
-      supabase
-        .from("matches_reporter_link")
-        .select("match_id, fetched_at, format_detected, urls, home_ratings, away_ratings")
-        .in("match_id", chunk25),
-      // Per-event minute timeline (the subscriber annotates each goal/card with
-      // when it happened). Stored normalized in match_events; we fold it back to
-      // a per-player `events` array on each stat row below.
-      supabase
+        .order("order_index", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (!data || data.length === 0) break;
+      stats.push(...data);
+      if (data.length < PAGE) break;
+    }
+    // Per-event minute timeline (the subscriber annotates each goal/card with when
+    // it happened). Stored normalized in match_events; folded into a per-player
+    // `events` array on each stat row below. Same cap risk — page by primary key.
+    for (let from = 0; ; from += PAGE) {
+      const { data } = await supabase
         .from("match_events")
-        .select("match_id, player_id, event_type, minute, extra_time")
-        .in("match_id", chunk25),
-    ]);
-    if (statChunk) stats.push(...statChunk);
+        .select("id, match_id, player_id, event_type, minute, extra_time")
+        .in("match_id", chunk25)
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (!data || data.length === 0) break;
+      matchEvents.push(...data);
+      if (data.length < PAGE) break;
+    }
+    // reporter links — at most one row per match (≤25 per chunk), never capped.
+    const { data: reporterChunk } = await supabase
+      .from("matches_reporter_link")
+      .select("match_id, fetched_at, format_detected, urls, home_ratings, away_ratings")
+      .in("match_id", chunk25);
     if (reporterChunk) reporterLinks.push(...reporterChunk);
-    if (eventChunk) matchEvents.push(...eventChunk);
   }
 
   const reporterByMatchId = Object.fromEntries(
