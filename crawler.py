@@ -558,7 +558,7 @@ CLASS_RE = re.compile(r'class="([^"]*)"')
 #   "89' 90+1'"  -> two goals
 #   "31' 72' (g.p.)"  -> goal at 31', penalty at 72'
 #   "17' (g.p.) 37'"  -> penalty at 17', goal at 37'
-MINUTE_TOKEN_RE = re.compile(r"(\d+(?:\+\d+)?)'\s*((?:\([^)]*\)\s*)*)")
+MINUTE_TOKEN_RE = re.compile(r"(\d+(?:\+\d+)?)['’]\s*((?:\([^)]*\)\s*)*)")
 
 
 def classify_events(events_html: str) -> dict:
@@ -638,26 +638,42 @@ def classify_events(events_html: str) -> dict:
         title_l = title.lower()
 
         if "zz-icn-fut" in klass or title == "Golos":
-            tokens = MINUTE_TOKEN_RE.findall(minute_text) or [("", "")]
+            tokens = MINUTE_TOKEN_RE.findall(minute_text)
             stats["goals"] = 0
-            for _min, mann in tokens:
-                a = mann.lower()
-                if "p.b." in a or "auto" in a:
+            if tokens:
+                for _min, mann in tokens:
+                    a = mann.lower()
+                    if "p.b." in a or "auto" in a:
+                        stats["own_goals"] += 1
+                        if _min:
+                            base, extra = _parse_minute_token(_min)
+                            events.append({"type": "own_goal", "minute": base, "extra": extra})
+                    elif "g.p." in a or "grande penal" in a:
+                        # Penalty goal: counted separately, NOT as an open-play goal.
+                        stats["penalties_scored"] += 1
+                        if _min:
+                            base, extra = _parse_minute_token(_min)
+                            events.append({"type": "penalty_scored", "minute": base, "extra": extra})
+                    else:
+                        stats["goals"] += 1
+                        if _min:
+                            base, extra = _parse_minute_token(_min)
+                            events.append({"type": "goal", "minute": base, "extra": extra})
+            else:
+                # No tokens matched — classify by annotation text, fall back to leading_minute.
+                text_l = minute_text.lower()
+                if "p.b." in text_l or "auto" in text_l:
                     stats["own_goals"] += 1
-                    if _min:
-                        base, extra = _parse_minute_token(_min)
-                        events.append({"type": "own_goal", "minute": base, "extra": extra})
-                elif "g.p." in a or "grande penal" in a:
-                    # Penalty goal: counted separately, NOT as an open-play goal.
+                    if minute is not None:
+                        events.append({"type": "own_goal", "minute": minute, "extra": None})
+                elif "g.p." in text_l or "grande penal" in text_l:
                     stats["penalties_scored"] += 1
-                    if _min:
-                        base, extra = _parse_minute_token(_min)
-                        events.append({"type": "penalty_scored", "minute": base, "extra": extra})
+                    if minute is not None:
+                        events.append({"type": "penalty_scored", "minute": minute, "extra": None})
                 else:
                     stats["goals"] += 1
-                    if _min:
-                        base, extra = _parse_minute_token(_min)
-                        events.append({"type": "goal", "minute": base, "extra": extra})
+                    if minute is not None:
+                        events.append({"type": "goal", "minute": minute, "extra": None})
 
         elif title == "Entrou" or "entrou" in title_l:
             entered_min = minute
