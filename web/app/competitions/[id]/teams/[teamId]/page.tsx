@@ -28,18 +28,19 @@ export default async function TeamDetails({
 
   const { data: roster } = await supabase
     .from("competition_player_details")
-    .select("player_id, player_name, age, position_group, position, club_name, photo_url, shirt_number, last_updated")
+    .select("player_id, player_name, age, position_group, position, club_name, photo_url, shirt_number, last_updated, active")
     .eq("competition_id", id)
-    .eq("team_id", teamId)
-    .eq("active", true);
+    .eq("team_id", teamId);
 
   const rows = (roster ?? []) as any[];
+  const activeRows = rows.filter((p) => p.active !== false);
   const byGroup = new Map<string, any[]>();
-  for (const p of rows) {
+  for (const p of activeRows) {
     const g = p.position_group ?? "Other";
     if (!byGroup.has(g)) byGroup.set(g, []);
     byGroup.get(g)!.push(p);
   }
+  const departed = rows.filter((p) => p.active === false);
   const groups = [...byGroup.keys()].sort(
     (a, b) => idx(a) - idx(b) || a.localeCompare(b),
   );
@@ -65,7 +66,7 @@ export default async function TeamDetails({
                 <Link href={`/competitions/${id}`}>
                   {comp?.full_name || comp?.name}
                 </Link>{" "}
-                · {comp?.season ?? ""} · {rows.length} players
+                · {comp?.season ?? ""} · {activeRows.length} players{departed.length ? ` · ${departed.length} departed` : ""}
               </div>
             </div>
           </div>
@@ -84,44 +85,57 @@ export default async function TeamDetails({
         </div>
       </div>
 
-      {rows.length ? (
+      {activeRows.length ? (
         groups.map((g) => (
           <div key={g} className="panel">
             <h3 style={{ marginTop: 0 }}>{g}</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th className="num">#</th>
-                  <th></th>
-                  <th>Name</th>
-                  <th className="num">Age</th>
-                  <th>Position</th>
-                  <th>Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {byGroup.get(g)!
-                  .sort((a, b) => (a.shirt_number ?? 99) - (b.shirt_number ?? 99))
-                  .map((p) => (
-                    <tr key={p.player_id}>
-                      <td className="num">{p.shirt_number ?? "—"}</td>
-                      <td><Avatar src={p.photo_url} name={p.player_name} /></td>
-                      <td><Link href={`/players/${p.player_id}`}>{p.player_name}</Link></td>
-                      <td className="num">{p.age ?? "—"}</td>
-                      <td>{p.position ?? <span className="muted">not enriched</span>}</td>
-                      <td className="muted">{fmt(p.last_updated)}</td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+            <PlayerTable players={byGroup.get(g)!} />
           </div>
         ))
       ) : (
         <div className="panel">
-          <p className="muted">No roster yet — press “Refresh roster”.</p>
+          <p className="muted">No roster yet — press "Refresh roster".</p>
+        </div>
+      )}
+
+      {departed.length > 0 && (
+        <div className="panel">
+          <h3 style={{ marginTop: 0, opacity: 0.5 }}>Departed</h3>
+          <PlayerTable players={departed} dim />
         </div>
       )}
     </>
+  );
+}
+
+function PlayerTable({ players, dim }: { players: any[]; dim?: boolean }) {
+  return (
+    <table style={dim ? { opacity: 0.45 } : undefined}>
+      <thead>
+        <tr>
+          <th className="num">#</th>
+          <th></th>
+          <th>Name</th>
+          <th className="num">Age</th>
+          <th>Position</th>
+          <th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {players
+          .sort((a, b) => (a.shirt_number ?? 99) - (b.shirt_number ?? 99))
+          .map((p) => (
+            <tr key={p.player_id}>
+              <td className="num">{p.shirt_number ?? "—"}</td>
+              <td><Avatar src={p.photo_url} name={p.player_name} /></td>
+              <td><Link href={`/players/${p.player_id}`}>{p.player_name}</Link></td>
+              <td className="num">{p.age ?? "—"}</td>
+              <td>{p.position ?? <span className="muted">not enriched</span>}</td>
+              <td className="muted">{fmt(p.last_updated)}</td>
+            </tr>
+          ))}
+      </tbody>
+    </table>
   );
 }
 
