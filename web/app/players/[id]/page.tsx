@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SquadSyncButton from "@/components/SquadSyncButton";
+import PlayerPositionEditor from "@/components/PlayerPositionEditor";
+import { savePlayerPosition } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +99,17 @@ export default async function PlayerDetails({
             <Row k="Position group" v={player.position_group} />
             <Row k="Position" v={player.position} />
             <Row k="Position code" v={player.position_code} />
+            <tr>
+              <td />
+              <td>
+                <PlayerPositionEditor
+                  playerId={player.id}
+                  position={player.position}
+                  positionCode={player.position_code}
+                  action={savePlayerPosition}
+                />
+              </td>
+            </tr>
             <Row k="Current club" v={player.club_name} />
             <Row k="Enriched" v={player.enriched_at ? fmt(player.enriched_at) : "never (run Full sync)"} />
           </tbody>
