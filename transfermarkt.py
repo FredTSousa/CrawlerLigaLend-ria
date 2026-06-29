@@ -417,9 +417,11 @@ def match_player(zz_player: dict, idx: dict) -> dict | None:
 
 def _detail(tm_player: dict) -> dict:
     position = tm_player.get("position")
+    code = roster.position_code(position)
     return {
         "position": position,
-        "position_code": roster.position_code(position),
+        "position_code": code,
+        "position_group": roster.group_from_code(code),
         "age": tm_player.get("age"),
         "birth_date": tm_player.get("birth_date"),
         "nationality": tm_player.get("nationality"),

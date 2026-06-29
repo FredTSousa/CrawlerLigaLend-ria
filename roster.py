@@ -51,11 +51,28 @@ POSITION_CODES: dict[str, str] = {
     "médio defensivo": "CDM", "medio defensivo": "CDM",
     "médio centro": "CM", "medio centro": "CM", "médio": "CM", "medio": "CM",
     "médio ofensivo": "CAM", "medio ofensivo": "CAM",
+    "médio direito": "RM", "medio direito": "RM",
+    "médio esquerdo": "LM", "medio esquerdo": "LM",
     "extremo direito": "RW", "extremo esquerdo": "LW",
     "segundo avançado": "SS", "segundo avancado": "SS",
     "ponta de lança": "ST", "ponta de lanca": "ST",
     "avançado": "ST", "avancado": "ST",
 }
+
+# Maps position_code -> canonical position_group (derived from TM, overrides zerozero sections).
+CODE_TO_GROUP: dict[str, str] = {
+    "GK":  "Guarda Redes",
+    "CB":  "Defesa", "RB": "Defesa", "LB": "Defesa",
+    "RWB": "Defesa", "LWB": "Defesa",
+    "CDM": "Médio", "CM": "Médio", "CAM": "Médio",
+    "RM":  "Médio", "LM": "Médio",
+    "RW":  "Avançado", "LW": "Avançado",
+    "SS":  "Avançado", "ST": "Avançado",
+}
+
+
+def group_from_code(code: str | None) -> str | None:
+    return CODE_TO_GROUP.get(code) if code else None
 
 # Roster section headers on the team page -> canonical position_group.
 GROUP_CANON: list[tuple[re.Pattern, str]] = [

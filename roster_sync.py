@@ -230,6 +230,7 @@ def _player_detail_rows(enriched: dict[str, dict]) -> list[dict]:
         "id": pid,
         "position": d.get("position"),
         "position_code": d.get("position_code"),
+        "position_group": d.get("position_group"),
         "age": d.get("age"),
         "birth_date": d.get("birth_date"),
         "nationality": d.get("nationality"),
@@ -313,6 +314,23 @@ def write_squads(sb: sync.Supabase, data: dict) -> dict:
     _save("players", detail_rows, "id")
     _save("roster_memberships", _roster_rows(comp_id, teams),
           "competition_id,team_id,player_id")
+    # Patch position_group in roster_memberships from TM-derived data (overrides
+    # zerozero section headers, which misclassify wingers as Avançado, etc.).
+    if enriched:
+        player_team = {p["id"]: t["id"]
+                       for t in teams for p in t.get("players", [])
+                       if p.get("id") and t.get("id")}
+        now = sync._now()
+        roster_group_rows = [
+            {"competition_id": comp_id, "team_id": player_team[pid],
+             "player_id": pid, "position_group": d["position_group"],
+             "last_sync_at": now, "updated_at": now}
+            for pid, d in enriched.items()
+            if d.get("position_group") and pid in player_team
+        ]
+        if roster_group_rows:
+            _save("roster_memberships", roster_group_rows,
+                  "competition_id,team_id,player_id")
 
     if problems:
         print(f"  ! {len(problems)} row(s) failed to save:", file=sys.stderr)
@@ -578,6 +596,23 @@ def run_players(*, competition_url: str, run_id: int | None, trigger: str,
             for row, err in failures[:50]:
                 print(f"      {row.get('id')} {row.get('name') or ''}: {err}"
                       .rstrip(), file=sys.stderr)
+
+        # Patch roster_memberships.position_group from TM-derived groups.
+        player_team = {p["id"]: t["id"]
+                       for t in teams for p in t.get("players", [])
+                       if p.get("id") and t.get("id")}
+        now = sync._now()
+        roster_group_rows = [
+            {"competition_id": comp_id, "team_id": player_team[pid],
+             "player_id": pid, "position_group": d["position_group"],
+             "last_sync_at": now, "updated_at": now}
+            for pid, d in res["enriched"].items()
+            if d.get("position_group") and pid in player_team
+        ]
+        if roster_group_rows:
+            sb.upsert_partial("roster_memberships", roster_group_rows,
+                              "competition_id,team_id,player_id")
+
         try:
             _rpc(sb, "refresh_competition_counts", {"p_competition_id": comp_id})
         except Exception as err:  # noqa: BLE001
