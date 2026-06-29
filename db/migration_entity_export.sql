@@ -166,7 +166,7 @@ returns jsonb language sql stable as $$
             from public.roster_memberships rm
             join public.players p on p.id = rm.player_id
             where rm.competition_id = p_competition_id
-              and rm.team_id = p_team_id and rm.active), '[]'::jsonb));
+              and rm.team_id = p_team_id), '[]'::jsonb));
 $$;
 
 create or replace function public.build_player_event(p_player_id text, p_competition_id text)
