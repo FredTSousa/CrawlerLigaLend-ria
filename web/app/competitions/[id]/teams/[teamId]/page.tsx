@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SquadSyncButton from "@/components/SquadSyncButton";
+import DepartedToggle from "@/components/DepartedToggle";
+import { setPlayerDeparted } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -98,7 +100,7 @@ export default async function TeamDetails({
         groups.map((g) => (
           <div key={g} className="panel">
             <h3 style={{ marginTop: 0 }}>{g}</h3>
-            <PlayerTable players={byGroup.get(g)!} />
+            <PlayerTable players={byGroup.get(g)!} competitionId={id} teamId={teamId} />
           </div>
         ))
       ) : (
@@ -110,14 +112,19 @@ export default async function TeamDetails({
       {departed.length > 0 && (
         <div className="panel">
           <h3 style={{ marginTop: 0, opacity: 0.5 }}>Departed</h3>
-          <PlayerTable players={departed} dim />
+          <PlayerTable players={departed} dim competitionId={id} teamId={teamId} />
         </div>
       )}
     </>
   );
 }
 
-function PlayerTable({ players, dim }: { players: any[]; dim?: boolean }) {
+function PlayerTable({
+  players, dim, competitionId, teamId,
+}: {
+  players: any[]; dim?: boolean; competitionId: string; teamId: string;
+}) {
+  const departed = dim ?? false;
   return (
     <table style={dim ? { opacity: 0.45 } : undefined}>
       <thead>
@@ -128,6 +135,7 @@ function PlayerTable({ players, dim }: { players: any[]; dim?: boolean }) {
           <th className="num">Age</th>
           <th>Position</th>
           <th>Updated</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -141,6 +149,15 @@ function PlayerTable({ players, dim }: { players: any[]; dim?: boolean }) {
               <td className="num">{p.age ?? "—"}</td>
               <td>{p.position ?? <span className="muted">not enriched</span>}</td>
               <td className="muted">{fmt(p.last_updated)}</td>
+              <td>
+                <DepartedToggle
+                  competitionId={competitionId}
+                  teamId={teamId}
+                  playerId={p.player_id}
+                  departed={departed}
+                  action={setPlayerDeparted}
+                />
+              </td>
             </tr>
           ))}
       </tbody>
