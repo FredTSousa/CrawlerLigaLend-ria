@@ -498,54 +498,12 @@ def run_player(player_id: str, *, delay: float) -> dict:
 # ----------------------------------------------------------------------------
 
 
-def _db_teams_with_rosters(sb: sync.Supabase, comp_id: str) -> list[dict]:
-    """Rebuild the teams+players structure from the DB (active roster_memberships
-    + player names), so Transfermarkt enrichment can run with no zerozero roster
-    crawl. Shape matches roster.crawl_competition_squads output."""
-    teams = team_ids_from_matches(sb, comp_id)  # id,name,slug,tm_verein_id,tm_slug
-    by_id = {t["id"]: {**t, "players": []} for t in teams if t.get("id")}
-    # PostgREST caps a single response (db-max-rows, default 1000). A big
-    # competition like the 48-team World Cup has ~1250 active memberships, so an
-    # unpaginated read silently drops whole teams' rosters (they fall past row
-    # 1000 and arrive with zero players -> never enriched). Page through with an
-    # explicit order so limit/offset is deterministic.
-    rm: list[dict] = []
-    page_size, offset = 1000, 0
-    while True:
-        page = sb._rest(
-            "GET",
-            f"roster_memberships?competition_id=eq.{comp_id}&active=is.true"
-            "&select=team_id,player_id,shirt_number,age_at_sync,position_group"
-            f"&order=team_id,player_id&limit={page_size}&offset={offset}").json()
-        rm.extend(page)
-        if len(page) < page_size:
-            break
-        offset += page_size
-    pids = sorted({r["player_id"] for r in rm if r.get("player_id")})
-    pinfo: dict[str, dict] = {}
-    for i in range(0, len(pids), 200):
-        chunk = pids[i:i + 200]
-        for p in sb._rest("GET",
-                          f"players?id=in.({','.join(chunk)})&select=id,name,slug").json():
-            pinfo[p["id"]] = p
-    for r in rm:
-        t = by_id.get(r["team_id"])
-        if not t:
-            continue
-        info = pinfo.get(r["player_id"], {})
-        t["players"].append({
-            "id": r["player_id"], "name": info.get("name"), "slug": info.get("slug"),
-            "shirt_number": r.get("shirt_number"), "age": r.get("age_at_sync"),
-            "position_group": r.get("position_group"),
-        })
-    return list(by_id.values())
-
-
 def run_players(*, competition_url: str, run_id: int | None, trigger: str,
                 github_run_id: str | None, delay: float) -> dict:
-    """Re-fetch detailed positions from Transfermarkt for a competition's existing
-    DB rosters (no zerozero squad crawl). Writes player detail only; team and
-    roster membership are left untouched."""
+    """Re-fetch detailed positions from Transfermarkt for a competition's
+    rosters. Also re-crawls each team's zerozero squad page first (fast, no
+    per-player pages) so departed/sold players are caught (active=false) the
+    same way a roster refresh would, instead of leaving the roster stale."""
     sb = sync.Supabase()
     comp = crawler.get_competition(competition_url, delay=delay)
     comp_id = comp.get("id_edicao")
@@ -568,10 +526,19 @@ def run_players(*, competition_url: str, run_id: int | None, trigger: str,
             comp["tm_competition_code"] = m.get("tm_competition_code")
             comp["tm_saison_id"] = m.get("tm_saison_id")
 
-        teams = _db_teams_with_rosters(sb, comp_id)
+        team_ids = team_ids_from_matches(sb, comp_id)
+        if not team_ids:
+            raise RuntimeError(
+                f"no teams found for competition {comp_id}; crawl its "
+                "fixtures first (sync.py --backfill) so the team set exists")
+
+        jobstatus.report("zerozero: squad + departed check")
+        squad_data = roster.crawl_competition_squads(comp, team_ids, full=False,
+                                                      delay=delay)
+        write_squads(sb, squad_data)
+        teams = squad_data["teams"]
         if not sum(len(t["players"]) for t in teams):
-            raise RuntimeError("no rosters in the DB for this competition; run a "
-                               "Full sync first to populate the squads")
+            raise RuntimeError("no rosters could be crawled for this competition")
 
         jobstatus.report("Transfermarkt: detailed positions")
         aliases = _team_aliases(sb, [t["id"] for t in teams if t.get("id")])
@@ -759,8 +726,8 @@ def main() -> int:
     ap.add_argument("--team", help="Refresh only this team id's roster.")
     ap.add_argument("--player", help="Enrich one player id and exit.")
     ap.add_argument("--players-only", action="store_true",
-                    help="Re-fetch detailed positions from Transfermarkt over the "
-                         "DB's existing rosters (no zerozero squad crawl).")
+                    help="Fast zerozero squad re-crawl (catches departed/sold "
+                         "players) plus detailed positions from Transfermarkt.")
     ap.add_argument("--departed-only", action="store_true",
                     help="Re-enrich departed (active=false) players via their "
                          "individual zerozero pages (TM team pages skip them).")
