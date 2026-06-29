@@ -248,6 +248,7 @@ def _roster_rows(comp_id: str, teams: list[dict]) -> list[dict]:
         for p in t.get("players", []):
             if not p.get("id"):
                 continue
+            departed = p.get("departed", False)
             rows.append({
                 "competition_id": comp_id,
                 "team_id": t["id"],
@@ -255,8 +256,8 @@ def _roster_rows(comp_id: str, teams: list[dict]) -> list[dict]:
                 "position_group": p.get("position_group"),
                 "shirt_number": p.get("shirt_number"),
                 "age_at_sync": p.get("age"),
-                "active": True,
-                "left_at": None,
+                "active": not departed,
+                "left_at": now if departed else None,
                 "last_sync_at": now,
                 "updated_at": now,
             })

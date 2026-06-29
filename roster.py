@@ -210,8 +210,7 @@ def parse_team_squad(html: str) -> list[dict]:
         seg = html[sec.end():(sections[i + 1].start()
                               if i + 1 < len(sections) else len(html))]
         for chunk in STAFF_SPLIT_RE.split(seg)[1:]:
-            if chunk.startswith(" inactive"):
-                continue  # sold/departed mid-season — skip
+            departed = chunk.startswith(" inactive")
             pm = STAFF_PLAYER_RE.search(chunk)
             if pm:
                 slug, pid, name = pm.groups()
@@ -237,6 +236,7 @@ def parse_team_squad(html: str) -> list[dict]:
                 "age": int(age.group(1)) if age else None,
                 "photo_url": photo.group(2) if photo else None,
                 "source_url": f"{BASE}/jogador/{slug}/{pid}",
+                "departed": departed,
             }
     return list(players.values())
 
