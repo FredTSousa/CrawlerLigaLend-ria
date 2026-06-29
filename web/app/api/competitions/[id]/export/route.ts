@@ -70,10 +70,9 @@ export async function GET(
     const { data: page } = await supabase
       .from("competition_player_details")
       .select(
-        "player_id, player_name, age, position_group, position, position_code, club_name, team_id, team_name, shirt_number, photo_url, market_value_k, source_url, last_updated",
+        "player_id, player_name, age, position_group, position, position_code, club_name, team_id, team_name, shirt_number, photo_url, market_value_k, source_url, last_updated, active",
       )
       .eq("competition_id", id)
-      .eq("active", true)
       .order("team_id", { ascending: true })
       .order("player_id", { ascending: true })
       .range(from, from + PAGE - 1);
@@ -209,6 +208,7 @@ export async function GET(
       market_value_k: p.market_value_k,
       source_url: p.source_url,
       last_updated: p.last_updated,
+      active: p.active ?? true,
     })),
     fixtures: ((fixtures ?? []) as any[]).map((f) => ({
       ...f,
