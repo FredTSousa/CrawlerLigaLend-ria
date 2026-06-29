@@ -207,7 +207,7 @@ def parse_team_squad(html: str) -> list[dict]:
         seg = html[sec.end():(sections[i + 1].start()
                               if i + 1 < len(sections) else len(html))]
         for chunk in STAFF_SPLIT_RE.split(seg)[1:]:
-            departed = chunk.startswith(" inactive")
+            departed = chunk.startswith("inactive")
             pm = STAFF_PLAYER_RE.search(chunk)
             if pm:
                 slug, pid, name = pm.groups()

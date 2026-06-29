@@ -28,9 +28,9 @@ export default function DepartedToggle({ competitionId, teamId, playerId, depart
       style={{ fontSize: 11, padding: "2px 8px", opacity: busy ? 0.5 : 1 }}
       onClick={toggle}
       disabled={busy}
-      title={departed ? "Mark as active" : "Mark as departed"}
+      title={departed ? "Mark as active" : "Mark as sold/departed"}
     >
-      {departed ? "restore" : "sold"}
+      {departed ? "restore" : "mark sold"}
     </button>
   );
 }
