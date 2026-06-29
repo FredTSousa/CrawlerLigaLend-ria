@@ -35,14 +35,16 @@ export default async function TeamDetails({
     .eq("team_id", teamId);
 
   const rows = (roster ?? []) as any[];
-  const activeRows = rows.filter((p) => p.active !== false);
+  const activeCount = rows.filter((p) => p.active !== false).length;
+  const departedCount = rows.filter((p) => p.active === false).length;
+
+  // Merge active + departed into the same groups so departed show inline.
   const byGroup = new Map<string, any[]>();
-  for (const p of activeRows) {
+  for (const p of rows) {
     const g = p.position_group ?? "Other";
     if (!byGroup.has(g)) byGroup.set(g, []);
     byGroup.get(g)!.push(p);
   }
-  const departed = rows.filter((p) => p.active === false);
   const groups = [...byGroup.keys()].sort(
     (a, b) => idx(a) - idx(b) || a.localeCompare(b),
   );
@@ -51,7 +53,7 @@ export default async function TeamDetails({
     return (
       <div className="panel">
         <h2>Team not found</h2>
-        <Link href={`/competitions/${id}`}>← back to competition</Link>
+        <Link href={`/competitions/${id}`}>back to competition</Link>
       </div>
     );
   }
@@ -68,7 +70,7 @@ export default async function TeamDetails({
                 <Link href={`/competitions/${id}`}>
                   {comp?.full_name || comp?.name}
                 </Link>{" "}
-                · {comp?.season ?? ""} · {activeRows.length} players{departed.length ? ` · ${departed.length} departed` : ""}
+                · {comp?.season ?? ""} · {activeCount} players{departedCount ? ` · ${departedCount} sold` : ""}
               </div>
             </div>
           </div>
@@ -80,7 +82,7 @@ export default async function TeamDetails({
               team={teamId}
               label="Refresh roster"
             />
-            {departed.length > 0 && (
+            {departedCount > 0 && (
               <SquadSyncButton
                 kind="comp_departed"
                 target={comp?.slug || id}
@@ -96,7 +98,7 @@ export default async function TeamDetails({
         </div>
       </div>
 
-      {activeRows.length ? (
+      {rows.length ? (
         groups.map((g) => (
           <div key={g} className="panel">
             <h3 style={{ marginTop: 0 }}>{g}</h3>
@@ -108,25 +110,17 @@ export default async function TeamDetails({
           <p className="muted">No roster yet — press "Refresh roster".</p>
         </div>
       )}
-
-      {departed.length > 0 && (
-        <div className="panel">
-          <h3 style={{ marginTop: 0, opacity: 0.5 }}>Departed</h3>
-          <PlayerTable players={departed} dim competitionId={id} teamId={teamId} />
-        </div>
-      )}
     </>
   );
 }
 
 function PlayerTable({
-  players, dim, competitionId, teamId,
+  players, competitionId, teamId,
 }: {
-  players: any[]; dim?: boolean; competitionId: string; teamId: string;
+  players: any[]; competitionId: string; teamId: string;
 }) {
-  const departed = dim ?? false;
   return (
-    <table style={dim ? { opacity: 0.45 } : undefined}>
+    <table>
       <thead>
         <tr>
           <th className="num">#</th>
@@ -140,26 +134,37 @@ function PlayerTable({
       </thead>
       <tbody>
         {players
-          .sort((a, b) => (a.shirt_number ?? 99) - (b.shirt_number ?? 99))
-          .map((p) => (
-            <tr key={p.player_id}>
-              <td className="num">{p.shirt_number ?? "—"}</td>
-              <td><Avatar src={p.photo_url} name={p.player_name} /></td>
-              <td><Link href={`/players/${p.player_id}`}>{p.player_name}</Link></td>
-              <td className="num">{p.age ?? "—"}</td>
-              <td>{p.position ?? <span className="muted">not enriched</span>}</td>
-              <td className="muted">{fmt(p.last_updated)}</td>
-              <td>
-                <DepartedToggle
-                  competitionId={competitionId}
-                  teamId={teamId}
-                  playerId={p.player_id}
-                  departed={departed}
-                  action={setPlayerDeparted}
-                />
-              </td>
-            </tr>
-          ))}
+          .sort((a, b) => {
+            // Active players first, then departed.
+            if ((a.active === false) !== (b.active === false))
+              return a.active === false ? 1 : -1;
+            return (a.shirt_number ?? 99) - (b.shirt_number ?? 99);
+          })
+          .map((p) => {
+            const sold = p.active === false;
+            return (
+              <tr key={p.player_id} style={sold ? { opacity: 0.4 } : undefined}>
+                <td className="num">{p.shirt_number ?? "—"}</td>
+                <td><Avatar src={p.photo_url} name={p.player_name} /></td>
+                <td>
+                  <Link href={`/players/${p.player_id}`}>{p.player_name}</Link>
+                  {sold && <span className="pill" style={{ marginLeft: 6, fontSize: 10 }}>sold</span>}
+                </td>
+                <td className="num">{p.age ?? "—"}</td>
+                <td>{p.position ?? <span className="muted">not enriched</span>}</td>
+                <td className="muted">{fmt(p.last_updated)}</td>
+                <td>
+                  <DepartedToggle
+                    competitionId={competitionId}
+                    teamId={teamId}
+                    playerId={p.player_id}
+                    departed={sold}
+                    action={setPlayerDeparted}
+                  />
+                </td>
+              </tr>
+            );
+          })}
       </tbody>
     </table>
   );
@@ -167,21 +172,14 @@ function PlayerTable({
 
 function Avatar({ src, name }: { src: string | null; name: string | null }) {
   if (!src) {
-    // No headshot crawled — show a clear, muted placeholder so a failed/partial
-    // photo crawl is obvious at a glance.
     return (
       <div
         title="no photo"
         style={{
-          width: 32,
-          height: 32,
-          borderRadius: "50%",
+          width: 32, height: 32, borderRadius: "50%",
           background: "var(--border, #2a2a2a)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 11,
-          color: "var(--muted, #888)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 11, color: "var(--muted, #888)",
         }}
       >
         ?
@@ -207,9 +205,6 @@ function idx(g: string) {
 function fmt(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
   });
 }
