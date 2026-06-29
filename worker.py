@@ -64,6 +64,7 @@ KIND_LABEL = {
     "reporter": "Reporter", "watch": "Live watch",
     "teams": "Squads", "roster": "Roster", "players": "Player",
     "comp_full": "Full squads", "comp_players": "Squad positions",
+    "comp_departed": "Departed positions",
 }
 
 # Generic param -> env var. The job's params mirror the old workflow inputs.
@@ -82,7 +83,7 @@ PARAM_ENV = {
 # inputs never leak into the next one this same worker runs.
 _JOB_ENV = set(PARAM_ENV.values()) | {
     "IN_BACKFILL", "IN_FORCE", "IN_SCHEDULED", "IN_REPORTER_SWEEP",
-    "IN_FULL", "IN_PLAYERS_ONLY", "IN_RUN_ID", "WATCH_DAEMON", "JOB_KIND",
+    "IN_FULL", "IN_PLAYERS_ONLY", "IN_DEPARTED_ONLY", "IN_RUN_ID", "WATCH_DAEMON", "JOB_KIND",
 }
 
 
@@ -127,6 +128,8 @@ def _prepare_env(kind: str, params: dict) -> None:
         os.environ["IN_FULL"] = "true"
     elif kind == "comp_players":
         os.environ["IN_PLAYERS_ONLY"] = "true"
+    elif kind == "comp_departed":
+        os.environ["IN_DEPARTED_ONLY"] = "true"
     elif kind == "watch":
         os.environ["WATCH_DAEMON"] = "1"
 

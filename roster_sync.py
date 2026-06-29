@@ -640,6 +640,109 @@ def run_players(*, competition_url: str, run_id: int | None, trigger: str,
 
 
 # ----------------------------------------------------------------------------
+# Departed-players position refresh: enrich sold/inactive players via their
+# individual zerozero pages (TM team pages no longer list them).
+# ----------------------------------------------------------------------------
+
+
+def run_departed_players(*, competition_url: str, run_id: int | None,
+                         trigger: str, github_run_id: str | None,
+                         delay: float) -> dict:
+    """Re-fetch positions for departed (active=false) roster members via their
+    individual zerozero pages, which persist even after a player leaves a club."""
+    sb = sync.Supabase()
+    comp = crawler.get_competition(competition_url, delay=delay)
+    comp_id = comp.get("id_edicao")
+    run_id = sync._begin_run(sb, run_id=run_id, trigger=trigger,
+                             kind="comp_departed",
+                             target=str(comp.get("slug") or competition_url),
+                             github_run_id=github_run_id)
+    try:
+        if not comp_id:
+            raise RuntimeError("could not resolve competition id_edicao")
+
+        # Fetch all inactive roster members that are missing a position_code.
+        raw = sb._rest(
+            "GET",
+            f"roster_memberships?competition_id=eq.{comp_id}"
+            f"&active=eq.false"
+            f"&select=player_id,team_id"
+        ).json()
+        memberships = raw if isinstance(raw, list) else []
+
+        if not memberships:
+            msg = "No departed players without positions found."
+            sync._finish_run(sb, run_id, status="success", games_count=0)
+            jobstatus.done("success", message=msg)
+            print(msg, file=sys.stderr)
+            return {"run_id": run_id, "enriched": 0, "failed": 0}
+
+        # Fetch player source_urls so we can hit their zerozero pages.
+        player_ids = list({m["player_id"] for m in memberships})
+        players_raw = sb._rest(
+            "GET",
+            f"players?id=in.({','.join(player_ids)})&select=id,source_url,position_code"
+        ).json()
+        players_info = {p["id"]: p for p in (players_raw if isinstance(players_raw, list) else [])}
+
+        session = crawler.new_session()
+        now = sync._now()
+        enriched = failed = 0
+
+        for pid in player_ids:
+            info = players_info.get(pid, {})
+            source_url = info.get("source_url")
+            if not source_url:
+                print(f"  ? player {pid}: no source_url, skipping", file=sys.stderr)
+                failed += 1
+                continue
+            jobstatus.report(f"zerozero: {info.get('id', pid)}")
+            try:
+                d = roster.get_player_detail(pid, session=session, delay=delay)
+            except Exception as err:  # noqa: BLE001
+                print(f"  ! player {pid}: {err}", file=sys.stderr)
+                failed += 1
+                continue
+            code = d.get("position_code")
+            if not code:
+                print(f"  ? player {pid}: position not parsed", file=sys.stderr)
+                failed += 1
+                continue
+            group = roster.group_from_code(code)
+            # Update players table.
+            sb.upsert("players", [{
+                "id": pid, "position": d.get("position"),
+                "position_code": code, "enriched_at": now,
+                "last_sync_at": now, "updated_at": now,
+            }], "id")
+            # Update all departed roster_memberships for this player in this comp.
+            team_ids = [m["team_id"] for m in memberships if m["player_id"] == pid]
+            if group and team_ids:
+                rm_rows = [{"competition_id": comp_id, "team_id": tid,
+                            "player_id": pid, "position_group": group,
+                            "last_sync_at": now, "updated_at": now}
+                           for tid in team_ids]
+                sb.upsert("roster_memberships", rm_rows,
+                          "competition_id,team_id,player_id")
+            enriched += 1
+            print(f"  ✓ {d.get('name') or pid}: {d.get('position')} → {code}",
+                  file=sys.stderr)
+
+        msg = f"Departed players: {enriched} enriched, {failed} failed."
+        sync._finish_run(sb, run_id, status="success", games_count=enriched,
+                         error=(f"{failed} failed" if failed else None))
+        jobstatus.done("error" if failed else "success",
+                       message=msg + (" See log." if failed else ""))
+        print(msg + f" crawl_run #{run_id}", file=sys.stderr)
+        return {"run_id": run_id, "enriched": enriched, "failed": failed}
+    except Exception as err:  # noqa: BLE001
+        sync._finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        jobstatus.done("error", message=str(err))
+        print(f"ERROR in departed crawl_run #{run_id}: {err}", file=sys.stderr)
+        raise
+
+
+# ----------------------------------------------------------------------------
 # CLI
 # ----------------------------------------------------------------------------
 
@@ -658,6 +761,9 @@ def main() -> int:
     ap.add_argument("--players-only", action="store_true",
                     help="Re-fetch detailed positions from Transfermarkt over the "
                          "DB's existing rosters (no zerozero squad crawl).")
+    ap.add_argument("--departed-only", action="store_true",
+                    help="Re-enrich departed (active=false) players via their "
+                         "individual zerozero pages (TM team pages skip them).")
     ap.add_argument("--run-id", type=int)
     ap.add_argument("--trigger", default="manual", choices=["manual", "schedule"])
     ap.add_argument("--github-run-id", default=os.environ.get("GITHUB_RUN_ID"))
@@ -671,6 +777,7 @@ def main() -> int:
     team_id = args.team or sync._env("IN_TEAM")
     player_id = args.player or sync._env("IN_PLAYER")
     players_only = args.players_only or sync._flag(sync._env("IN_PLAYERS_ONLY"))
+    departed_only = args.departed_only or sync._flag(sync._env("IN_DEPARTED_ONLY"))
     run_id = args.run_id
     if run_id is None:
         rid = sync._env("IN_RUN_ID")
@@ -687,6 +794,10 @@ def main() -> int:
     if players_only:
         run_players(competition_url=url, run_id=run_id, trigger=trigger,
                     github_run_id=args.github_run_id, delay=args.delay)
+        return 0
+    if departed_only:
+        run_departed_players(competition_url=url, run_id=run_id, trigger=trigger,
+                             github_run_id=args.github_run_id, delay=args.delay)
         return 0
     run(competition_url=url, full=full, run_id=run_id, trigger=trigger,
         github_run_id=args.github_run_id, delay=args.delay,

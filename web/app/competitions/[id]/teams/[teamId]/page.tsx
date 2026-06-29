@@ -78,6 +78,15 @@ export default async function TeamDetails({
               team={teamId}
               label="Refresh roster"
             />
+            {departed.length > 0 && (
+              <SquadSyncButton
+                kind="comp_departed"
+                target={comp?.slug || id}
+                competition={comp?.slug || id}
+                label="Update departed positions"
+                variant="secondary"
+              />
+            )}
             {team.source_url && (
               <a href={team.source_url} target="_blank" rel="noreferrer">source ↗</a>
             )}
