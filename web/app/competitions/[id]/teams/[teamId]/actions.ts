@@ -23,4 +23,5 @@ export async function setPlayerDeparted(
     .eq("player_id", playerId);
   if (error) throw new Error(error.message);
   revalidatePath(`/competitions/${competitionId}/teams/${teamId}`);
+  revalidatePath(`/players/${playerId}`);
 }
