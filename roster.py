@@ -43,31 +43,28 @@ BASE = crawler.BASE
 # ----------------------------------------------------------------------------
 
 POSITION_CODES: dict[str, str] = {
-    "guarda-redes": "GK", "guarda redes": "GK",
-    "defesa central": "CB",
-    "defesa direito": "RB", "lateral direito": "RB",
-    "defesa esquerdo": "LB", "lateral esquerdo": "LB",
-    "ala direito": "RWB", "ala esquerdo": "LWB",
-    "médio defensivo": "CDM", "medio defensivo": "CDM",
-    "médio centro": "CM", "medio centro": "CM", "médio": "CM", "medio": "CM",
-    "médio ofensivo": "CAM", "medio ofensivo": "CAM",
-    "médio direito": "RM", "medio direito": "RM",
-    "médio esquerdo": "LM", "medio esquerdo": "LM",
+    "guarda-redes": "GR", "guarda redes": "GR",
+    "defesa central": "DC",
+    "defesa direito": "DL", "lateral direito": "DL",
+    "defesa esquerdo": "DL", "lateral esquerdo": "DL",
+    "ala direito": "DL", "ala esquerdo": "DL",
+    "médio defensivo": "MC", "medio defensivo": "MC",
+    "médio centro": "MC", "medio centro": "MC", "médio": "MC", "medio": "MC",
+    "médio ofensivo": "MC", "medio ofensivo": "MC",
+    "médio direito": "MC", "medio direito": "MC",
+    "médio esquerdo": "MC", "medio esquerdo": "MC",
     "extremo direito": "MA", "extremo esquerdo": "MA",
-    "segundo avançado": "SS", "segundo avancado": "SS",
-    "ponta de lança": "ST", "ponta de lanca": "ST",
-    "avançado": "ST", "avancado": "ST",
+    "segundo avançado": "AV", "segundo avancado": "AV",
+    "ponta de lança": "AV", "ponta de lanca": "AV",
+    "avançado": "AV", "avancado": "AV",
 }
 
 # Maps position_code -> canonical position_group (derived from TM, overrides zerozero sections).
 CODE_TO_GROUP: dict[str, str] = {
-    "GK":  "Guarda Redes",
-    "CB":  "Defesa", "RB": "Defesa", "LB": "Defesa",
-    "RWB": "Defesa", "LWB": "Defesa",
-    "CDM": "Médio", "CM": "Médio", "CAM": "Médio",
-    "RM":  "Médio", "LM": "Médio",
-    "MA":  "Médio",
-    "SS":  "Avançado", "ST": "Avançado",
+    "GR": "Guarda Redes",
+    "DC": "Defesa", "DL": "Defesa",
+    "MC": "Médio", "MA": "Médio",
+    "AV": "Avançado",
 }
 
 
