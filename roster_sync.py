@@ -609,6 +609,15 @@ def run_players(*, competition_url: str, run_id: int | None, trigger: str,
 # ----------------------------------------------------------------------------
 # Departed-players position refresh: enrich sold/inactive players via their
 # individual zerozero pages (TM team pages no longer list them).
+#
+# POTENTIALLY DEPRECATED: superseded by run_sold_players, which reads the same
+# departed players from each team's Transfermarkt transfers (Saídas) page. This
+# zerozero path relies on per-player pages whose bot traffic is poisoned with
+# random data, and it was never wired into the queue worker (comp_departed has no
+# KIND_MODULE entry), so it does not run in production. It also carries the same
+# latent NOT NULL players.name bug fixed in run_sold_players (the players upsert
+# below omits name). Kept only as reference; remove once run_sold_players has
+# proven out.
 # ----------------------------------------------------------------------------
 
 
@@ -616,7 +625,10 @@ def run_departed_players(*, competition_url: str, run_id: int | None,
                          trigger: str, github_run_id: str | None,
                          delay: float) -> dict:
     """Re-fetch positions for departed (active=false) roster members via their
-    individual zerozero pages, which persist even after a player leaves a club."""
+    individual zerozero pages, which persist even after a player leaves a club.
+
+    POTENTIALLY DEPRECATED — see the module section comment above; prefer
+    run_sold_players (Transfermarkt-based)."""
     sb = sync.Supabase()
     comp = crawler.get_competition(competition_url, delay=delay)
     comp_id = comp.get("id_edicao")
