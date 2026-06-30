@@ -810,8 +810,12 @@ def run_sold_players(*, competition_url: str, run_id: int | None, trigger: str,
                     failed += 1
                     continue
                 group = roster.group_from_code(code)
+                # name is carried (NOT NULL players.name is validated on the
+                # upsert's proposed insert tuple even when it resolves to an
+                # UPDATE); mb["name"] is non-null here (skipped above otherwise).
                 sb.upsert("players", [{
-                    "id": mb["id"], "position": hit.get("position"),
+                    "id": mb["id"], "name": mb["name"],
+                    "position": hit.get("position"),
                     "position_code": code, "enriched_at": now,
                     "last_sync_at": now, "updated_at": now,
                 }], "id")
