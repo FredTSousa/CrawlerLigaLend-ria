@@ -323,6 +323,85 @@ def get_team_squad(slug: str, verein_id: str, saison_id: str, *,
 
 
 # ----------------------------------------------------------------------------
+# Team transfers (Saídas / departures) -> players who LEFT, with their position.
+# The kader page only lists the current squad, so a sold player's detailed
+# position can't be read there. The transfers page keeps them: it has two
+# `<table class="items">` blocks — Chegadas (arrivals) then Saídas (departures) —
+# and each departure row carries the SAME inline-table markup as a kader row
+# (player link + a second <td> with the detailed Portuguese position), so the
+# kader player/position regexes are reused. Rows are split on the position-colour
+# cell (<td class="bg_…">) that prefixes each player, exactly like the kader split.
+#
+# VERIFIED against real markup (AVS, verein 110302, saison_id 2025):
+#   <h2 … class="content-box-headline">Saídas</h2> … <table class="items"> …
+#     <tr class="odd"><td class="bg_Sturm">&nbsp;</td>
+#       <td><table class="inline-table">
+#         <tr><td rowspan="2"><img …/></td>
+#             <td class="hauptlink"><a href="/john-mercado/profil/spieler/659804">…</a></td></tr>
+#         <tr><td>Extremo Esquerdo</td></tr></table></td>
+#       <td class="zentriert">23</td>  (age)  …
+# ----------------------------------------------------------------------------
+
+_DEPARTURES_HEAD_RE = re.compile(r'content-box-headline[^>]*>\s*Sa[ií]das', re.I)
+_TRANSFER_ROW_SPLIT = re.compile(r'(?=<td class="bg_)')
+_TM_DEP_AGE_RE = re.compile(
+    r'</table>\s*</td>\s*<td class="zentriert">\s*(\d{1,2})\s*</td>')
+
+
+def transfers_url(slug: str, verein_id: str, saison_id: str) -> str:
+    return (f"{TM_BASE}/{slug or 'x'}/transfers/verein/{verein_id}"
+            f"/saison_id/{saison_id}")
+
+
+def _departures_html(html: str) -> str:
+    """Slice the page to just the Saídas (departures) box: from its headline to
+    the next content box. Returns "" if no departures section is present."""
+    m = _DEPARTURES_HEAD_RE.search(html)
+    if not m:
+        return ""
+    rest = html[m.end():]
+    nxt = re.search(r"content-box-headline", rest)
+    return rest[:nxt.start()] if nxt else rest
+
+
+def parse_departures(html: str) -> list[dict]:
+    players: list[dict] = []
+    section = _departures_html(html)
+    if not section:
+        return players
+    for chunk in _TRANSFER_ROW_SPLIT.split(section)[1:]:
+        pm = _TM_PLAYER_RE.search(chunk)
+        if not pm:
+            continue
+        slug, tm_id, raw_name = pm.groups()
+        name = crawler.clean_name(crawler.strip_tags(raw_name))
+        if not name:
+            continue
+        pos = _TM_POS_RE.search(chunk)
+        age = _TM_DEP_AGE_RE.search(chunk)
+        players.append({
+            "tm_id": tm_id,
+            "slug": slug,
+            "name": name,
+            "position": crawler.clean_name(pos.group(1)) if pos else None,
+            "age": int(age.group(1)) if age else None,
+        })
+    return players
+
+
+def get_team_departures(slug: str, verein_id: str, saison_id: str, *,
+                        session=None) -> list[dict]:
+    session = session or crawler.new_session()
+    html = _fetch(session, transfers_url(slug, verein_id, saison_id))
+    players = parse_departures(html)
+    if not players:
+        print(f"  ! no TM departures parsed for {slug}/{verein_id} "
+              "(team may have no Saídas this season, or # VERIFY row regex).",
+              file=sys.stderr)
+    return players
+
+
+# ----------------------------------------------------------------------------
 # Name normalization + matching (TM rows -> zerozero ids)
 # ----------------------------------------------------------------------------
 
@@ -503,6 +582,69 @@ def enrich_competition(comp: dict, zz_teams: list[dict], *, session=None,
              "players_matched": players_matched, "players_total": players_total,
              "unmatched_teams": unmatched_teams}
     return {"enriched": enriched, "team_tm": team_tm, "stats": stats}
+
+
+def get_competition_departures(comp: dict, zz_teams: list[dict], *, session=None,
+                               aliases: dict[str, list[str]] | None = None) -> dict:
+    """Fetch each team's Transfermarkt departures (Saídas), for fixing the
+    positions of sold/left players the kader page no longer lists.
+
+    `zz_teams` is [{id, name, slug?, tm_verein_id?, tm_slug?}] (players not
+    needed — the departed set comes from the DB). Returns:
+        departures : {zz_team_id: [{tm_id, name, position, age}, ...]}
+        team_tm    : {zz_team_id: {verein_id, slug}}  newly resolved (to persist)
+        stats      : counters for logging
+    Mirrors enrich_competition's team-resolution path (DB tm ids first, else a
+    one-page league match)."""
+    session = session or crawler.new_session()
+    code = comp_code_for(comp)
+    saison = saison_id_for(comp)
+    departures: dict[str, list[dict]] = {}
+    team_tm: dict[str, dict] = {}
+    unmatched_teams: list[str] = []
+    if not code or not saison:
+        print(f"  ! TM departures skipped: no mapping for slug "
+              f"{comp.get('slug')!r} / season {comp.get('season')!r}.",
+              file=sys.stderr)
+        return {"departures": {}, "team_tm": {},
+                "stats": {"teams_matched": 0, "teams_total": len(zz_teams),
+                          "departures_total": 0,
+                          "unmatched_teams": [t.get("name") for t in zz_teams]}}
+
+    league_teams: list[dict] | None = None  # fetched lazily, only if needed
+    teams_matched = 0
+    departures_total = 0
+    for n, zz in enumerate(zz_teams, 1):
+        jobstatus.report(f"Transfermarkt saídas: {zz.get('name') or zz['id']}",
+                         current=n, total=len(zz_teams))
+        verein = zz.get("tm_verein_id")
+        slug = zz.get("tm_slug")
+        if not verein:
+            if league_teams is None:
+                league_teams = get_competition_teams(code, saison, session=session)
+            tm = match_team(zz, league_teams, aliases)
+            if not tm:
+                print(f"  ? no TM team for {zz.get('name') or zz['id']}",
+                      file=sys.stderr)
+                unmatched_teams.append(zz.get("name") or zz["id"])
+                continue
+            verein, slug = tm["verein_id"], tm["slug"]
+            team_tm[zz["id"]] = {"verein_id": verein, "slug": slug}
+        teams_matched += 1
+
+        try:
+            dep = get_team_departures(slug, verein, saison, session=session)
+        except Exception as err:  # noqa: BLE001
+            print(f"  ! TM departures failed for {zz.get('name') or zz['id']}: "
+                  f"{err}", file=sys.stderr)
+            continue
+        departures[zz["id"]] = dep
+        departures_total += len(dep)
+
+    stats = {"teams_matched": teams_matched, "teams_total": len(zz_teams),
+             "departures_total": departures_total,
+             "unmatched_teams": unmatched_teams}
+    return {"departures": departures, "team_tm": team_tm, "stats": stats}
 
 
 # ----------------------------------------------------------------------------

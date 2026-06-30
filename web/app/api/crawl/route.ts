@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   }
 
   // Squad kinds drive roster_sync.py via squads.yml; the rest drive sync.py.
-  const squadKinds = ["teams", "roster", "players", "comp_full", "comp_players"];
+  const squadKinds = ["teams", "roster", "players", "comp_full", "comp_players", "comp_sold"];
   const allowed = [
     "round", "match", "watch", "reporter", "backfill", ...squadKinds,
   ];

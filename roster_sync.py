@@ -710,6 +710,144 @@ def run_departed_players(*, competition_url: str, run_id: int | None,
 
 
 # ----------------------------------------------------------------------------
+# Sold-players position fix: read each team's Transfermarkt transfers page
+# (Saídas / departures) — which still lists players who LEFT, with their detailed
+# position — and apply it to the departed (active=false) roster members. This is
+# the reliable replacement for run_departed_players: it never touches zerozero's
+# per-player pages (bot traffic there is poisoned with random data).
+# ----------------------------------------------------------------------------
+
+
+def run_sold_players(*, competition_url: str, run_id: int | None, trigger: str,
+                     github_run_id: str | None, delay: float) -> dict:
+    """Fix positions of sold/departed (active=false) roster members from each
+    team's Transfermarkt departures (Saídas) list, matched by name."""
+    sb = sync.Supabase()
+    comp = crawler.get_competition(competition_url, delay=delay)
+    comp_id = comp.get("id_edicao")
+    run_id = sync._begin_run(sb, run_id=run_id, trigger=trigger,
+                             kind="comp_sold",
+                             target=str(comp.get("slug") or competition_url),
+                             github_run_id=github_run_id)
+    try:
+        if not comp_id:
+            raise RuntimeError("could not resolve competition id_edicao")
+
+        # Season + TM mapping from the DB (avoids a second zerozero request).
+        try:
+            meta = sb._rest("GET", f"competitions?id=eq.{comp_id}&select="
+                            "slug,season,tm_competition_code,tm_saison_id").json()
+        except Exception:  # noqa: BLE001
+            meta = []
+        if meta:
+            m = meta[0]
+            comp["season"] = comp.get("season") or m.get("season")
+            comp.setdefault("slug", m.get("slug"))
+            comp["tm_competition_code"] = m.get("tm_competition_code")
+            comp["tm_saison_id"] = m.get("tm_saison_id")
+
+        teams = team_ids_from_matches(sb, comp_id)
+        if not teams:
+            raise RuntimeError(
+                f"no teams found for competition {comp_id}; crawl its "
+                "fixtures first (sync.py --backfill) so the team set exists")
+
+        # Departed (active=false) roster members + their names/ages, grouped by team.
+        memberships = sb._rest(
+            "GET",
+            f"roster_memberships?competition_id=eq.{comp_id}&active=eq.false"
+            "&select=player_id,team_id,age_at_sync").json()
+        memberships = memberships if isinstance(memberships, list) else []
+        if not memberships:
+            msg = "No sold/departed players to fix."
+            sync._finish_run(sb, run_id, status="success", games_count=0)
+            jobstatus.done("success", message=msg)
+            print(msg, file=sys.stderr)
+            return {"run_id": run_id, "fixed": 0, "failed": 0}
+
+        player_ids = list({m["player_id"] for m in memberships})
+        names_raw = sb._rest(
+            "GET",
+            f"players?id=in.({','.join(player_ids)})&select=id,name,age").json()
+        pname = {p["id"]: p for p in (names_raw if isinstance(names_raw, list) else [])}
+        departed_by_team: dict[str, list[dict]] = {}
+        for mb in memberships:
+            info = pname.get(mb["player_id"], {})
+            departed_by_team.setdefault(mb["team_id"], []).append({
+                "id": mb["player_id"],
+                "name": info.get("name"),
+                "age": mb.get("age_at_sync") or info.get("age"),
+            })
+
+        # Transfermarkt departures per team (only fetch teams that have departed
+        # members to fix).
+        jobstatus.report("Transfermarkt: departures (Saídas)")
+        zz_teams = [t for t in teams if t["id"] in departed_by_team]
+        aliases = _team_aliases(sb, [t["id"] for t in zz_teams if t.get("id")])
+        session = crawler.new_session()
+        res = transfermarkt.get_competition_departures(
+            comp, zz_teams, session=session, aliases=aliases)
+        if res["team_tm"]:
+            _persist_team_tm(sb, res["team_tm"])
+
+        now = sync._now()
+        fixed = failed = 0
+        for team_id, members in departed_by_team.items():
+            tm_dep = res["departures"].get(team_id, [])
+            if not tm_dep:
+                failed += len(members)
+                continue
+            idx = transfermarkt._player_index(tm_dep)
+            for mb in members:
+                if not mb.get("name"):
+                    failed += 1
+                    continue
+                hit = transfermarkt.match_player(mb, idx)
+                code = roster.position_code(hit.get("position")) if hit else None
+                if not code:
+                    print(f"  ? no TM departure match for {mb['name']!r} "
+                          f"(team {team_id})", file=sys.stderr)
+                    failed += 1
+                    continue
+                group = roster.group_from_code(code)
+                sb.upsert("players", [{
+                    "id": mb["id"], "position": hit.get("position"),
+                    "position_code": code, "enriched_at": now,
+                    "last_sync_at": now, "updated_at": now,
+                }], "id")
+                if group:
+                    sb.upsert("roster_memberships", [{
+                        "competition_id": comp_id, "team_id": team_id,
+                        "player_id": mb["id"], "position_group": group,
+                        "last_sync_at": now, "updated_at": now,
+                    }], "competition_id,team_id,player_id")
+                fixed += 1
+                print(f"  ✓ {mb['name']}: {hit.get('position')} → {code}",
+                      file=sys.stderr)
+
+        try:
+            _rpc(sb, "refresh_competition_counts", {"p_competition_id": comp_id})
+        except Exception as err:  # noqa: BLE001
+            print(f"  (refresh_competition_counts skipped: {err})", file=sys.stderr)
+
+        s = res["stats"]
+        msg = (f"Sold players: fixed {fixed}, {failed} unmatched "
+               f"({s['teams_matched']}/{s['teams_total']} teams, "
+               f"{s['departures_total']} TM departures).")
+        sync._finish_run(sb, run_id, status="success", games_count=fixed,
+                         error=(f"{failed} unmatched (see log)" if failed else None))
+        jobstatus.done("error" if failed else "success",
+                       message=msg + (" See log." if failed else ""))
+        print(msg + f" crawl_run #{run_id}", file=sys.stderr)
+        return {"run_id": run_id, "fixed": fixed, "failed": failed}
+    except Exception as err:  # noqa: BLE001
+        sync._finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        jobstatus.done("error", message=str(err))
+        print(f"ERROR in sold-players crawl_run #{run_id}: {err}", file=sys.stderr)
+        raise
+
+
+# ----------------------------------------------------------------------------
 # CLI
 # ----------------------------------------------------------------------------
 
@@ -731,6 +869,9 @@ def main() -> int:
     ap.add_argument("--departed-only", action="store_true",
                     help="Re-enrich departed (active=false) players via their "
                          "individual zerozero pages (TM team pages skip them).")
+    ap.add_argument("--sold-only", action="store_true",
+                    help="Fix sold/departed player positions from each team's "
+                         "Transfermarkt transfers (Saídas) page.")
     ap.add_argument("--run-id", type=int)
     ap.add_argument("--trigger", default="manual", choices=["manual", "schedule"])
     ap.add_argument("--github-run-id", default=os.environ.get("GITHUB_RUN_ID"))
@@ -745,6 +886,7 @@ def main() -> int:
     player_id = args.player or sync._env("IN_PLAYER")
     players_only = args.players_only or sync._flag(sync._env("IN_PLAYERS_ONLY"))
     departed_only = args.departed_only or sync._flag(sync._env("IN_DEPARTED_ONLY"))
+    sold_only = args.sold_only or sync._flag(sync._env("IN_SOLD_ONLY"))
     run_id = args.run_id
     if run_id is None:
         rid = sync._env("IN_RUN_ID")
@@ -765,6 +907,10 @@ def main() -> int:
     if departed_only:
         run_departed_players(competition_url=url, run_id=run_id, trigger=trigger,
                              github_run_id=args.github_run_id, delay=args.delay)
+        return 0
+    if sold_only:
+        run_sold_players(competition_url=url, run_id=run_id, trigger=trigger,
+                         github_run_id=args.github_run_id, delay=args.delay)
         return 0
     run(competition_url=url, full=full, run_id=run_id, trigger=trigger,
         github_run_id=args.github_run_id, delay=args.delay,

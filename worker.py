@@ -55,6 +55,7 @@ KIND_MODULE = {
     "watch": "live_watch",
     "teams": "roster_sync", "roster": "roster_sync", "players": "roster_sync",
     "comp_full": "roster_sync", "comp_players": "roster_sync",
+    "comp_sold": "roster_sync",
 }
 
 # Human label shown in the tray (JOB_KIND), per kind.
@@ -64,7 +65,7 @@ KIND_LABEL = {
     "reporter": "Reporter", "watch": "Live watch",
     "teams": "Squads", "roster": "Roster", "players": "Player",
     "comp_full": "Full squads", "comp_players": "Squad positions",
-    "comp_departed": "Departed positions",
+    "comp_departed": "Departed positions", "comp_sold": "Sold positions",
 }
 
 # Generic param -> env var. The job's params mirror the old workflow inputs.
@@ -83,7 +84,8 @@ PARAM_ENV = {
 # inputs never leak into the next one this same worker runs.
 _JOB_ENV = set(PARAM_ENV.values()) | {
     "IN_BACKFILL", "IN_FORCE", "IN_SCHEDULED", "IN_REPORTER_SWEEP",
-    "IN_FULL", "IN_PLAYERS_ONLY", "IN_DEPARTED_ONLY", "IN_RUN_ID", "WATCH_DAEMON", "JOB_KIND",
+    "IN_FULL", "IN_PLAYERS_ONLY", "IN_DEPARTED_ONLY", "IN_SOLD_ONLY", "IN_RUN_ID",
+    "WATCH_DAEMON", "JOB_KIND",
 }
 
 
@@ -98,7 +100,7 @@ def _target_fallback(kind: str, params: dict) -> None:
     elif kind in ("match", "watch"):
         params.setdefault("match", t)
     elif kind == "backfill" or kind in ("teams", "roster", "comp_full",
-                                        "comp_players"):
+                                        "comp_players", "comp_sold"):
         params.setdefault("competition", t)
     elif kind == "reporter":
         params.setdefault("match_id", t)
@@ -130,6 +132,8 @@ def _prepare_env(kind: str, params: dict) -> None:
         os.environ["IN_PLAYERS_ONLY"] = "true"
     elif kind == "comp_departed":
         os.environ["IN_DEPARTED_ONLY"] = "true"
+    elif kind == "comp_sold":
+        os.environ["IN_SOLD_ONLY"] = "true"
     elif kind == "watch":
         os.environ["WATCH_DAEMON"] = "1"
 

@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 // polls the crawl_runs row to completion, mirroring CrawlButton. Used on the
 // Competition details and Team/Player pages.
 type Props = {
-  kind: "teams" | "roster" | "players" | "comp_full" | "comp_players" | "comp_departed";
+  kind: "teams" | "roster" | "players" | "comp_full" | "comp_players" | "comp_departed" | "comp_sold";
   target: string; // competition slug/URL, or player id (kind="players")
   competition?: string; // explicit competition for kind="roster"
   team?: string; // team id for kind="roster"
