@@ -870,7 +870,7 @@ def run_backfill(*, competition_url: str, run_id: int | None, trigger: str,
 #   - DEACTIVATE (and stop sweeping) once the season is complete (all rounds
 #     final). A manual backfill re-activates the league.
 
-_SKIP, _CRAWL, _DEACTIVATE = "skip", "crawl", "deactivate"
+_SKIP, _CRAWL, _CRAWL_PHASE, _DEACTIVATE = "skip", "crawl", "crawl_phase", "deactivate"
 
 
 def _parse_iso(value: str | None) -> datetime | None:
@@ -887,11 +887,33 @@ def _parse_iso(value: str | None) -> datetime | None:
     return dt
 
 
+def _knockout_todo(status_map: dict, comp: dict) -> list[dict]:
+    """Knockout/cup phases (comp['phases']) not yet fully captured as final,
+    each tagged with the synthetic round number they map to (continues after
+    the group jornadas, same mapping run_backfill uses). Empty for a plain
+    league or once every phase is complete."""
+    knockouts = [p for p in (comp.get("phases") or [])
+                 if p.get("fase") and p["fase"] != comp.get("fase")]
+    if not knockouts:
+        return []
+    all_rounds = comp.get("rounds") or []
+    group_max = max(all_rounds) if all_rounds else 0
+    todo = []
+    for idx, ph in enumerate(knockouts, 1):
+        rd = group_max + idx
+        statuses = status_map.get(rd)
+        if not statuses or any(s != "final" for s in statuses):
+            todo.append({**ph, "round_no": rd})
+    return todo
+
+
 def _decide_round(sb: Supabase, comp_id: str,
-                  comp: dict) -> tuple[str, int | None, str]:
+                  comp: dict) -> tuple[str, int | dict | None, str]:
     """Decide what the sweep should do for one competition: (_SKIP|_CRAWL|
-    _DEACTIVATE, target_round, human reason). Reads only the DB (the cheap
-    landing page was already fetched to get current_round/rounds)."""
+    _CRAWL_PHASE|_DEACTIVATE, target, human reason). ``target`` is a round
+    number, except for _CRAWL_PHASE where it's a phase dict ({fase, name,
+    round_no}). Reads only the DB (the cheap landing page was already fetched
+    to get current_round/rounds/phases)."""
     cr = comp.get("current_round")
     rounds = comp.get("rounds") or []
     is_last = bool(rounds) and cr is not None and cr >= max(rounds)
@@ -917,13 +939,24 @@ def _decide_round(sb: Supabase, comp_id: str,
         return (_CRAWL, cr, f"round {cr}: kickoff unknown or a match is due")
 
     # Current round fully final. If any earlier round still has an open game
-    # (e.g. a postponed fixture), refresh that one; otherwise the league is done.
+    # (e.g. a postponed fixture), refresh that one; otherwise check knockout
+    # phases before deciding the competition is done.
     status_map = sb.competition_rounds_status(comp_id)
     open_rounds = sorted(
         rd for rd, statuses in status_map.items()
         if any(s != "final" for s in statuses))
     if open_rounds:
         return (_CRAWL, open_rounds[0], f"round {open_rounds[0]} still open")
+
+    # Knockout/cup phases (Oitavos, Quartos, Final, ...) aren't numbered
+    # jornadas, so they never show up in `rounds`/`open_rounds` above -- a cup
+    # competition would otherwise look "finished" the moment its group stage
+    # wraps up and get deactivated before the bracket was ever crawled.
+    knockout_todo = _knockout_todo(status_map, comp)
+    if knockout_todo:
+        ph = knockout_todo[0]
+        return (_CRAWL_PHASE, ph, f"phase '{ph['name']}' needs update")
+
     if is_last:
         return (_DEACTIVATE, cr, "season complete (all rounds final)")
     return (_CRAWL, cr, f"round {cr} final but not last; advancing")
@@ -1001,6 +1034,36 @@ def _scheduled_crawl_league(sb: Supabase, comp: dict, round_no: int, *,
         raise
 
 
+def _scheduled_crawl_phase(sb: Supabase, comp: dict, phase: dict, *,
+                           slug: str | None, comp_id: str | None,
+                           github_run_id: str | None, delay: float) -> int:
+    """Crawl & sync one knockout phase for the scheduled sweep, logging its own
+    crawl_runs row. Mirrors _scheduled_crawl_league but addresses a phase
+    (fase, with no jornada) instead of a numbered round, tagging each game
+    with its phase name (matches.phase) via the synthetic round number
+    _knockout_todo mapped it to."""
+    round_no = phase["round_no"]
+    run_id = _begin_run(sb, run_id=None, trigger="schedule", kind="phase",
+                        target=phase["name"], github_run_id=github_run_id)
+    try:
+        data = crawler.crawl_phase(comp, phase["fase"], round_no=round_no,
+                                   phase_name=phase["name"], delay=delay)
+        games = data["games"]
+        write_games(sb, games, competition=comp, round_no=round_no,
+                    scraped_at=data.get("scraped_at"), phase=phase["name"])
+        _finish_run(sb, run_id, status="success", games_count=len(games))
+        print(f"    {phase['name']} (round {round_no}): synced {len(games)} "
+              f"game(s). crawl_run #{run_id}", file=sys.stderr)
+        if comp_id and _reporter_covered(sb, comp_id, slug):
+            _fetch_missing_reporters(sb, comp_id, github_run_id=github_run_id,
+                                     delay=delay)
+        return len(games)
+    except Exception as err:  # noqa: BLE001
+        _finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        print(f"ERROR in scheduled crawl_run #{run_id}: {err}", file=sys.stderr)
+        raise
+
+
 def run_scheduled(*, github_run_id: str | None, delay: float) -> dict:
     """Sweep every active competition: crawl the rounds that need an update, skip
     the rest, and deactivate finished leagues. This is the scheduled (cron)
@@ -1038,6 +1101,19 @@ def run_scheduled(*, github_run_id: str | None, delay: float) -> dict:
             deactivated += 1
             print(f"  x {name}: deactivated ({reason})", file=sys.stderr)
             continue
+        if action == _CRAWL_PHASE:
+            phase = target
+            jobstatus.report(f"{name}: crawl phase {phase['name']}")
+            print(f"  > {name}: crawl phase '{phase['name']}' "
+                  f"(round {phase['round_no']}) ({reason})", file=sys.stderr)
+            try:
+                _scheduled_crawl_phase(sb, comp, phase, slug=slug, comp_id=comp_id,
+                                       github_run_id=github_run_id, delay=delay)
+                crawled += 1
+            except Exception as err:  # noqa: BLE001 - keep sweeping the other leagues
+                failed += 1
+                print(f"  ! {name}: phase crawl failed: {err}", file=sys.stderr)
+            continue
 
         jobstatus.report(f"{name}: crawl round {target}")
         print(f"  > {name}: crawl round {target} ({reason})", file=sys.stderr)
@@ -1055,10 +1131,16 @@ def run_scheduled(*, github_run_id: str | None, delay: float) -> dict:
         # stop the moment a crawl yields no dates — further rounds are even
         # less likely to have them yet.
         if comp_id:
+            # Restrict to actual jornada rounds: knockout phases also live in
+            # this status map (keyed by their synthetic round number), but
+            # they must go through _scheduled_crawl_phase (a different URL
+            # shape: ?fase=N, no jornada_in), not _scheduled_crawl_league.
+            jornada_rounds = set(comp.get("rounds") or [])
             status_map = sb.competition_rounds_status(comp_id)
             open_rounds = sorted(
                 rd for rd, statuses in status_map.items()
-                if rd != target and any(s != "final" for s in statuses))
+                if rd != target and rd in jornada_rounds
+                and any(s != "final" for s in statuses))
             upcoming = [
                 rd for rd in open_rounds
                 if all(r.get("kickoff_at") is None
