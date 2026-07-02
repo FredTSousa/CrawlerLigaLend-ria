@@ -851,23 +851,29 @@ FASE_RE = re.compile(r'name="fase"[^>]*value="(\d+)"')
 ROUND_OPTION_RE = re.compile(
     r'<option value="(\d+)"([^>]*)>\s*Jornada\s*\d+\s*</option>')
 # Knockout-phase tabs on a competition page link to /edicao/<slug>/<id>?fase=N
-# with the phase name as text (e.g. "Oitavos-de-Final"). The active phase (the
-# group stage on the landing page) is rendered without a link, so this yields
-# only the *other* phases — exactly the knockout rounds. League pages have none.
+# with the phase name as the link text (e.g. "Oitavos-de-Final"). The
+# currently-active tab is wrapped in an extra <b>...</b> (e.g. "1/16 de
+# Final"), so the label can't be assumed tag-free — capture the inner HTML
+# non-greedily and strip any nested tags separately.
 PHASE_LINK_RE = re.compile(
-    r'<a[^>]+href="/edicao/[^"]*[?&]fase=(\d+)[^"]*"[^>]*>([^<]+)</a>')
+    r'<a[^>]+href="/edicao/[^"]*[?&]fase=(\d+)[^"]*"[^>]*>(.*?)</a>', re.S)
+_INNER_TAG_RE = re.compile(r"<[^>]+>")
 
 
 def parse_phases(html: str) -> list[dict]:
-    """Return knockout/cup phases linked on a competition page, in bracket
-    order: [{fase, name}]. Empty for a plain league (single-phase) page."""
+    """Return every phase tab on a competition page, in bracket order:
+    [{fase, name}]. Includes the currently-active phase (e.g. the group stage
+    while it's ongoing) — callers filter that out via comp["fase"]. Empty for
+    a plain league (single-phase) page."""
     phases: list[dict] = []
     seen: set[str] = set()
-    for fase, label in PHASE_LINK_RE.findall(html):
+    for fase, label_html in PHASE_LINK_RE.findall(html):
         if fase in seen:
             continue
         seen.add(fase)
-        phases.append({"fase": fase, "name": clean_name(label)})
+        name = clean_name(_INNER_TAG_RE.sub("", label_html))
+        if name:
+            phases.append({"fase": fase, "name": name})
     return phases
 
 
