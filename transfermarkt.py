@@ -45,6 +45,7 @@ import re
 import sys
 import time
 import unicodedata
+from urllib.parse import quote
 
 import crawler  # reuse: new_session, clean_name, strip_tags
 import jobstatus  # best-effort progress heartbeat for the runner tray
@@ -207,6 +208,41 @@ def parse_cup_teams(html: str) -> list[dict]:
 def get_cup_teams(code: str, saison_id: str, *, session=None) -> list[dict]:
     session = session or crawler.new_session()
     return parse_cup_teams(_fetch(session, cup_teilnehmer_url(code, saison_id)))
+
+
+# A competition's own roster page (league table or cup teilnehmer) only lists
+# teams currently IN it — for a knockout cup that means teams still alive in
+# the bracket, so one eliminated in an earlier round (or the group stage, for
+# something like the World Cup) never appears there at all, no matter the
+# alias. search_teams() is the fallback: look the team up directly on TM.
+_SEARCH_URL = f"{TM_BASE}/schnellsuche/ergebnis/schnellsuche"
+_SEARCH_HIT_RE = re.compile(
+    r'<a title="([^"]+)" href="/([a-z0-9-]+)/startseite/verein/(\d+)"')
+# Youth/reserve squads TM lists alongside the senior team (Portuguese "S15..S23"
+# on transfermarkt.pt, but deep youth pages fall back to untranslated "U15..U23"
+# / "Sub-15.."), excluded so e.g. "Coreia do Sul S23" never shadows the senior
+# team "Coreia do Sul" in the match below.
+_YOUTH_SUFFIX_RE = re.compile(
+    r"\b(?:[SU]\s*-?\s*(?:1[5-9]|2[0-3])|sub-?\s*(?:1[5-9]|2[0-3])|II)\b", re.I)
+
+
+def search_teams(query: str, *, session=None) -> list[dict]:
+    """Search transfermarkt.pt directly for a club/national team by name,
+    senior squads only. Used as a match_team() fallback for a team that isn't
+    on the competition's own roster page at all."""
+    if not query:
+        return []
+    session = session or crawler.new_session()
+    html = _fetch(session, f"{_SEARCH_URL}?query={quote(query)}")
+    teams: list[dict] = []
+    seen: set[str] = set()
+    for name, slug, verein_id in _SEARCH_HIT_RE.findall(html):
+        if verein_id in seen or _YOUTH_SUFFIX_RE.search(name):
+            continue
+        seen.add(verein_id)
+        teams.append({"name": crawler.clean_name(name), "slug": slug,
+                      "verein_id": verein_id})
+    return teams
 
 
 def get_competition_teams(code: str, saison_id: str, *, session=None) -> list[dict]:
@@ -426,13 +462,10 @@ def _team_tokens(s: str | None) -> set[str]:
     return toks or _tokens(s)  # never empty (e.g. "AVS" alone)
 
 
-def match_team(zz_team: dict, tm_teams: list[dict],
-               aliases: dict[str, list[str]] | None = None) -> dict | None:
-    """Map a zerozero team to its Transfermarkt club by name (+ aliases).
-    Exact normalized match wins; else a unique token subset/superset; else None."""
-    names = [zz_team.get("name") or ""]
-    names += (aliases or {}).get(zz_team.get("id"), [])
-    cand_sets = [_team_tokens(n) for n in names if n]
+def _best_token_match(cand_sets: list[set[str]], tm_teams: list[dict], *,
+                      label: str | None = None) -> dict | None:
+    """Exact normalized match wins; else a unique token subset/superset; else
+    None (logging when several candidates tie, so a caller can add an alias)."""
     tm_sets = [(_team_tokens(t["name"]), t) for t in tm_teams]
 
     for cs in cand_sets:
@@ -449,8 +482,36 @@ def match_team(zz_team: dict, tm_teams: list[dict],
     if len(uniq) == 1:
         return next(iter(uniq.values()))
     if len(uniq) > 1:
-        print(f"  ? ambiguous TM team match for {zz_team.get('name')!r}: "
+        print(f"  ? ambiguous TM team match for {label!r}: "
               f"{[t['name'] for t in uniq.values()]}", file=sys.stderr)
+    return None
+
+
+def match_team(zz_team: dict, tm_teams: list[dict],
+               aliases: dict[str, list[str]] | None = None, *,
+               session=None, allow_search: bool = True) -> dict | None:
+    """Map a zerozero team to its Transfermarkt club by name (+ aliases).
+    Exact normalized match wins; else a unique token subset/superset; else,
+    if allow_search, a live TM search per candidate name — for a team that was
+    eliminated (group stage or an earlier knockout round) before the
+    competition's own roster page ever listed it, so no alias would help
+    against that page's team list."""
+    names = [zz_team.get("name") or ""]
+    names += (aliases or {}).get(zz_team.get("id"), [])
+    cand_sets = [_team_tokens(n) for n in names if n]
+    label = zz_team.get("name")
+
+    hit = _best_token_match(cand_sets, tm_teams, label=label)
+    if hit is not None or not allow_search:
+        return hit
+
+    for name in names:
+        found = search_teams(name, session=session)
+        if not found:
+            continue
+        hit = _best_token_match(cand_sets, found, label=label)
+        if hit is not None:
+            return hit
     return None
 
 
@@ -546,7 +607,7 @@ def enrich_competition(comp: dict, zz_teams: list[dict], *, session=None,
         if not verein:
             if league_teams is None:
                 league_teams = get_competition_teams(code, saison, session=session)
-            tm = match_team(zz, league_teams, aliases)
+            tm = match_team(zz, league_teams, aliases, session=session)
             if not tm:
                 print(f"  ? no TM team for {zz.get('name') or zz['id']}",
                       file=sys.stderr)
@@ -622,7 +683,7 @@ def get_competition_departures(comp: dict, zz_teams: list[dict], *, session=None
         if not verein:
             if league_teams is None:
                 league_teams = get_competition_teams(code, saison, session=session)
-            tm = match_team(zz, league_teams, aliases)
+            tm = match_team(zz, league_teams, aliases, session=session)
             if not tm:
                 print(f"  ? no TM team for {zz.get('name') or zz['id']}",
                       file=sys.stderr)
