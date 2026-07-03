@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SquadSyncButton from "@/components/SquadSyncButton";
+import FullBackfillButton from "@/components/FullBackfillButton";
 import TmSettings from "@/components/TmSettings";
 import RatingSourceSettings from "@/components/RatingSourceSettings";
 import EmulationControl from "@/components/EmulationControl";
@@ -16,7 +17,7 @@ type SearchParams = {
 };
 
 const TABS = ["teams", "players", "fixtures", "history"] as const;
-const SQUAD_KINDS = ["teams", "roster", "players", "comp_full", "comp_players", "comp_sold"];
+const SQUAD_KINDS = ["teams", "roster", "players", "comp_full", "comp_players", "comp_sold", "backfill"];
 
 export default async function CompetitionDetails({
   params,
@@ -99,6 +100,7 @@ export default async function CompetitionDetails({
             </div>
           </div>
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <FullBackfillButton target={comp.slug || comp.id} label="Full backfill (matches + players)" />
             <SquadSyncButton kind="teams" target={comp.slug || comp.id} label="Sync teams" />
             <SquadSyncButton kind="comp_players" target={comp.slug || comp.id} label="Re-fetch players" variant="secondary" />
             <SquadSyncButton kind="comp_sold" target={comp.slug || comp.id} label="Fix sold positions" variant="secondary" />

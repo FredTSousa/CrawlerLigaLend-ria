@@ -153,10 +153,12 @@ STAFF_PHOTO_RE = re.compile(
     r'class="photo"[^>]*background-image:\s*url\(\s*([\'"]?)([^\'")]+)\1\s*\)')
 # A prominent player can link WITHOUT the numeric id (/jogador/<slug>?edicao_id=…
 # — e.g. Cristiano Ronaldo), the /jogador twin of the big-club crest quirk. Then
-# read the id from the photo filename (img/jogadores/.../<id>_<slug>_<ts>.png),
-# exactly like the team-crest trick in crawler.py.
+# read the id from the photo filename (<id>_<slug>_<ts>.png), exactly like the
+# team-crest trick in crawler.py. The photo's parent folder isn't stable across
+# players — older ones sit under img/jogadores/..., current squads under
+# img/planteis/new/.../ — so match on the filename shape alone, not the folder.
 STAFF_PLAYER_NOID_RE = re.compile(r'/jogador/([a-z0-9-]+)[^"]*">\s*([^<]+?)\s*</a>')
-STAFF_PHOTO_ID_RE = re.compile(r'jogadores/[^"\')]*?(\d+)_[a-z]')
+STAFF_PHOTO_ID_RE = re.compile(r'/(\d+)_[a-z]+(?:_[a-z]+)*_\d+\.\w+')
 
 
 def parse_team_logo(html: str, team_id: str) -> str | None:
