@@ -140,6 +140,34 @@ def full_crawl(sb, session, url, *, status, minute=None, score=None):
     return game
 
 
+def phase_followup(sb, gid):
+    """After a KNOCKOUT match goes final, queue a fixtures backfill for its
+    competition so the next round's pairings (which zerozero fills in as
+    results land) reach the DB — and subscribers — minutes after the whistle
+    instead of waiting for the 6-hourly sweep. Gated on matches.phase, which
+    only knockout crawls set, so a league match finishing enqueues nothing.
+    Same job kind + dedupe key as the website's backfill button, so repeated
+    finals (or a click racing this) collapse into one pending job.
+    Best-effort: the sweep's phase look-ahead covers any miss here."""
+    try:
+        rows = sb._rest(
+            "GET", f"matches?id=eq.{gid}&select=phase,competition_id").json()
+        row = rows[0] if rows else {}
+        comp_id = row.get("competition_id")
+        if not row.get("phase") or not comp_id:
+            return
+        comps = sb._rest(
+            "GET", f"competitions?id=eq.{comp_id}&select=slug").json()
+        comp = (comps[0].get("slug") if comps else None) or comp_id
+        sb.enqueue_job("backfill", {"competition": comp},
+                       dedupe_key=f"backfill:{comp}", priority=90)
+        print(f"  knockout final — queued fixtures backfill for {comp}",
+              file=sys.stderr)
+    except Exception as e:  # noqa: BLE001 - never let this kill the watcher
+        print(f"  ! phase follow-up enqueue failed for {gid}: {e}",
+              file=sys.stderr)
+
+
 def light_update(sb, gid, *, minute, gc, gf):
     sb.update("matches", f"id=eq.{gid}", {
         "status": "live", "minute": minute or None,
@@ -211,6 +239,7 @@ def watch_loop(sb, session, match_url, *, light_interval, full_interval,
 
     full_crawl(sb, session, match_url, status="final",
                score=last_score or None, minute=None)
+    phase_followup(sb, gid)
     print("Done. Match marked final.", file=sys.stderr)
 
 
@@ -284,6 +313,7 @@ def daemon_loop(sb, session, *, light_interval, full_interval, max_minutes,
                       file=sys.stderr)
                 full_crawl(sb, session, url, status="final", score=score)
                 sb.set_watch(gid, False)
+                phase_followup(sb, gid)
                 continue
             light_update(sb, gid, minute=minute, gc=gc, gf=gf)
             changed = score != st["last_score"] and st["last_score"] is not None

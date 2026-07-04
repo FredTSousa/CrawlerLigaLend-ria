@@ -888,10 +888,17 @@ def _parse_iso(value: str | None) -> datetime | None:
 
 
 def _knockout_todo(status_map: dict, comp: dict) -> list[dict]:
-    """Knockout/cup phases (comp['phases']) not yet fully captured as final,
-    each tagged with the synthetic round number they map to (continues after
-    the group jornadas, same mapping run_backfill uses). Empty for a plain
-    league or once every phase is complete."""
+    """Knockout/cup phases (comp['phases']) the sweep should crawl now, each
+    tagged with the synthetic round number they map to (continues after the
+    group jornadas, same mapping run_backfill uses). Empty for a plain league
+    or once every phase is complete.
+
+    At most two phases: the first not-yet-final one, plus the next phase but
+    only once the current one has produced at least one final result — that's
+    the moment zerozero starts filling in the next round's pairings. Later
+    phases (semis, final placeholders) stay untouched until their predecessor
+    starts finishing, so a cup competition never burns crawls on empty
+    bracket pages."""
     knockouts = [p for p in (comp.get("phases") or [])
                  if p.get("fase") and p["fase"] != comp.get("fase")]
     if not knockouts:
@@ -904,16 +911,20 @@ def _knockout_todo(status_map: dict, comp: dict) -> list[dict]:
         statuses = status_map.get(rd)
         if not statuses or any(s != "final" for s in statuses):
             todo.append({**ph, "round_no": rd})
+    if len(todo) > 1:
+        head_statuses = status_map.get(todo[0]["round_no"]) or []
+        lookahead = 2 if any(s == "final" for s in head_statuses) else 1
+        todo = todo[:lookahead]
     return todo
 
 
 def _decide_round(sb: Supabase, comp_id: str,
-                  comp: dict) -> tuple[str, int | dict | None, str]:
+                  comp: dict) -> tuple[str, int | list[dict] | None, str]:
     """Decide what the sweep should do for one competition: (_SKIP|_CRAWL|
     _CRAWL_PHASE|_DEACTIVATE, target, human reason). ``target`` is a round
-    number, except for _CRAWL_PHASE where it's a phase dict ({fase, name,
-    round_no}). Reads only the DB (the cheap landing page was already fetched
-    to get current_round/rounds/phases)."""
+    number, except for _CRAWL_PHASE where it's a list of phase dicts ({fase,
+    name, round_no}). Reads only the DB (the cheap landing page was already
+    fetched to get current_round/rounds/phases)."""
     cr = comp.get("current_round")
     rounds = comp.get("rounds") or []
     is_last = bool(rounds) and cr is not None and cr >= max(rounds)
@@ -954,8 +965,8 @@ def _decide_round(sb: Supabase, comp_id: str,
     # wraps up and get deactivated before the bracket was ever crawled.
     knockout_todo = _knockout_todo(status_map, comp)
     if knockout_todo:
-        ph = knockout_todo[0]
-        return (_CRAWL_PHASE, ph, f"phase '{ph['name']}' needs update")
+        names = ", ".join(p["name"] for p in knockout_todo)
+        return (_CRAWL_PHASE, knockout_todo, f"phase(s) '{names}' need update")
 
     if is_last:
         return (_DEACTIVATE, cr, "season complete (all rounds final)")
@@ -1102,17 +1113,25 @@ def run_scheduled(*, github_run_id: str | None, delay: float) -> dict:
             print(f"  x {name}: deactivated ({reason})", file=sys.stderr)
             continue
         if action == _CRAWL_PHASE:
-            phase = target
-            jobstatus.report(f"{name}: crawl phase {phase['name']}")
-            print(f"  > {name}: crawl phase '{phase['name']}' "
-                  f"(round {phase['round_no']}) ({reason})", file=sys.stderr)
-            try:
-                _scheduled_crawl_phase(sb, comp, phase, slug=slug, comp_id=comp_id,
-                                       github_run_id=github_run_id, delay=delay)
+            # Usually one phase; two while the current phase is mid-play (the
+            # look-ahead keeps next-round pairings fresh as results land).
+            ok = 0
+            for phase in target:
+                jobstatus.report(f"{name}: crawl phase {phase['name']}")
+                print(f"  > {name}: crawl phase '{phase['name']}' "
+                      f"(round {phase['round_no']}) ({reason})", file=sys.stderr)
+                try:
+                    _scheduled_crawl_phase(sb, comp, phase, slug=slug,
+                                           comp_id=comp_id,
+                                           github_run_id=github_run_id,
+                                           delay=delay)
+                    ok += 1
+                except Exception as err:  # noqa: BLE001 - keep sweeping the other leagues
+                    failed += 1
+                    print(f"  ! {name}: phase crawl failed: {err}",
+                          file=sys.stderr)
+            if ok:
                 crawled += 1
-            except Exception as err:  # noqa: BLE001 - keep sweeping the other leagues
-                failed += 1
-                print(f"  ! {name}: phase crawl failed: {err}", file=sys.stderr)
             continue
 
         jobstatus.report(f"{name}: crawl round {target}")
