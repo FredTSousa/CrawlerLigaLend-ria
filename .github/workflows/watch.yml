@@ -20,10 +20,14 @@ on:
         required: false
         type: string
 
-# One live watch at a time; a new one replaces the old.
+# One live watch at a time. A redundant dispatch (e.g. a stray "Watch live"
+# click while a match is already being watched) queues behind the running
+# watcher instead of cancelling it — the daemon already re-reads the DB watch
+# list every ~30s and absorbs newly-flagged matches on its own, so there is
+# never a need to kill an in-progress watch to pick up new work.
 concurrency:
   group: watch-live
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
