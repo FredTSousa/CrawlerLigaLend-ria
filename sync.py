@@ -254,7 +254,8 @@ class Supabase:
     def watch_list(self) -> list[dict]:
         """Matches flagged for live watching that aren't finished yet."""
         resp = self._rest(
-            "GET", "matches?watch=is.true&status=neq.final&select=id,url")
+            "GET", "matches?watch=is.true&status=neq.final"
+            "&select=id,url,kickoff_at")
         return resp.json()
 
     def set_watch(self, match_id: str, on: bool) -> None:

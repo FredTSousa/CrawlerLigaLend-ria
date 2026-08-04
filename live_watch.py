@@ -28,6 +28,7 @@ import os
 import re
 import sys
 import time
+from datetime import datetime, timezone
 
 import crawler
 import sync
@@ -189,6 +190,33 @@ def heartbeat(sb, run_id):
         print(f"  heartbeat failed: {e}", file=sys.stderr)
 
 
+# A match whose kickoff was this long ago and has NEVER produced a single row
+# on the live feed (not even a "not started" placeholder that later goes live)
+# is not delayed — the feed has simply given up on it (game abandoned,
+# postponed indefinitely, or just too old for zerozero's live endpoint to
+# still track). Left unchecked, daemon_loop would re-crawl it every
+# full_interval forever, and the self-healing kickoff cron (migration_
+# watch_liveness.sql) would keep resurrecting the daemon to babysit it every
+# time it idles out. Give up and let the real match page (not the forced
+# "scheduled" seed status) decide the final state.
+STALE_NO_FEED_HOURS = 6
+
+
+def _abandon_stale_watch(sb, session, gid, url):
+    """No live-feed row for hours past kickoff — do one real full crawl (letting
+    the actual page state land instead of forcing "scheduled") and drop the
+    watch flag so this match stops being resurrected."""
+    print(f"  ! {gid}: no live-feed data for {STALE_NO_FEED_HOURS}h+ past "
+          "kickoff — abandoning watch.", file=sys.stderr)
+    try:
+        game = crawler.get_match(url, session=session)
+        sync.write_games(sb, [game], competition=None, round_no=None,
+                         scraped_at=sync._now())
+    except Exception as e:  # noqa: BLE001 - still drop the flag even if this fails
+        print(f"  ! abandon crawl failed for {gid}: {e}", file=sys.stderr)
+    sb.set_watch(gid, False)
+
+
 def watch_loop(sb, session, match_url, *, light_interval, full_interval,
                max_minutes, run_id=None):
     gid = game_id_from(match_url)
@@ -290,9 +318,20 @@ def daemon_loop(sb, session, *, light_interval, full_interval, max_minutes,
             row = rows.get(str(gid))
             st = state.setdefault(gid, {"last_score": None, "last_full": 0.0})
             if not row:
-                # Feed has no data yet (pre-kickoff or delayed). Seed the lineup
-                # on first encounter and keep the match page fresh every
-                # full_interval so postponements/delays are caught early.
+                # Feed has no data yet (pre-kickoff or delayed) — OR the feed has
+                # simply given up on a match that's hours past its kickoff and
+                # never went live here. Tell those apart via kickoff_at before
+                # deciding whether to keep re-seeding or to abandon the watch.
+                ko = sync._parse_iso(t.get("kickoff_at"))
+                stale = (ko is not None and st["last_score"] is None and
+                        (datetime.now(timezone.utc) - ko).total_seconds()
+                        > STALE_NO_FEED_HOURS * 3600)
+                if stale:
+                    _abandon_stale_watch(sb, session, gid, url)
+                    continue
+                # Seed the lineup on first encounter and keep the match page
+                # fresh every full_interval so postponements/delays are caught
+                # early.
                 no_feed_due = (time.time() - st["last_full"]) >= full_interval
                 if no_feed_due:
                     try:
