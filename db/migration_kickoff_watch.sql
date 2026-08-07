@@ -31,8 +31,9 @@ create extension if not exists pg_net;
 -- the whistle), and how long after kickoff we keep trying to catch a match the
 -- cron may have missed. A still-"scheduled" match outside this window is treated
 -- as stale and left alone rather than resurrected.
---   lead  = 5 minutes before kickoff
---   grace = 15 minutes after kickoff
+--   lead  = 45 minutes before kickoff (see migration_cron_queue.sql, which now
+--           owns this function; kept here only for history)
+--   grace = 90 minutes after kickoff
 
 create or replace function public.start_due_live_watches()
 returns integer
@@ -62,7 +63,7 @@ begin
      where status = 'scheduled'
        and coalesce(watch, false) = false
        and kickoff_at is not null
-       and kickoff_at <= now() + interval '5 minutes'
+       and kickoff_at <= now() + interval '45 minutes'
        and kickoff_at >= now() - interval '90 minutes';
     get diagnostics v_promoted = row_count;
 

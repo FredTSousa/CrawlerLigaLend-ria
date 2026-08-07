@@ -50,14 +50,15 @@ declare
     v_repo     text;
 begin
     -- 1) Promote scheduled matches whose kickoff window has arrived
-    --    (lead 5 min before, grace 15 min after). Unchanged from before.
+    --    (lead 45 min before, grace 90 min after — see migration_cron_queue.sql,
+    --    which now owns this function; kept here only for history).
     update public.matches
        set watch      = true,
            updated_at = now()
      where status = 'scheduled'
        and coalesce(watch, false) = false
        and kickoff_at is not null
-       and kickoff_at <= now() + interval '5 minutes'
+       and kickoff_at <= now() + interval '45 minutes'
        and kickoff_at >= now() - interval '90 minutes';
     get diagnostics v_promoted = row_count;
 

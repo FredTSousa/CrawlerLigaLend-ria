@@ -129,6 +129,11 @@ $$;
 -- by the queue's own singleton + lease. A running daemon already absorbs newly
 -- flagged matches via its ~30s DB poll, so the deduped enqueue is a harmless no-op
 -- while one is alive.
+--
+-- lead = 45 minutes before kickoff (raised from 5 min so the pre-kickoff poll
+--   loop has real odds of catching the starting XI once zerozero publishes it,
+--   instead of only seeding the lineup 5 minutes before the whistle).
+-- grace = 90 minutes after kickoff (catches a match the cron missed).
 create or replace function public.start_due_live_watches()
 returns integer
 language plpgsql
@@ -145,7 +150,7 @@ begin
      where status = 'scheduled'
        and coalesce(watch, false) = false
        and kickoff_at is not null
-       and kickoff_at <= now() + interval '5 minutes'
+       and kickoff_at <= now() + interval '45 minutes'
        and kickoff_at >= now() - interval '90 minutes';
     get diagnostics v_promoted = row_count;
 
