@@ -1,7 +1,9 @@
 name: Reporter sweep
 
-# Fetch reporter ratings (A Bola / Goal.com) for any FINAL match that still
-# lacks them, across active reporter-covered competitions.
+# Fetch reporter ratings (A Bola / Goal.com) for any FINAL match from the last
+# week that still lacks them, across active reporter-covered competitions.
+# Keeps retrying a match every 30 min until it gets scores or ages out of that
+# window (sync.REPORTER_SWEEP_MAX_AGE_DAYS) -- see sync.unscored_finished_matches.
 #
 # Triggered every 30 minutes by Supabase pg_cron (dispatch_reporter_sweep ->
 # workflow_dispatch), NOT by a GitHub schedule -- see db/migration_reporter_sweep.sql.

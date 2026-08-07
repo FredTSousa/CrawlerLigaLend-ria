@@ -30,7 +30,7 @@ import os
 import random
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import requests
 
@@ -38,6 +38,11 @@ import crawler
 import jobstatus  # best-effort progress heartbeat for the runner tray
 
 COMPETITION_SLUG = "liga-portuguesa"
+
+# How far back the reporter sweep keeps retrying a finished match that still
+# has no ratings. Bounds the retry window so a game the rating source never
+# ends up covering doesn't get swept forever.
+REPORTER_SWEEP_MAX_AGE_DAYS = 7
 
 
 def _load_dotenv(path: str = ".env") -> None:
@@ -261,18 +266,30 @@ class Supabase:
     def set_watch(self, match_id: str, on: bool) -> None:
         self.update("matches", f"id=eq.{match_id}", {"watch": on})
 
-    def unscored_finished_matches(self, competition_id: str) -> list[str]:
-        """Match IDs in this competition that are final, have at least one
-        player with reporter_linked=false, and have never had a reporter fetch
-        attempted (no matches_reporter_link row). This last condition prevents
-        the gap-fill from re-fetching matches that run_round() just processed:
-        unlinked players after an attempted fetch are manual-linking gaps, not
-        missing fetches."""
+    def unscored_finished_matches(
+        self, competition_id: str,
+        max_age_days: int = REPORTER_SWEEP_MAX_AGE_DAYS,
+    ) -> list[str]:
+        """Match IDs in this competition that are final, played within the
+        last `max_age_days` days, and still have at least one player with
+        reporter_linked=false. Bounded to recent matches so a game the rating
+        source never ends up covering doesn't get swept forever.
+
+        A prior reporter-fetch attempt only takes a match out of the running
+        when it actually found ratings (a matches_reporter_link row with a
+        non-empty home_ratings/away_ratings) -- at that point any remaining
+        unlinked players are manual-linking gaps, not a missing fetch. An
+        attempt that found NOTHING (e.g. the crónica wasn't published yet)
+        still leaves the match a candidate, so later sweeps keep retrying it
+        until it succeeds or ages out."""
+        cutoff = (datetime.now(timezone.utc).date()
+                  - timedelta(days=max_age_days)).isoformat()
         resp = self._rest(
             "GET",
-            f"match_players?select=match_id,matches!inner(competition_id,status)"
+            f"match_players?select=match_id,matches!inner(competition_id,status,played_on)"
             f"&matches.competition_id=eq.{competition_id}"
             f"&matches.status=eq.final"
+            f"&matches.played_on=gte.{cutoff}"
             f"&reporter_linked=eq.false"
             f"&did_not_play=eq.false",
         )
@@ -287,11 +304,14 @@ class Supabase:
         if not candidates:
             return []
         inlist = ",".join(candidates)
-        already = {r["match_id"] for r in self._rest(
+        attempted = self._rest(
             "GET",
-            f"matches_reporter_link?match_id=in.({inlist})&select=match_id",
-        ).json()}
-        return [mid for mid in candidates if mid not in already]
+            f"matches_reporter_link?match_id=in.({inlist})"
+            "&select=match_id,home_ratings,away_ratings",
+        ).json()
+        found = {r["match_id"] for r in attempted
+                 if r.get("home_ratings") or r.get("away_ratings")}
+        return [mid for mid in candidates if mid not in found]
 
     def active_competitions(self) -> list[dict]:
         """Competitions the scheduled sweep should consider (crawl_active=true).
@@ -1195,13 +1215,16 @@ def run_scheduled(*, github_run_id: str | None, delay: float) -> dict:
 
 
 def run_reporter_sweep(*, github_run_id: str | None, delay: float) -> dict:
-    """Lightweight cron sweep: fetch reporter ratings for every FINAL match that
-    still lacks them, across active reporter-covered competitions. Unlike
-    run_scheduled this never crawls zerozero -- reporter_sync reads players from
-    the DB and scrapes only the rating source (A Bola / Goal.com) -- so it's safe
-    to run every 30 min. It closes the gap the live watcher leaves: the watcher
-    marks a match final but deliberately doesn't chain a reporter fetch, because
-    the crónica isn't published until hours later."""
+    """Lightweight cron sweep: fetch reporter ratings for every FINAL match from
+    the last REPORTER_SWEEP_MAX_AGE_DAYS days that still lacks them, across
+    active reporter-covered competitions. Unlike run_scheduled this never
+    crawls zerozero -- reporter_sync reads players from the DB and scrapes
+    only the rating source (A Bola / Goal.com) -- so it's safe to run every 30
+    min. It closes the gap the live watcher leaves: the watcher marks a match
+    final but deliberately doesn't chain a reporter fetch, because the
+    crónica isn't published until hours later -- and it keeps retrying a
+    match every 30 min (see unscored_finished_matches) until the crónica
+    shows up or the match ages out of the window."""
     sb = Supabase()
     comps = sb.active_competitions()
     print(f"Reporter sweep: {len(comps)} active competition(s).", file=sys.stderr)
