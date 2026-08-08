@@ -730,14 +730,15 @@ def classify_events(events_html: str) -> dict:
 
 def parse_player_block(chunk: str) -> dict | None:
     """Parse a single player chunk (already split on `<div class="player`)."""
-    # "inactive" marks an unused substitute (never entered the match). This
-    # MUST be a full class-list membership check, not a fixed-position prefix
-    # match: zerozero emits an extra position class ahead of "inactive" for
-    # some cards (goalkeepers in particular get e.g. `player goalkeeper
-    # inactive ...` instead of `player inactive ...`), so a plain
-    # `chunk.startswith(" inactive")` silently mis-detects unused backup
-    # keepers as having played. See classify_events()'s "grey" in klass check
-    # a few dozen lines down for the same reasoning applied consistently.
+    # "inactive" marks an unused substitute (never entered the match).
+    # Read it as full class-list membership rather than a fixed-position
+    # prefix match: `chunk.startswith(" inactive")` (the previous check) only
+    # holds if "inactive" happens to be the very first class after "player",
+    # which real zerozero markup does consistently today -- but there's no
+    # guarantee that ordering is stable across every card, and a membership
+    # check costs nothing extra. classify_events()'s "grey" in klass check a
+    # few dozen lines down already takes the same membership-not-position
+    # approach for the sub-out marker.
     class_tail_m = PLAYER_CLASS_TAIL_RE.match(chunk)
     classes = class_tail_m.group(1).split() if class_tail_m else []
     inactive = "inactive" in classes

@@ -61,6 +61,7 @@ re-delivery is a no-op.
     { "player_id": "...", "player_name": "...", "team_id": "1",
       "order_index": 0, "shirt_number": 7, "is_captain": false, "is_starter": true,
       "entered_min": null, "left_min": null,
+      "did_not_play": false,
       "goals": 1, "assists": 0, "yellow_cards": 0, "red_card": false,
       "own_goals": 0, "penalties_scored": 0, "penalties_missed": 0,
       "penalties_defended": 0, "played_under_20m": false,
@@ -75,6 +76,11 @@ re-delivery is a no-op.
 
 Each event is the **full current snapshot** of the match (not a diff), so the
 subscriber just upserts the match and replaces its player rows.
+
+`did_not_play: true` marks a player named in the squad who never entered the
+match (an unused substitute) -- `entered_min`/`left_min` stay `null` for them.
+Derive "played" as `!did_not_play`, not from `entered_min`/`is_starter` alone:
+a starter who played the full 90 also has `entered_min: null`.
 
 ### Squad events (Teams & Players)
 

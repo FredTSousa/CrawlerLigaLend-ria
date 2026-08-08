@@ -1,25 +1,29 @@
--- Diagnose the "unused substitute recorded as played" bug (Martin Turk /
--- Estoril Praia 1-1 FC Famalicão, Liga Portugal Betclic 2026/27 round 1).
+-- Diagnostics for the "unused substitute shows as played" report (Martin Turk
+-- / Estoril Praia 1-1 FC Famalicão, Liga Portugal Betclic 2026/27 round 1).
 --
--- Root cause (fixed in crawler.py, parse_player_block()): the unused-sub
--- flag was read with `chunk.startswith(" inactive")`, a fixed-position
--- prefix check against the player card's `class` attribute. zerozero emits
--- an extra position class ahead of "inactive" on some cards -- goalkeepers
--- in particular (their bench card carries a distinct GK styling class) --
--- e.g. `class="player goalkeeper inactive ..."` instead of
--- `class="player inactive ..."`. The prefix check missed those, so an
--- unused backup keeper (or anyone else whose card happens to order classes
--- that way) got did_not_play = false with no entered_min/left_min: exactly
--- what the downstream ingest reads as "played the full match". The fix
--- reads the full class list instead of a fixed position.
+-- UPDATE: the initial theory here (a goalkeeper-specific class-ordering bug
+-- in crawler.py's parse_player_block) did not hold up against the real
+-- zerozero markup -- Turk's card is `class="player inactive fl-r-cen"`,
+-- which the parser (before AND after that hardening) reads correctly, and
+-- his match_players row has always had did_not_play = true. Storage was
+-- never wrong for this match.
 --
--- This file is READ-ONLY diagnostics. It is deliberately not a scripted
--- UPDATE: the correct repair is a full re-crawl of each affected match with
--- the fixed parser (see the runbook at the bottom), not hand-flipping
--- did_not_play in place -- that would leave order_index/entered_min/etc.
--- stale and wouldn't catch a same-match mis-parse of a *different* field.
+-- The actual root cause was in the OUTBOUND webhook payload, not scraping:
+-- public.build_match_event() (the function `dispatch` calls to build the
+-- match.update body sent to subscribers) never included `did_not_play` in
+-- its per-player object -- not since it was first defined, and not after the
+-- did_not_play column/view were added later. A subscriber deriving
+-- `played = !did_not_play` from a payload that's missing the key entirely
+-- reads every unused sub, in every match, in every league, as "played".
+-- Fixed in db/migration_match_event_did_not_play.sql -- apply that, then use
+-- select public.replay_competition(...) there to force a fresh, corrected
+-- delivery of already-played matches (nothing here needs re-scraping).
+--
+-- What's left below is still useful as a genuine STORAGE sanity check (in
+-- case a *future* scrape ever does mis-set did_not_play), just not what
+-- caused this particular report.
 
--- 1) Exact match: Estoril Praia vs FC Famalicão, round 1.
+-- 1) Turk / this match, current stored values.
 select
     mpd.match_id,
     mpd.round,
@@ -37,11 +41,11 @@ where mpd.player_name ilike '%turk%'
    or (mpd.round = 1
        and (mpd.team_name ilike '%estoril%' or mpd.team_name ilike '%famalic%'));
 
--- 2) Blast radius: every row across every match/competition with the same
--- signature -- benched (not a starter), no substitution timing recorded,
--- yet not flagged as an unused sub. A real player who came on always gets
--- entered_min from the "Entrou" event, and a starter is is_starter = true,
--- so this combination should only exist because of the parsing bug above.
+-- 2) Storage sanity check: benched, no substitution timing, yet not flagged
+-- as an unused sub. A real player who came on always gets entered_min from
+-- the "Entrou" event, and a starter is is_starter = true, so this
+-- combination shouldn't otherwise exist. Empty result = storage is fine
+-- (expected, given the finding above) and the fix is purely the migration.
 select
     mpd.match_id,
     mpd.round,
@@ -56,19 +60,3 @@ where mpd.is_starter = false
   and mpd.left_min is null
   and mpd.did_not_play = false
 order by mpd.played_on desc nulls last, mpd.match_id, mpd.player_name;
-
--- ----------------------------------------------------------------------------
--- Repair runbook
--- ----------------------------------------------------------------------------
--- For every match_id returned by query (2) above (Estoril-Famalicão included),
--- re-crawl that single match with the fixed crawler.py/sync.py so ALL of its
--- player rows -- not just the flagged one -- get regenerated correctly:
---
---   python sync.py --match "<zerozero_url from the query above>"
---
--- That UPSERTs match_players for the whole lineup, which unconditionally
--- fires trg_match_players_enqueue -> delivery_outbox -> the `dispatch` edge
--- function -> a signed `match.update` POST to every active subscriber for
--- that match's competition (db/migration_subscriptions.sql). No manual
--- resync should be needed on the subscriber side once this re-crawl lands --
--- the existing webhook does it.
