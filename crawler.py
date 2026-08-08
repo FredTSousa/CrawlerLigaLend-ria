@@ -195,6 +195,10 @@ TEAM_LINK_RE = re.compile(r'/equipa/([a-z0-9-]+)/(\d+)')
 PLAYER_LINK_RE = re.compile(r'/jogador/([a-z0-9-]+)(?:/(\d+))?"[^>]*>([^<]+)</a>')
 PLAYER_DATA_ID_RE = re.compile(r'data-player-id="(\d+)"')
 TAG_RE = re.compile(r"<[^>]+>")
+# `chunk` (see parse_player_block) starts right after `<div class="player`, so
+# the rest of the class attribute's value runs up to the closing quote, e.g.
+# ` inactive small"` or ` goalkeeper inactive small"`.
+PLAYER_CLASS_TAIL_RE = re.compile(r'^([^"]*)"')
 
 
 def strip_tags(html: str) -> str:
@@ -726,7 +730,17 @@ def classify_events(events_html: str) -> dict:
 
 def parse_player_block(chunk: str) -> dict | None:
     """Parse a single player chunk (already split on `<div class="player`)."""
-    inactive = chunk.startswith(" inactive")
+    # "inactive" marks an unused substitute (never entered the match). This
+    # MUST be a full class-list membership check, not a fixed-position prefix
+    # match: zerozero emits an extra position class ahead of "inactive" for
+    # some cards (goalkeepers in particular get e.g. `player goalkeeper
+    # inactive ...` instead of `player inactive ...`), so a plain
+    # `chunk.startswith(" inactive")` silently mis-detects unused backup
+    # keepers as having played. See classify_events()'s "grey" in klass check
+    # a few dozen lines down for the same reasoning applied consistently.
+    class_tail_m = PLAYER_CLASS_TAIL_RE.match(chunk)
+    classes = class_tail_m.group(1).split() if class_tail_m else []
+    inactive = "inactive" in classes
     pl = PLAYER_LINK_RE.search(chunk)
     if not pl:
         return None
