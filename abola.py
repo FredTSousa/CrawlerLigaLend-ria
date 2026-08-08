@@ -503,6 +503,13 @@ MVP_RE = re.compile(
 MVP_SUFFIX_RE = re.compile(
     r"([^()<\n]+?)\s*\(\s*(" + _RATING + r")\s*\)\s*[—–-]\s*"
     r"((?:o\s+)?melhor em campo|a figura)", re.I)
+# Bare label form (A Bola's newest crónica boxes): "Melhor em campo: Name" / "A
+# figura do <team>: Name" with NO score at all -- the player already has a score
+# from the ratings list, so this just supplies the name (+ optional team hint);
+# apply_mvp() leaves the score alone since the player's row already carries one.
+MVP_BARE_RE = re.compile(
+    r"\s*((?:o\s+)?melhor em campo|a figura)(?:\s+d[oae]\s+([^:<\n]+?))?"
+    r"\s*:\s*([^()<\n]+?)\s*$", re.I)
 # Leading "O melhor em campo" / "A figura" -- handled by the MVP box pass, never
 # as a rating row.
 MVP_LEAD_RE = re.compile(r"^\s*(o melhor em campo|a figura)\b", re.I)
@@ -791,11 +798,14 @@ def _highlight_cards(soup) -> list[dict]:
 
 def _mvp_boxes(soup) -> list[dict]:
     """Find 'O melhor em campo' / 'A figura' boxes -> name, score, team, text.
-    Three labelled layouts: label-first ("O melhor em campo: Name (7)"),
-    label-last ("Prestianni (7) — o melhor em campo"), and the visual "square"
-    where the label and the player line ("7 - Francisco Trincão — …") sit in
-    separate spans of one box -- plus the unlabelled gradient highlight card
-    (_highlight_cards), A Bola's newer way of flagging the standout player."""
+    Four labelled layouts: label-first with a score ("O melhor em campo: Name
+    (7)"), label-first with NO score ("Melhor em campo: Name" -- the newest
+    gradient-card wording; the player's score comes from the ratings list
+    instead), label-last ("Prestianni (7) — o melhor em campo"), and the visual
+    "square" where the label and the player line ("7 - Francisco Trincão — …")
+    sit in separate spans of one box -- plus the unlabelled gradient highlight
+    card (_highlight_cards), A Bola's other way of flagging the standout
+    player."""
     boxes, seen = [], set()
     for node in soup.find_all(string=re.compile(r"melhor em campo|a figura", re.I)):
         lbl = re.search(r"(?:o\s+)?melhor em campo|a figura", node, re.I)
@@ -811,6 +821,11 @@ def _mvp_boxes(soup) -> list[dict]:
         elif (m := MVP_SUFFIX_RE.search(node)):
             name, score = _clean_name(m.group(1)), _score(m.group(2))
             narrative = _mvp_narrative(node, m.group(0))
+        elif (m := MVP_BARE_RE.match(node)) and _player_name(m.group(3)):
+            name = _player_name(m.group(3))
+            team = (m.group(2) or "").strip() or None
+            title = re.sub(r"\s+", " ", m.group(0)).strip()
+            narrative = _mvp_narrative(node, title)
         elif re.match(r"\s*(?:(?:o\s+)?melhor em campo|a figura)\b", node, re.I):
             # "square": label here, player line in a sibling span of the box.
             box = node.parent
