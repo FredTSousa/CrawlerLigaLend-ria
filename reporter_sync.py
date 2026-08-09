@@ -39,13 +39,43 @@ def _route_abola_url(url: str, home: str, away: str) -> dict:
     wrong one) to abola.scrape_match kwargs: a combined crónica that carries BOTH
     teams' ratings -> single_url; a single-team 'as notas do X' page -> home_url
     or away_url for whichever side it actually carries. This auto-routing keeps
-    the override to one paste-box -- no need to ask which team the page is for."""
+    the override to one paste-box -- no need to ask which team the page is for.
+
+    Probed two ways. First with NO default team, which is enough for a genuine
+    combined crónica (proper 'as notas d<team>' headers name both sides) and
+    costs nothing extra. But a big-three single-team page can carry a creative
+    headline instead of that phrase ('Zalazar na cadeira do poder... (os
+    jogadores do Sporting)', no 'notas'/'destaques' anywhere in the body) --
+    parse_page finds no header at all there and returns empty, which used to
+    fall through to single_url and then get silently dropped by scrape_match's
+    big-three branch (it only read home_url/away_url).
+
+    Seeding default_team on a header-less page isn't a valid disambiguator by
+    itself: with no header to redirect `current`, EVERY paragraph gets bucketed
+    under whatever team you seed, so it "succeeds" no matter which team is
+    passed. So when neither side is found header-first, fall back to the
+    page's own title/H1 and the same team-token matching find_team_notas /
+    find_cronica use to read a team off an A Bola headline -- only trusted
+    when the title names ONE side and not the other, then confirmed by
+    actually parsing with that team seeded."""
     try:
-        teams = abola.parse_page(abola.fetch(url))["teams"]
+        html = abola.fetch(url)
     except Exception:  # noqa: BLE001
         return {"single_url": url}
+    try:
+        teams = abola.parse_page(html)["teams"]
+    except Exception:  # noqa: BLE001
+        teams = {}
     has_home = len(abola._pick_team(teams, home)) >= abola.MIN_FEED_RATINGS
     has_away = len(abola._pick_team(teams, away)) >= abola.MIN_FEED_RATINGS
+    if not has_home and not has_away:
+        tn = abola._norm(abola.page_title(html))
+        home_hint = any(t in tn for t in abola._team_tokens(home))
+        away_hint = any(t in tn for t in abola._team_tokens(away))
+        if home_hint and not away_hint:
+            has_home = abola._has_team_ratings(url, home, default_team=home)
+        elif away_hint and not home_hint:
+            has_away = abola._has_team_ratings(url, away, default_team=away)
     if has_home and not has_away:
         return {"home_url": url}
     if has_away and not has_home:

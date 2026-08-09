@@ -169,6 +169,19 @@ def fetch(url: str, *, retries: int = 3, delay: float = 1.0) -> str:
     raise RuntimeError(f"Could not fetch {url}: {last}")
 
 
+def page_title(html: str) -> str:
+    """The article's H1 (falls back to <title>) -- used to identify which team
+    a page covers from its headline when the body has no 'notas d<team>' /
+    'destaques d<team>' phrase at all (a creatively-titled big-three page,
+    e.g. 'Zalazar na cadeira do poder... (os jogadores do Sporting)')."""
+    soup = BeautifulSoup(html, "lxml")
+    h1 = soup.find("h1")
+    if h1:
+        return h1.get_text(" ", strip=True)
+    t = soup.find("title")
+    return t.get_text(" ", strip=True) if t else ""
+
+
 # ----------------------------------------------------------------------------
 # Discovery
 # ----------------------------------------------------------------------------
@@ -1100,13 +1113,24 @@ def scrape_match(match: dict, *, single_url: str | None = None,
     if big3:
         # Two separate "as notas" pages; MVP ('melhor' beats 'figura') spans
         # both, so combine their teams + boxes and resolve once.
-        if home_url is None and single_url is None:
-            home_url = find_team_notas(home, gdate)
-            time.sleep(delay)
-        if away_url is None and single_url is None:
-            away_url = find_team_notas(away, gdate)
-        teams, boxes = _parse_team_pages(
-            [(home_url, home), (away_url, away)], out["urls_used"], delay)
+        if single_url:
+            # A single pinned page covering BOTH sides -- either a genuine
+            # combined crónica, or a URL _route_abola_url couldn't attribute
+            # to one team over the other. Parse once, same as the
+            # non-big-three crónica path, instead of silently dropping it
+            # (home_url/away_url stay None, so the branch below would never
+            # look at it and the match would come back with zero ratings).
+            out["urls_used"].append(single_url)
+            page = parse_page(fetch(single_url))
+            teams, boxes = page["teams"], page["mvp_boxes"]
+        else:
+            if home_url is None:
+                home_url = find_team_notas(home, gdate)
+                time.sleep(delay)
+            if away_url is None:
+                away_url = find_team_notas(away, gdate)
+            teams, boxes = _parse_team_pages(
+                [(home_url, home), (away_url, away)], out["urls_used"], delay)
         apply_mvp(teams, boxes)
         out["home_team_ratings"] = _pick_team(teams, home)
         out["away_team_ratings"] = _pick_team(teams, away)
