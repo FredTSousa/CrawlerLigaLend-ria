@@ -276,12 +276,17 @@ class Supabase:
         source never ends up covering doesn't get swept forever.
 
         A prior reporter-fetch attempt only takes a match out of the running
-        when it actually found ratings (a matches_reporter_link row with a
-        non-empty home_ratings/away_ratings) -- at that point any remaining
-        unlinked players are manual-linking gaps, not a missing fetch. An
-        attempt that found NOTHING (e.g. the crónica wasn't published yet)
-        still leaves the match a candidate, so later sweeps keep retrying it
-        until it succeeds or ages out."""
+        when it found ratings for BOTH sides (a matches_reporter_link row with
+        non-empty home_ratings AND away_ratings) -- at that point any
+        remaining unlinked players are manual-linking gaps, not a missing
+        fetch. An attempt that found nothing, or only one side, still leaves
+        the match a candidate, so later sweeps keep retrying it until it
+        succeeds or ages out. The one-side case matters for the big three
+        (Benfica/Porto/Sporting): their two "as notas do X" pages are fetched
+        independently, and one team's crónica routinely goes up well after
+        the other's -- an `or` here would let the match drop out with the
+        late side never filled in (e.g. Sporting's notas published 28 min
+        after the sweep that already had Estrela da Amadora's)."""
         cutoff = (datetime.now(timezone.utc).date()
                   - timedelta(days=max_age_days)).isoformat()
         resp = self._rest(
@@ -310,7 +315,7 @@ class Supabase:
             "&select=match_id,home_ratings,away_ratings",
         ).json()
         found = {r["match_id"] for r in attempted
-                 if r.get("home_ratings") or r.get("away_ratings")}
+                 if r.get("home_ratings") and r.get("away_ratings")}
         return [mid for mid in candidates if mid not in found]
 
     def active_competitions(self) -> list[dict]:
