@@ -69,6 +69,13 @@ export default async function MatchPage({
   const homeCov = coverage(m?.home_team_id);
   const awayCov = coverage(m?.away_team_id);
 
+  // Ratings were fetched (rep exists, at least one side non-empty) but none
+  // of them carry the MVP flag. Often correct -- the source article just
+  // never named a standout -- but worth surfacing so it can be checked
+  // against the printed edition and set by hand (★ MVP button below).
+  const repRatings = [...(rep?.home_ratings || []), ...(rep?.away_ratings || [])];
+  const mvpMissing = !!rep && repRatings.length > 0 && !repRatings.some((r: any) => r.is_mvp);
+
   if (!m) {
     return (
       <div className="panel">
@@ -131,6 +138,16 @@ export default async function MatchPage({
             Every player who appeared should be linked. Fix nicknames / parsing
             gaps below — name links are remembered for future games.
           </p>
+          {mvpMissing && (
+            <p
+              className="muted"
+              style={{ fontSize: 13, margin: "0 0 12px", color: "var(--red)" }}
+            >
+              ⚠ No MVP found in the source article — either it genuinely named
+              none, or it's a parsing gap. Check the printed edition and set it
+              with the ★ MVP button below.
+            </p>
+          )}
           <ReporterLinker
             matchId={m.id}
             home={{ id: m.home_team_id, name: m.home_team?.name }}
