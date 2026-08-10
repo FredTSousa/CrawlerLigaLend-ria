@@ -933,11 +933,23 @@ def _target_team(teams: dict, hint: str | None) -> str | None:
 
 def apply_mvp(teams: dict, boxes: list[dict]) -> None:
     """Resolve MVP across a whole MATCH (both teams / both big-three pages):
-    'O melhor em campo' wins; 'A figura' is MVP only when no melhor exists
-    anywhere. Marks the matching player, or appends the box if not in the list."""
+    'O melhor em campo' wins outright. Failing that, 'a figura' is the
+    fallback -- but a big-three match assembles TWO independent team pages,
+    and each page can carry its OWN unlabelled gradient highlight card (see
+    _highlight_cards): that's the standout of THAT team's own page, not
+    necessarily one shared match MVP A Bola never actually named anywhere.
+    So when several 'figura' boxes turn up with no 'melhor' anywhere, only
+    the highest-scoring one is crowned MVP; the rest still get their
+    score/description attached to their player, just not the MVP flag.
+    Marks the matching player, or appends the box if not in the list."""
     has_melhor = any(b["kind"] == "melhor" for b in boxes)
+    top_figura = None
+    if not has_melhor:
+        figuras = [b for b in boxes if b["kind"] == "figura"]
+        if figuras:
+            top_figura = max(figuras, key=lambda b: b["score"] if b["score"] is not None else -1)
     for b in boxes:
-        is_mvp = b["kind"] == "melhor" or (b["kind"] == "figura" and not has_melhor)
+        is_mvp = b["kind"] == "melhor" or (b["kind"] == "figura" and b is top_figura)
         found = False
         for plist in teams.values():
             for pl in plist:
