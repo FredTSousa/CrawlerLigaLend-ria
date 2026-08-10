@@ -509,6 +509,72 @@ def _match_player_rows(game: dict) -> list[dict]:
 # ----------------------------------------------------------------------------
 
 
+def _prune_stale_match_players(sb: Supabase, new_rows: list[dict]) -> None:
+    """Remove match_players rows this crawl's fresh lineup no longer confirms.
+
+    upsert("match_players", ..., "match_id,player_id") only ever ADDS/updates
+    rows keyed by (match_id, player_id); it can never remove one keyed on a
+    DIFFERENT player_id. So when zerozero's own lineup box changes between
+    crawls -- the concrete case: a wrong player linked in the lineup on the
+    first crawl (e.g. because the right one, "Afonso Vieira", hadn't been
+    scraped into the roster yet, so zerozero's OWN box briefly pointed at an
+    unrelated existing profile, "Afonso Carvalho") gets corrected on a later
+    crawl to name the right player under a DIFFERENT id -- the old row for the
+    wrong player just lingers forever, still showing them as having played.
+    Simply requiring the fresh count to be >= the stored count (an earlier
+    version of this guard) doesn't catch this: dropping one spurious extra
+    player is a net SHRINK, indistinguishable by count alone from a botched
+    partial parse.
+
+    So the safety check here isn't about size, it's about which segment of
+    parse_lineups() a row came from. Its starters (the first two "Subtítulo"
+    segments) are captured as a unit whenever the function returns anything at
+    all -- there's no code path that parses one team's starting XI but not the
+    other's, or half a lineup. So a fresh capture of a full 11-a-side XI for a
+    team is trustworthy proof of what's on the pitch, and this reconciles
+    every row the DB marks as having PLAYED (did_not_play=false, so a starter
+    or a sub who came on) against that team's full fresh roster (starters +
+    subs), deleting whichever ones the fresh crawl no longer lists at all.
+
+    The optional "suplentes" segments (unused bench) are comparatively
+    fragile -- a page can genuinely lack them -- so this never touches a row
+    the DB marks did_not_play=true; an unused substitute's history is left
+    alone even if this crawl's bench segment came back thin or missing."""
+    fresh_all: dict[tuple[str, str], set[str]] = {}
+    fresh_starters: dict[tuple[str, str], set[str]] = {}
+    for r in new_rows:
+        tid = r.get("team_id")
+        if not tid:
+            continue
+        key = (r["match_id"], tid)
+        fresh_all.setdefault(key, set()).add(r["player_id"])
+        if r.get("is_starter"):
+            fresh_starters.setdefault(key, set()).add(r["player_id"])
+    keys = [k for k, s in fresh_starters.items() if len(s) >= 11]
+    if not keys:
+        return
+    match_ids = sorted({mid for mid, _ in keys})
+    inlist = ",".join(match_ids)
+    existing = sb._rest(
+        "GET",
+        f"match_players?match_id=in.({inlist})&did_not_play=eq.false"
+        "&select=match_id,team_id,player_id",
+    ).json()
+    old_played: dict[tuple[str, str], set[str]] = {}
+    for r in existing:
+        tid = r.get("team_id")
+        if not tid:
+            continue
+        old_played.setdefault((r["match_id"], tid), set()).add(r["player_id"])
+    for key in keys:
+        stale = old_played.get(key, set()) - fresh_all.get(key, set())
+        if not stale:
+            continue
+        mid, tid = key
+        sb.delete("match_players",
+                 f"match_id=eq.{mid}&team_id=eq.{tid}&player_id=in.({','.join(stale)})")
+
+
 def write_games(sb: Supabase, games: list[dict], *,
                 competition: dict | None, round_no: int | None,
                 scraped_at: str | None, phase: str | None = None) -> None:
@@ -588,6 +654,7 @@ def write_games(sb: Supabase, games: list[dict], *,
     for g in games:
         match_players.extend(_match_player_rows(g))
     sb.upsert("match_players", match_players, "match_id,player_id")
+    _prune_stale_match_players(sb, match_players)
 
 
 # ----------------------------------------------------------------------------
