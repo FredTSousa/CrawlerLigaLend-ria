@@ -696,29 +696,36 @@ def _deepdive_entry(el, id_map: dict) -> list[dict]:
 
 
 def _leading_score_row(el) -> list[dict]:
-    """Deep dive with the score BEFORE the name. Three spellings seen:
+    """Deep dive with the score BEFORE the name. Spellings seen:
         '7 Rui Silva — narrative'        (score then name, space-separated)
         '5 Diomande — narrative'         (bold is just the score; name is a link)
         '5 - MAXI ARAÚJO — narrative'    ('-' between the score and the name)
-    Parse from TEXT: the score is the leading number, the name is what's left
-    after dropping the score (and a '-' separator) up to the narrative dash, and
-    the id comes from the first player link. A player autolink is required so
-    listicles ('5 Coisas — …') are out."""
+        '- Dedic — narrative'            (a colored "pen-*" span holding just a
+                                           dash -- an unrated cameo, e.g. a sub
+                                           who barely touched the ball -- with NO
+                                           digit anywhere, same leading-token slot)
+    Parse from TEXT: the score is the leading token (a digit, or a bare dash
+    meaning "reporter gave no rating" -- same convention as elsewhere in this
+    file, via _score()), the name is what's left after dropping the score (and
+    a '-' separator) up to the narrative dash, and the id comes from the first
+    player link. A player autolink is required so listicles ('5 Coisas — …')
+    are out."""
     full = el.get_text(" ", strip=True)
-    m = re.match(r"\s*(10|\d)(?!\d)", full)
+    m = re.match(r"\s*(" + _RATING + r")(?!\d)", full)
     if not m:
         return []
     a = el.find("a", attrs={"data-resource-type": "player"})
     if not a:
         return []
-    rest = re.sub(r"^\s*\d+\s*[–—-]*\s*", "", full)   # drop score + '-' separator
+    # drop the leading score token (digit or dash) + '-' separator
+    rest = re.sub(r"^\s*(?:10|\d+|[-–—])\s*[–—-]*\s*", "", full)
     parts = re.split(r"\s[–—-]\s", rest, maxsplit=1)   # split off the narrative
     name = _player_name(parts[0])
     if not name or not name[:1].isupper():
         return []
     return [{
         "player_name": name, "player_id": _player_id(a),
-        "score": int(m.group(1)), "is_mvp": False,
+        "score": _score(m.group(1)), "is_mvp": False,
         "description": (parts[1].strip() or None) if len(parts) > 1 else None,
     }]
 
@@ -775,37 +782,45 @@ def _mvp_narrative(node, title: str) -> str | None:
 
 # A Bola's newer "as notas" layout drops the "O melhor em campo" label entirely:
 # the standout player sits alone in a coloured highlight card (a yellow CSS
-# linear-gradient box) whose bold line is "(score) Name" with the narrative
-# beside it. There's no label text to match and the card is a <div>/<span> the
-# ratings walk (h1-h6/<p> only) never visits, so without this the highlighted
-# player -- usually the match's best (e.g. "(7) Pedro Gonçalves" in "...as notas
-# do Sporting") -- is dropped completely. Find the card by its gradient styling.
+# linear-gradient box) whose bold line names them + their score, with the
+# narrative beside it. There's no label text to match and the card is a
+# <div>/<span> the ratings walk (h1-h6/<p> only) never visits, so without this
+# the highlighted player -- usually the match's best -- is dropped completely.
+# Both parenthesis orders have been seen: "(7) Pedro Gonçalves" (score first,
+# the original wording this was built against) and "Prestianni (8)" (name
+# first, a later re-skin of the same card). Find the card by its gradient
+# styling and accept either order for the bold line.
 _GRADIENT_RE = re.compile(r"linear-gradient", re.I)
 _BOLD_CLASS_RE = re.compile(r"font-bold", re.I)
+_SCORE_NAME_RE = re.compile(r"\(\s*(" + _RATING + r")\s*\)\s*(.+)")   # "(8) Name"
 
 
 def _highlight_cards(soup) -> list[dict]:
     """Standout-player highlight cards (no 'melhor em campo' label) -> figura
-    boxes. A card is a gradient-backed box whose bold line reads '(score) Name';
-    the rest of the box text is the narrative. Same-gradient promo cards (related
-    news, headed '// Nacional // …') are skipped -- their bold line isn't a
-    '(score) Name' rating, so the leading-parenthesis match fails."""
+    boxes. A card is a gradient-backed box whose bold line reads '(score) Name'
+    or 'Name (score)'; the rest of the box text is the narrative. Same-gradient
+    promo cards (related news, headed '// Nacional // …') are skipped -- their
+    bold line matches neither order, so both attempts fail."""
     out = []
     for box in soup.find_all(True, class_=_GRADIENT_RE):
         bold = box.find(["strong", "b"]) or box.find("span", class_=_BOLD_CLASS_RE)
         if not bold:
             continue
         head = bold.get_text(" ", strip=True)
-        m = re.match(r"\(\s*(" + _RATING + r")\s*\)\s*(.+)", head)
-        if not m:
-            continue
-        name = _player_name(m.group(2))
+        m = _SCORE_NAME_RE.match(head)
+        if m:
+            score, name = _score(m.group(1)), _player_name(m.group(2))
+        else:
+            m = ENTRY_RE.match(head)                                  # "Name (8)"
+            if not m:
+                continue
+            name, score = _player_name(m.group(1)), _score(m.group(2))
         if not name:
             continue
         full = box.get_text(" ", strip=True)
         desc = full.split(head, 1)[1].strip(" :—–-") if head in full else ""
         out.append({"kind": "figura", "team": None, "name": name,
-                    "score": _score(m.group(1)), "description": desc or None})
+                    "score": score, "description": desc or None})
     return out
 
 
