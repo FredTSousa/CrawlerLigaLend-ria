@@ -855,7 +855,17 @@ def _mvp_boxes(soup) -> list[dict]:
     "square" where the label and the player line ("7 - Francisco Trincão — …")
     sit in separate spans of one box -- plus the unlabelled gradient highlight
     card (_highlight_cards), A Bola's other way of flagging the standout
-    player."""
+    player.
+
+    The team-in-parens sub-case ("Name (Team)", score assumed to live in the
+    ratings list) has since sprouted two more spellings that DO carry a score
+    right there, both handled inline in the MVP_RE branch below: team and
+    score combined in one parenthesis ("Name (FC Porto, 7)"), and the score
+    trailing the closing paren ("Name (FC Porto) - 7"). And when the label
+    box's own name doesn't match anything already parsed from the ratings
+    list, that's sometimes just A Bola spelling the player differently in the
+    two spots on the same page ("Nabil"/"Nabili" Touaizi) rather than a
+    missing score -- see the edit-distance tolerance in _names_match."""
     boxes, seen = [], set()
     for node in soup.find_all(string=re.compile(r"melhor em campo|a figura", re.I)):
         lbl = re.search(r"(?:o\s+)?melhor em campo|a figura", node, re.I)
@@ -863,10 +873,19 @@ def _mvp_boxes(soup) -> list[dict]:
         m = MVP_RE.search(node)
         if m:
             name, paren = _clean_name(m.group(3)), m.group(4).strip()
+            combo = re.fullmatch(r"(.+?)\s*,\s*(" + _RATING + r")", paren)
             if re.fullmatch(r"(?:nota\s*)?[\d\-–—]+", paren, re.I):
                 score, team = _score(paren), (m.group(2) or "").strip() or None
+            elif combo:  # newest: team + score combined, "(FC Porto, 7)"
+                score = _score(combo.group(2))
+                team = (m.group(2) or combo.group(1)).strip() or None
             else:  # the parenthesis is the team, not a score
                 score, team = None, (m.group(2) or paren).strip() or None
+            if score is None:  # newest: score trails the paren, "(Team) - 7"
+                tail = re.match(
+                    r"\s*[-–—]\s*(" + _RATING + r")\b", node[m.end():])
+                if tail:
+                    score = _score(tail.group(1))
             narrative = _mvp_narrative(node, m.group(0))
         elif (m := MVP_SUFFIX_RE.search(node)):
             name, score = _clean_name(m.group(1)), _score(m.group(2))
@@ -932,16 +951,50 @@ def _canonical_team(teams: dict, name: str, default_team: str | None = None) -> 
     return name
 
 
+def _levenshtein1(a: str, b: str) -> bool:
+    """True if `a` and `b` are at most one single-character edit apart (a
+    classic Levenshtein distance <=1 check, done without a DP table since we
+    only care about "<=1"): same length differing in exactly one spot, or
+    lengths differing by one with everything else aligned around a single
+    insertion/deletion."""
+    la, lb = len(a), len(b)
+    if abs(la - lb) > 1:
+        return False
+    if la == lb:
+        return sum(1 for x, y in zip(a, b) if x != y) <= 1
+    shorter, longer = (a, b) if la < lb else (b, a)
+    i = j = 0
+    skipped = False
+    while i < len(shorter) and j < len(longer):
+        if shorter[i] == longer[j]:
+            i += 1
+            j += 1
+            continue
+        if skipped:
+            return False
+        skipped = True
+        j += 1  # skip the extra character in `longer`
+    return True
+
+
 def _names_match(a: str, b: str) -> bool:
     """Same player by name: exact, or one a substring of the other when the
-    shorter is long enough to be unambiguous ('Ríos' ~ 'Richard Ríos')."""
+    shorter is long enough to be unambiguous ('Ríos' ~ 'Richard Ríos'). Also
+    a single-character edit apart on longer names -- A Bola sometimes spells
+    the same player differently in its MVP box vs. the main ratings list on
+    the SAME page ('Nabil'/'Nabili' Touaizi, 'Makan'/'Maikan' Aiko: one
+    dropped/inserted letter). Both names come from the one article, so this
+    tolerance is safe; it's gated to longer names since a 1-edit tolerance on
+    a short name risks colliding two genuinely different players."""
     na, nb = _norm(a), _norm(b)
     if not na or not nb:
         return False
     if na == nb:
         return True
     short = na if len(na) <= len(nb) else nb
-    return len(short) >= 4 and (na in nb or nb in na)
+    if len(short) >= 4 and (na in nb or nb in na):
+        return True
+    return max(len(na), len(nb)) >= 8 and _levenshtein1(na, nb)
 
 
 def _target_team(teams: dict, hint: str | None) -> str | None:
