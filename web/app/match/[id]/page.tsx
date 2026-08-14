@@ -75,6 +75,14 @@ export default async function MatchPage({
   // against the printed edition and set by hand (★ MVP button below).
   const repRatings = [...(rep?.home_ratings || []), ...(rep?.away_ratings || [])];
   const mvpMissing = !!rep && repRatings.length > 0 && !repRatings.some((r: any) => r.is_mvp);
+  // Unlike mvpMissing, this is never a genuine editorial gap -- A Bola always
+  // gives its MVP a number -- so it always means the scraper failed to pull
+  // the score off whatever MVP-card layout this article used (e.g. Fotis
+  // Ioannidis / Sporting-V. Guimarães 2026-08-14, where the score led the
+  // narrative paragraph instead of sitting in the labelled line).
+  const mvpScoreMissing = repRatings.some(
+    (r: any) => r.is_mvp && (r.score === null || r.score === undefined),
+  );
 
   if (!m) {
     return (
@@ -146,6 +154,16 @@ export default async function MatchPage({
               ⚠ No MVP found in the source article — either it genuinely named
               none, or it's a parsing gap. Check the printed edition and set it
               with the ★ MVP button below.
+            </p>
+          )}
+          {mvpScoreMissing && (
+            <p
+              className="muted"
+              style={{ fontSize: 13, margin: "0 0 12px", color: "var(--red)" }}
+            >
+              ⚠ The MVP has no score — the source article rated them, but the
+              scraper didn't find it (a parsing gap, not an editorial one).
+              Check the crawl.
             </p>
           )}
           <ReporterLinker

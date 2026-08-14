@@ -22,7 +22,7 @@ const NAV: Entry[] = [
     label: "Data",
     items: [
       { href: "/linking-issues", label: "Linking issues" },
-      { href: "/mvp-missing", label: "MVP missing" },
+      { href: "/mvp-missing", label: "MVP issues" },
       { href: "/team-aliases", label: "Team aliases" },
       { href: "/subscribers", label: "Subscribers" },
     ],

@@ -145,14 +145,34 @@ function fmtKickoff(iso: string) {
   });
 }
 
-function RepCoverage({ s }: { s?: { players: number; linked: number; fetched: boolean } }) {
+function RepCoverage({
+  s,
+}: {
+  s?: {
+    players: number;
+    linked: number;
+    fetched: boolean;
+    has_mvp?: boolean;
+    mvp_missing_score?: boolean;
+  };
+}) {
   if (!s || !s.fetched) {
     return <span className="cov none">– reporter not fetched</span>;
   }
   const missing = s.players - s.linked;
-  return missing > 0 ? (
-    <span className="cov warn">⚠ {missing} unlinked</span>
-  ) : (
+  if (missing > 0) {
+    return <span className="cov warn">⚠ {missing} unlinked</span>;
+  }
+  // A linked-but-scoreless MVP (reporter_linked=true, reporter_score=null)
+  // doesn't show up in the "unlinked" count above -- the name matched fine,
+  // only the score parsing failed -- so check it separately. Always a
+  // scraper bug (A Bola never leaves its MVP unrated), unlike has_mvp=false
+  // which is sometimes a genuine "no standout named" article and stays a
+  // quiet ✓ here (see /mvp-missing for that worklist).
+  if (s.has_mvp && s.mvp_missing_score) {
+    return <span className="cov warn">⚠ MVP has no score</span>;
+  }
+  return (
     <span className="cov ok">✓ reporter {s.linked}/{s.players}</span>
   );
 }
