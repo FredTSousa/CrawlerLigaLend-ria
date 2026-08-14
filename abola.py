@@ -780,6 +780,28 @@ def _mvp_narrative(node, title: str) -> str | None:
     return None
 
 
+# The bare label box ("Melhor em campo: Name", MVP_BARE_RE) was built assuming
+# the player's score always lives in the main ratings list instead -- true for
+# the older bare layout, but A Bola's newest gradient MVP card puts the name
+# ONLY in the bold label and gives the player NO separate ratings-list row at
+# all: the score sits at the front of the card's own narrative, in the same
+# "pen-red <strong>N</strong> — text" convention every other rated row uses
+# (see _leading_score_row). Without this, that player keeps score=None even
+# though the card names a rating right there.
+_NARRATIVE_LEAD_SCORE_RE = re.compile(r"^\s*(" + _RATING + r")\s*[–—-]\s*(.*)$", re.S)
+
+
+def _split_leading_score(narrative: str | None) -> tuple[int | None, str | None]:
+    """(score, rest) when `narrative` opens with a bare leading score token
+    ('7 — Titular ...'); otherwise (None, narrative) unchanged."""
+    if not narrative:
+        return None, narrative
+    m = _NARRATIVE_LEAD_SCORE_RE.match(narrative)
+    if not m:
+        return None, narrative
+    return _score(m.group(1)), (m.group(2).strip() or None)
+
+
 # A Bola's newer "as notas" layout drops the "O melhor em campo" label entirely:
 # the standout player sits alone in a coloured highlight card (a yellow CSS
 # linear-gradient box) whose bold line names them + their score, with the
@@ -868,6 +890,8 @@ def _mvp_boxes(soup) -> list[dict]:
                     if name:
                         break
                 box = box.parent
+        if score is None:  # newest gradient card: score leads the narrative
+            score, narrative = _split_leading_score(narrative)
         if not name:
             continue
         key = _norm(name)
