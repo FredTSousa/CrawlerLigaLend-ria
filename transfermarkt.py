@@ -523,30 +523,44 @@ def _player_index(tm_players: list[dict]) -> dict:
 
 
 def match_player(zz_player: dict, idx: dict) -> dict | None:
-    """Map a zerozero squad player to a TM squad row: shirt number first (a
-    strong key within one official squad), else name token subset/superset with
-    birth-year/age as a tiebreaker."""
+    """Map a zerozero squad player to a TM squad row: name (token subset/
+    superset, birth-year/age as an ambiguity tiebreaker) first; shirt number
+    only as a last resort, once a name search comes up with nothing.
+
+    Shirt number used to be tried FIRST and accepted even with zero shared
+    name tokens ("shirt numbers are reliable even when the two sources spell
+    the name very differently"). That is true only while both sources agree
+    on who wears the number — zerozero and Transfermarkt independently drift
+    out of sync after a squad renumbering, and a same-number lookup then pairs
+    up two unrelated players (e.g. FC Alverca #21: zerozero's Sergi Gómez vs
+    TM's Sabit Abdulai, a Ghanaian midfielder — his "Médio Defensivo" ended up
+    stamped on Sergi Gómez's record). Trying the name first avoids that: the
+    right TM row is normally still findable by name even when its shirt
+    number disagrees (Sergi Gómez is TM's #5). Shirt stays useful as a last
+    resort for real spelling divergence with no number conflict (nicknames
+    like "Kiko" for Francisco Domingues, transliteration variants), where a
+    name search finds nothing to contradict it — but even then it's only
+    trusted when age corroborates (within a year, to allow for a birthday
+    between the two scrapes): two unrelated players can share both a squad
+    number and a name-match failure (e.g. Casa Pia's real Sebastián Pérez, 33,
+    vs TM's #24 Iyad Mohamed, 25 — an 8-year gap the age check catches)."""
+    zt = _tokens(zz_player.get("name"))
+    if zt:
+        hits = [p for ts, p in idx["by_token"] if ts and (zt <= ts or ts <= zt)]
+        if len(hits) == 1:
+            return hits[0]
+        if len(hits) > 1:
+            age = zz_player.get("age")
+            narrowed = [p for p in hits if age and p.get("age") == age]
+            if len(narrowed) == 1:
+                return narrowed[0]
+
     shirt = zz_player.get("shirt_number")
     if shirt is not None and shirt in idx["by_shirt"]:
         cand = idx["by_shirt"][shirt]
-        # Sanity-guard the shirt match with a shared name token when possible.
-        if _tokens(zz_player.get("name")) & _tokens(cand["name"]):
+        zz_age, tm_age = zz_player.get("age"), cand.get("age")
+        if zz_age is None or tm_age is None or abs(zz_age - tm_age) <= 1:
             return cand
-        # Shirt numbers are reliable even when the two sources spell the name
-        # very differently; accept the shirt match as a fallback.
-        return cand
-
-    zt = _tokens(zz_player.get("name"))
-    if not zt:
-        return None
-    hits = [p for ts, p in idx["by_token"] if ts and (zt <= ts or ts <= zt)]
-    if len(hits) == 1:
-        return hits[0]
-    if len(hits) > 1:
-        age = zz_player.get("age")
-        narrowed = [p for p in hits if age and p.get("age") == age]
-        if len(narrowed) == 1:
-            return narrowed[0]
     return None
 
 
