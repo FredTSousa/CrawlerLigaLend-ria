@@ -76,7 +76,15 @@ export default async function RoundPage({
       <div className="panel">
         <div className="row" style={{ justifyContent: "space-between" }}>
           <h2 style={{ margin: 0 }}>Round {round}</h2>
-          <CrawlButton kind="round" target={round} label="Re-crawl round" competition={comp} />
+          <span className="row" style={{ gap: 8 }}>
+            <CrawlButton
+              kind="dates"
+              target={round}
+              label="Refresh dates"
+              competition={comp}
+            />
+            <CrawlButton kind="round" target={round} label="Re-crawl round" competition={comp} />
+          </span>
         </div>
       </div>
 

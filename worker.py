@@ -51,6 +51,7 @@ import sync  # noqa: E402  (after WORKER_ID is set)
 KIND_MODULE = {
     "round": "sync", "match": "sync", "backfill": "sync",
     "scheduled": "sync", "reporter_sweep": "sync",
+    "dates": "sync", "dates_sweep": "sync",
     "reporter": "reporter_sync",
     "watch": "live_watch",
     "teams": "roster_sync", "roster": "roster_sync", "players": "roster_sync",
@@ -62,6 +63,7 @@ KIND_MODULE = {
 KIND_LABEL = {
     "round": "League matches", "match": "Match", "backfill": "Backfill",
     "scheduled": "Scheduled sweep", "reporter_sweep": "Reporter sweep",
+    "dates": "Fixture dates", "dates_sweep": "Dates sweep",
     "reporter": "Reporter", "watch": "Live watch",
     "teams": "Squads", "roster": "Roster", "players": "Player",
     "comp_full": "Full squads", "comp_players": "Squad positions",
@@ -85,6 +87,7 @@ PARAM_ENV = {
 _JOB_ENV = set(PARAM_ENV.values()) | {
     "IN_BACKFILL", "IN_FORCE", "IN_SCHEDULED", "IN_REPORTER_SWEEP",
     "IN_FULL", "IN_PLAYERS_ONLY", "IN_DEPARTED_ONLY", "IN_SOLD_ONLY", "IN_RUN_ID",
+    "IN_DATES_ONLY", "IN_DATES_SWEEP",
     "WATCH_DAEMON", "JOB_KIND",
 }
 
@@ -95,7 +98,7 @@ def _target_fallback(kind: str, params: dict) -> None:
     t = params.get("target")
     if not t:
         return
-    if kind == "round":
+    if kind in ("round", "dates"):
         params.setdefault("jornada", t)
     elif kind in ("match", "watch"):
         params.setdefault("match", t)
@@ -126,6 +129,10 @@ def _prepare_env(kind: str, params: dict) -> None:
         os.environ["IN_SCHEDULED"] = "true"
     elif kind == "reporter_sweep":
         os.environ["IN_REPORTER_SWEEP"] = "true"
+    elif kind == "dates":
+        os.environ["IN_DATES_ONLY"] = "true"
+    elif kind == "dates_sweep":
+        os.environ["IN_DATES_SWEEP"] = "true"
     elif kind == "comp_full":
         os.environ["IN_FULL"] = "true"
     elif kind == "comp_players":

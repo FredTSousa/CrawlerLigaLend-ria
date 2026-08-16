@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   // Squad kinds drive roster_sync.py via squads.yml; the rest drive sync.py.
   const squadKinds = ["teams", "roster", "players", "comp_full", "comp_players", "comp_sold"];
   const allowed = [
-    "round", "match", "watch", "reporter", "backfill", ...squadKinds,
+    "round", "match", "watch", "reporter", "backfill", "dates", ...squadKinds,
   ];
   const kind = allowed.includes(body.kind as string) ? (body.kind as string) : "round";
   const isSquad = squadKinds.includes(kind);
@@ -104,6 +104,14 @@ export async function POST(request: Request) {
     if (body.force) params.force = true;
     dedupe = `backfill:${target}`;
     priority = 90;
+  } else if (kind === "dates") {
+    // Lightweight round-table-only refresh (played_on/kickoff_at, no match
+    // visits) — its own dedupe key so it never collides with a full "round"
+    // crawl of the same target already queued.
+    params.jornada = target;
+    if (body.competition) params.competition = body.competition;
+    dedupe = `dates:${body.competition || "default"}:${target}`;
+    priority = 55;
   } else if (isSquad) {
     // Squad syncs (roster_sync.py): teams/comp_full/comp_players/roster/players.
     if (kind === "players") {

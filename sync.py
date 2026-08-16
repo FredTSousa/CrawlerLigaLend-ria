@@ -18,6 +18,8 @@ Usage:
     python sync.py --competition la-liga --jornada 5
     python sync.py --competition la-liga --backfill        # all not-yet-final rounds
     python sync.py --competition la-liga --backfill --force # every round
+    python sync.py --jornada 31 --dates-only               # dates/kickoffs only, no match visits
+    python sync.py --dates-sweep                            # daily: current+next 2 rounds, every league
 
 If --run-id is given (the site pre-created a 'queued' row), that row is updated;
 otherwise a new crawl_runs row is created.
@@ -228,16 +230,20 @@ class Supabase:
         return self.rpc("reclaim_jobs", {}) or 0
 
     def match_existing(self, ids: list[str]) -> dict[str, dict]:
-        """Current status + competition_id of the given match ids, so a crawl can
-        keep status moving forward only and never null out an already-known
-        league (live/single-match crawls don't carry a competition)."""
+        """Current status/schedule/competition_id of the given match ids, so a
+        crawl can keep status moving forward only and never null out an
+        already-known league (live/single-match crawls don't carry a
+        competition), team id, round, or -- for the dates-only writer -- an
+        already-known played_on/kickoff_at/url the round table didn't resolve
+        this time."""
         if not ids:
             return {}
         inlist = ",".join(ids)
         resp = self._rest(
             "GET",
             f"matches?id=in.({inlist})"
-            "&select=id,status,competition_id,home_team_id,away_team_id,round")
+            "&select=id,status,competition_id,home_team_id,away_team_id,round,"
+            "played_on,kickoff_at,url")
         return {r["id"]: r for r in resp.json()}
 
     def competition_rounds_status(self, competition_id: str) -> dict[int, list[str]]:
@@ -657,6 +663,71 @@ def write_games(sb: Supabase, games: list[dict], *,
     _prune_stale_match_players(sb, match_players)
 
 
+def _date_row(game: dict, *, competition_id: str | None, round_no: int | None,
+              phase: str | None, prev: dict) -> dict:
+    """Build a matches patch carrying only what a round-table-only crawl (one
+    request, no match-page visit -- see write_match_dates) can responsibly
+    claim: schedule fields. Deliberately omits status/score/minute/scraped_at
+    so a "dates only" refresh can never stomp on data only a full crawl earns
+    -- e.g. a round-table game already final also carries its score in the
+    "result" cell, but that's not evidence of the fuller stuff (lineups,
+    events) a full crawl records, so leaving status/score out entirely means
+    the existing row (and the round-completion check in _decide_round) is
+    untouched either way. Any field the round table didn't resolve this pass
+    (kickoff_at is only set on a still-scheduled "vs" cell, never on a played
+    "result" one) falls back to the existing value, mirroring write_games's
+    "never null out a known id" guards."""
+    row = {
+        "id": game["game_id"],
+        "competition_id": competition_id or prev.get("competition_id"),
+        "round": round_no if round_no is not None else prev.get("round"),
+        "played_on": game.get("date") or prev.get("played_on"),
+        "url": game.get("url") or prev.get("url"),
+        "home_team_id": (game.get("home_team") or {}).get("id")
+                        or prev.get("home_team_id"),
+        "away_team_id": (game.get("away_team") or {}).get("id")
+                        or prev.get("away_team_id"),
+        "kickoff_at": game.get("kickoff_at") or prev.get("kickoff_at"),
+        "updated_at": _now(),
+    }
+    if phase is not None:
+        row["phase"] = phase
+    return row
+
+
+def write_match_dates(sb: Supabase, games: list[dict], *,
+                      competition: dict | None, round_no: int | None,
+                      phase: str | None = None) -> int:
+    """Upsert ONLY the scheduling fields (played_on/kickoff_at/team ids/round)
+    for a round's games, from a single cheap fetch (crawler.get_fixture --
+    the round table alone, no per-match page visits). Never touches
+    status/score/minute/lineups/events, so it's safe to run far more often
+    than a full round crawl (crawl_round): it exists purely to catch
+    postponements and newly-published kickoff times fast. Returns the number
+    of matches written."""
+    games = [g for g in games if g and g.get("game_id")]
+    if not games:
+        return 0
+
+    competition_id = None
+    if competition:
+        sb.upsert("competitions", [_competition_row(competition)], "id")
+        competition_id = competition.get("id_edicao")
+
+    # Round-table team dicts carry no logo, so _collect_entities' logo map is
+    # always empty here -- teams get name+id only, never touching logo_url.
+    teams, _players, _logos = _collect_entities(games)
+    if teams:
+        sb.upsert("teams", teams, "id")
+
+    existing = sb.match_existing([g["game_id"] for g in games])
+    rows = [_date_row(g, competition_id=competition_id, round_no=round_no,
+                      phase=phase, prev=existing.get(g["game_id"]) or {})
+            for g in games]
+    sb.upsert("matches", rows, "id")
+    return len(rows)
+
+
 # ----------------------------------------------------------------------------
 # crawl_runs lifecycle + orchestration
 # ----------------------------------------------------------------------------
@@ -815,6 +886,42 @@ def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
         _finish_run(sb, run_id, status="error", error=str(err)[:2000])
         jobstatus.done("error", message=str(err))
         print(f"ERROR in crawl_run #{run_id}: {err}", file=sys.stderr)
+        raise
+
+
+def run_dates(*, jornada: int | None, run_id: int | None, trigger: str,
+              github_run_id: str | None, delay: float,
+              competition_url: str | None = None) -> dict:
+    """Entry point behind the round backoffice page's "Refresh dates" button:
+    refresh one round's played_on/kickoff_at only (one HTTP request -- the
+    round table -- no match-page visits, no score/status/lineup changes).
+    See write_match_dates for what it does and doesn't touch."""
+    sb = Supabase()
+    target = str(jornada if jornada is not None else "current")
+    run_id = _begin_run(sb, run_id=run_id, trigger=trigger, kind="dates",
+                        target=target, github_run_id=github_run_id)
+    try:
+        jobstatus.report("Resolving competition")
+        session = crawler.new_session()
+        competition = crawler.get_competition(
+            competition_url or crawler.COMPETITION_URL, session=session,
+            delay=delay)
+        if jornada is None:
+            jornada = competition["current_round"]
+        jobstatus.report(f"Refreshing round {jornada} dates")
+        fixture = crawler.get_fixture(competition, jornada, session=session,
+                                      delay=delay)
+        n = write_match_dates(sb, fixture["games"], competition=competition,
+                              round_no=fixture["round"])
+        _finish_run(sb, run_id, status="success", games_count=n)
+        jobstatus.done("success",
+                       message=f"Refreshed {n} date(s) (round {fixture['round']}).")
+        print(f"Refreshed {n} date(s). crawl_run #{run_id}", file=sys.stderr)
+        return {"run_id": run_id, "games": n}
+    except Exception as err:  # noqa: BLE001
+        _finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        jobstatus.done("error", message=str(err))
+        print(f"ERROR in dates crawl_run #{run_id}: {err}", file=sys.stderr)
         raise
 
 
@@ -1286,6 +1393,79 @@ def run_scheduled(*, github_run_id: str | None, delay: float) -> dict:
             "deactivated": deactivated, "failed": failed}
 
 
+def _dates_sweep_round(sb: Supabase, comp: dict, round_no: int, *,
+                       session: requests.Session, github_run_id: str | None,
+                       delay: float) -> int:
+    """Refresh one round's dates only (write_match_dates), logging its own
+    crawl_runs row. Shared by the daily dates sweep below; the manual
+    "Refresh dates" button goes through run_dates instead (its own crawl_runs
+    row keyed off the run the website pre-creates)."""
+    run_id = _begin_run(sb, run_id=None, trigger="schedule", kind="dates",
+                        target=str(round_no), github_run_id=github_run_id)
+    try:
+        fixture = crawler.get_fixture(comp, round_no, session=session, delay=delay)
+        n = write_match_dates(sb, fixture["games"], competition=comp,
+                              round_no=fixture["round"])
+        _finish_run(sb, run_id, status="success", games_count=n)
+        print(f"    round {fixture['round']}: refreshed {n} date(s). "
+              f"crawl_run #{run_id}", file=sys.stderr)
+        return n
+    except Exception as err:  # noqa: BLE001
+        _finish_run(sb, run_id, status="error", error=str(err)[:2000])
+        print(f"ERROR in dates crawl_run #{run_id}: {err}", file=sys.stderr)
+        raise
+
+
+def run_dates_sweep(*, github_run_id: str | None, delay: float) -> dict:
+    """Daily cron: refresh fixture dates only (played_on/kickoff_at -- no
+    scores/status/lineups) for the current round + next 2 rounds of every
+    active competition. Each round costs one HTTP request (the round table
+    alone, via crawler.get_fixture -- no per-match page visits), so unlike the
+    6-hourly full sweep (run_scheduled) this is cheap enough to hit every
+    active league daily and catch postponements or newly-published kickoff
+    times well before the full sweep's next tick would."""
+    sb = Supabase()
+    comps = sb.active_competitions()
+    print(f"Dates sweep: {len(comps)} active competition(s).", file=sys.stderr)
+
+    refreshed = failed = 0
+    for c in comps:
+        comp_id = c.get("id")
+        slug = c.get("slug")
+        name = c.get("name") or slug or comp_id or "?"
+        url = _competition_url(slug) or crawler.COMPETITION_URL
+        session = crawler.new_session()
+        try:
+            comp = crawler.get_competition(url, session=session, delay=delay)
+        except Exception as err:  # noqa: BLE001 - one bad league must not stop others
+            failed += 1
+            print(f"  ! {name}: competition page failed: {err}", file=sys.stderr)
+            continue
+
+        cur = comp.get("current_round")
+        all_rounds = comp.get("rounds") or []
+        if cur is None or not all_rounds:
+            continue
+        targets = sorted(rd for rd in all_rounds if cur <= rd <= cur + 2)
+
+        for rd in targets:
+            jobstatus.report(f"{name}: refresh dates round {rd}")
+            print(f"  > {name}: refresh dates round {rd}", file=sys.stderr)
+            try:
+                _dates_sweep_round(sb, comp, rd, session=session,
+                                   github_run_id=github_run_id, delay=delay)
+                refreshed += 1
+            except Exception as err:  # noqa: BLE001 - keep sweeping other rounds/leagues
+                failed += 1
+                print(f"  ! {name}: dates refresh round {rd} failed: {err}",
+                      file=sys.stderr)
+
+    summary = f"Dates sweep done: {refreshed} round(s) refreshed, {failed} failed."
+    print(summary, file=sys.stderr)
+    jobstatus.done("success", message=summary)
+    return {"refreshed": refreshed, "failed": failed}
+
+
 def run_reporter_sweep(*, github_run_id: str | None, delay: float) -> dict:
     """Lightweight cron sweep: fetch reporter ratings for every FINAL match from
     the last REPORTER_SWEEP_MAX_AGE_DAYS days that still lacks them, across
@@ -1385,6 +1565,16 @@ def main() -> int:
                     help="Lightweight cron sweep: only fetch reporter ratings for "
                          "FINAL matches that still lack them (never crawls "
                          "zerozero). This is what the 30-minute schedule runs.")
+    ap.add_argument("--dates-only", action="store_true",
+                    help="With --jornada/--competition, refresh only "
+                         "played_on/kickoff_at for that round (one request, no "
+                         "match-page visits, no score/status/lineup changes) "
+                         "instead of a full round crawl.")
+    ap.add_argument("--dates-sweep", action="store_true",
+                    help="Lightweight cron sweep: refresh fixture dates only "
+                         "(current round + next 2) across every active "
+                         "competition (never visits a match page). This is "
+                         "what the daily schedule runs.")
     ap.add_argument("--run-id", type=int,
                     help="Existing crawl_runs row to update (else a new one is created).")
     ap.add_argument("--trigger", default="manual", choices=["manual", "schedule"],
@@ -1432,6 +1622,12 @@ def main() -> int:
         run_reporter_sweep(github_run_id=args.github_run_id, delay=args.delay)
         return 0
 
+    # Same reasoning: the daily dates sweep is its own no-args cron job and
+    # must be checked before the generic schedule->run_scheduled fallback.
+    if args.dates_sweep or _flag(_env("IN_DATES_SWEEP")):
+        run_dates_sweep(github_run_id=args.github_run_id, delay=args.delay)
+        return 0
+
     if (args.scheduled or _flag(_env("IN_SCHEDULED"))
             or (trigger == "schedule" and no_targets)):
         run_scheduled(github_run_id=args.github_run_id, delay=args.delay)
@@ -1442,6 +1638,12 @@ def main() -> int:
                      run_id=run_id, trigger=trigger,
                      github_run_id=args.github_run_id, delay=args.delay,
                      force=force)
+        return 0
+
+    if (args.dates_only or _flag(_env("IN_DATES_ONLY"))) and not match_url:
+        run_dates(jornada=jornada, run_id=run_id, trigger=trigger,
+                 github_run_id=args.github_run_id, delay=args.delay,
+                 competition_url=competition_url)
         return 0
 
     run(jornada=jornada, match_url=match_url, run_id=run_id,
