@@ -497,8 +497,13 @@ NOTAS_RE = re.compile(_HDR + r"\s+d", re.I)
 # A bare rating token. A Bola rates 0-10, so cap it there: this rejects not just
 # formations "(4x2x3x1)" / "(35 anos)" but stray stats in prose like "(43)" that
 # would otherwise look like a rating and pull narrative into the list. An unrated
-# player is "(-)" / "(–)" / "(—)" (hyphen, en-dash or em-dash) -> score None.
-_RATING = r"(?:10|\d|[-–—])"
+# player is "(-)" / "(–)" / "(—)" (hyphen, en-dash or em-dash) -> score 0. A late
+# substitute sometimes gets a DOUBLED dash instead, "(--)" (e.g. "Samuel (--) e
+# Patrício (--)") -- same "no rating" meaning, just two hyphens -- so the dash
+# alternative is "+" (one or more), not a bare single char, so that spelling is
+# captured too instead of silently dropping the whole "Name (--)" token (and
+# the player) from the ratings list.
+_RATING = r"(?:10|\d|[-–—]+)"
 # Closing of a rating token. Normally ")", but A Bola sometimes typos it as ";"
 # or "," ("Ricardo Horta (5;") -- accept those so the player isn't dropped.
 _CLOSE = r"[);,]"

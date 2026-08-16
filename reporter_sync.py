@@ -157,6 +157,16 @@ def _last(name: str) -> str:
     return abola._norm(parts[-1]) if parts else abola._norm(name)
 
 
+def _tokens(name: str) -> frozenset[str]:
+    """Per-word normalized tokens, e.g. 'Inbeom Hwang' -> {'inbeom', 'hwang'} --
+    lets the surname/substring tier also catch a reporter writing a name in the
+    OTHER order (A Bola uses Western given-name-first; some sources, e.g. Korean
+    players like Hwang Inbeom, are registered surname-first). Still an exact
+    word-for-word match, just order-independent -- no fuzzier than the existing
+    exact-name rule, so it carries the same low false-positive risk."""
+    return frozenset(abola._norm(w) for w in re.split(r"\s+", name.strip()) if w)
+
+
 def _resolve(rating, zz, aliases, abolaid_map, used, ambiguous):
     """Resolve one A Bola rating to a zerozero player_id, in priority order:
     A Bola id -> learned alias -> exact name -> *unambiguous* surname/substring.
@@ -178,12 +188,13 @@ def _resolve(rating, zz, aliases, abolaid_map, used, ambiguous):
         if pid not in used and abola._norm(pn) == na:
             return pid
     la = _last(rating["player_name"])                      # surname / substring
+    ra_tokens = _tokens(rating["player_name"])              # word-set (order-free)
     cands = []
     for pid, pn in zz:
         if pid in used:
             continue
         npn = abola._norm(pn)
-        if (na in npn or npn in na) or _last(pn) == la:
+        if (na in npn or npn in na) or _last(pn) == la or _tokens(pn) == ra_tokens:
             cands.append(pid)
     return cands[0] if len(cands) == 1 else None
 
