@@ -521,6 +521,15 @@ MVP_RE = re.compile(
 MVP_SUFFIX_RE = re.compile(
     r"([^()<\n]+?)\s*\(\s*(" + _RATING + r")\s*\)\s*[—–-]\s*"
     r"((?:o\s+)?melhor em campo|a figura)", re.I)
+# Name-first, label-last, with the score in a TRAILING parenthesis -- A Bola's
+# newest gradient MVP-card header: "Gabri Veiga — o melhor em campo (nota 8)",
+# "Trincão – a figura (7)", or with no score at all ("Sellouki — a figura").
+# MVP_SUFFIX_RE is the older label-last spelling with the "(score)" BEFORE the
+# label; here it trails the label, and the word "nota" may sit inside it. The
+# trailing "\s*$" keeps this off prose that merely contains " — a figura …".
+MVP_NAME_LABEL_RE = re.compile(
+    r"\s*([^()<\n:]+?)\s*[—–-]\s*((?:o\s+)?melhor em campo|a figura)\b"
+    r"(?:\s*\(\s*(?:nota\s*)?(" + _RATING + r")\s*\))?\s*$", re.I)
 # Bare label form (A Bola's newest crónica boxes): "Melhor em campo: Name" / "A
 # figura do <team>: Name" with NO score at all -- the player already has a score
 # from the ratings list, so this just supplies the name (+ optional team hint);
@@ -851,6 +860,29 @@ def _highlight_cards(soup) -> list[dict]:
     return out
 
 
+def _gradient_notas_cards(soup) -> list[tuple]:
+    """A Bola's newest 'gradient card' layout also wraps a whole team's inline
+    ratings list in a yellow linear-gradient box: a bold '(As) notas do <team>'
+    / 'destaques do <team>' header (a <span>, not a heading), then the
+    'Name (6); Name (5); …' list in a <p> nested in a sibling <span>.
+    parse_page's heading/paragraph walk reaches that <p> but never the <span>
+    header, so the list is orphaned with no 'current team' and dropped -- a
+    crónica whose BOTH teams use this layout parses to nothing. Return
+    [(team, header_text, box)] for each such card so parse_page can bucket it."""
+    out = []
+    for box in soup.find_all(True, class_=_GRADIENT_RE):
+        head_el = (box.find("span", class_=_BOLD_CLASS_RE)
+                   or box.find(["strong", "b"]))
+        if not head_el:
+            continue
+        head = head_el.get_text(" ", strip=True)
+        if not NOTAS_RE.search(head) \
+                or not re.match(r"\s*" + _HDR + r"\b", head, re.I):
+            continue
+        out.append((_team_of_header(head_el), head, box))
+    return out
+
+
 def _mvp_boxes(soup) -> list[dict]:
     """Find 'O melhor em campo' / 'A figura' boxes -> name, score, team, text.
     Four labelled layouts: label-first with a score ("O melhor em campo: Name
@@ -886,15 +918,31 @@ def _mvp_boxes(soup) -> list[dict]:
                 team = (m.group(2) or combo.group(1)).strip() or None
             else:  # the parenthesis is the team, not a score
                 score, team = None, (m.group(2) or paren).strip() or None
-            if score is None:  # newest: score trails the paren, "(Team) - 7"
+            tail_score = None
+            if score is None:  # score trails the paren: "(Team) - 7" / "(Team), 7"
                 tail = re.match(
-                    r"\s*[-–—]\s*(" + _RATING + r")\b", node[m.end():])
+                    r"\s*[-–—,:]\s*(?:nota\s*)?(" + _RATING + r")\b",
+                    node[m.end():])
                 if tail:
-                    score = _score(tail.group(1))
+                    score = tail_score = _score(tail.group(1))
             narrative = _mvp_narrative(node, m.group(0))
+            if tail_score is not None and narrative:
+                # that trailing score echoes at the head of the card narrative
+                # ("… (Sporting), 7 Está em três dos …") -- drop the echo so the
+                # description doesn't open with a stray ", 7".
+                narrative = re.sub(
+                    r"^[\s,:;–—-]*" + re.escape(str(tail_score))
+                    + r"\s*[–—-]?\s+", "", narrative, count=1)
         elif (m := MVP_SUFFIX_RE.search(node)):
             name, score = _clean_name(m.group(1)), _score(m.group(2))
             narrative = _mvp_narrative(node, m.group(0))
+        elif (m := MVP_NAME_LABEL_RE.match(node)) and _player_name(m.group(1)):
+            # "Gabri Veiga — o melhor em campo (nota 8)": name first, score in a
+            # trailing paren (or absent -- then apply_mvp fills it from the list).
+            name = _player_name(m.group(1))
+            score = _score(m.group(3)) if m.group(3) else None
+            title = re.sub(r"\s+", " ", m.group(0)).strip()
+            narrative = _mvp_narrative(node, title)
         elif (m := MVP_BARE_RE.match(node)) and _player_name(m.group(3)):
             name = _player_name(m.group(3))
             team = (m.group(2) or "").strip() or None
@@ -1109,6 +1157,23 @@ def parse_page(html: str, default_team: str | None = None) -> dict:
             rows = _rating_rows(el)
             if rows:
                 add(rows)
+
+    # Newest layout: a team's whole ratings list sits in a gradient "card" whose
+    # header is a <span> the heading/paragraph walk never visits, so `current`
+    # never gets set for it and the list above is left unbucketed. Pull those
+    # straight from the card. Deduped below against anything the walk did catch.
+    for gteam, ghead, gbox in _gradient_notas_cards(soup):
+        gcanon = (_canonical_team(teams, gteam, default_team) if gteam
+                  else (current if current else default_team))
+        if not gcanon:
+            continue
+        gfull = re.sub(r"\s+", " ", gbox.get_text(" ", strip=True))
+        ghead = re.sub(r"\s+", " ", ghead)
+        grest = gfull.split(ghead, 1)[1] if ghead in gfull else gfull
+        if TOKEN_RE.search(grest):
+            bucket = teams.setdefault(gcanon, [])
+            bucket.extend(r for r in _inline_entries(grest, _link_id_map(gbox))
+                          if r["player_name"])
 
     for tname in teams:
         teams[tname] = _dedupe_players(teams[tname])
