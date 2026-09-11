@@ -677,7 +677,7 @@ def _deepdive_entry(el, id_map: dict) -> list[dict]:
         '(1) Bednarek — …'      (parenthetical, before the name)
     plus the leading bare-number form handled by _leading_score_row. Prefer an
     autolink for the id; fall back to text when the player isn't linked."""
-    full = el.get_text(" ", strip=True)
+    full = _flat_text(el)
     parts = re.split(r"\s[–—-]\s", full, maxsplit=1)
     desc = (parts[1].strip() or None) if len(parts) > 1 else None
     a = el.find("a", attrs={"data-resource-type": "player"})
@@ -686,9 +686,20 @@ def _deepdive_entry(el, id_map: dict) -> list[dict]:
     if lead:
         name = _player_name(lead.group(2))
         if name:
+            # `a` is only trustworthy here when it actually names THIS player --
+            # otherwise it's just the first player link the narrative happens to
+            # mention (e.g. a teammate praised in the same paragraph), and using
+            # it would silently attach this row's score to the wrong player. Seen
+            # on a card whose own name wasn't autolinked at all: "(8)
+            # SCHJELDERU</strong>P — …" left `a` pointing at Prestianni, the next
+            # player linked in the narrative, mis-scoring him with Schjelderup's
+            # card and leaving Schjelderup unscored.
+            an = _norm(a.get_text(strip=True)) if a else ""
+            nn = _norm(name)
+            pid = _player_id(a) if an and (an in nn or nn in an) else None
             return [{
                 "player_name": name,
-                "player_id": _player_id(a) if a else _attach_id(name, id_map),
+                "player_id": pid if pid is not None else _attach_id(name, id_map),
                 "score": _score(lead.group(1)), "is_mvp": False, "description": desc,
             }]
     # Score AFTER the name: prefer an autolink that carries the rating.
@@ -709,6 +720,17 @@ def _deepdive_entry(el, id_map: dict) -> list[dict]:
     }] if name else []
 
 
+def _flat_text(el) -> str:
+    """Text of `el` with no synthetic whitespace at tag boundaries -- unlike
+    el.get_text(' ', strip=True), which always splices in a space between
+    adjacent nodes even where the source has none. A Bola sometimes closes a
+    <strong> one letter short of the name it's bolding ('<strong>(8)
+    SCHJELDERU</strong>P — …'), and get_text(' ') turns that into 'SCHJELDERU
+    P', breaking the name in two -- and, downstream, causing the name-before-
+    score branch below to fall back to the wrong player link for the id."""
+    return re.sub(r"\s+", " ", el.get_text("", strip=False)).strip()
+
+
 def _leading_score_row(el) -> list[dict]:
     """Deep dive with the score BEFORE the name. Spellings seen:
         '7 Rui Silva — narrative'        (score then name, space-separated)
@@ -724,7 +746,7 @@ def _leading_score_row(el) -> list[dict]:
     a '-' separator) up to the narrative dash, and the id comes from the first
     player link. A player autolink is required so listicles ('5 Coisas — …')
     are out."""
-    full = el.get_text(" ", strip=True)
+    full = _flat_text(el)
     m = re.match(r"\s*(" + _RATING + r")(?!\d)", full)
     if not m:
         return []
