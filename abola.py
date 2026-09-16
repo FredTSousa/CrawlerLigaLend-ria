@@ -531,12 +531,14 @@ MVP_NAME_LABEL_RE = re.compile(
     r"\s*([^()<\n:]+?)\s*[—–-]\s*((?:o\s+)?melhor em campo|a figura)\b"
     r"(?:\s*\(\s*(?:nota\s*)?(" + _RATING + r")\s*\))?\s*$", re.I)
 # Bare label form (A Bola's newest crónica boxes): "Melhor em campo: Name" / "A
-# figura do <team>: Name" with NO score at all -- the player already has a score
-# from the ratings list, so this just supplies the name (+ optional team hint);
-# apply_mvp() leaves the score alone since the player's row already carries one.
+# figura do <team>: Name", usually with NO score (the player already has one
+# from the ratings list, so apply_mvp() leaves it alone) -- but some boxes tack
+# the score straight onto the name with a bare comma and no parens at all
+# ("O melhor em campo: Gianluca Prestianni, 7"), so an optional trailing
+# ",score" is split off rather than swallowed into the name.
 MVP_BARE_RE = re.compile(
     r"\s*((?:o\s+)?melhor em campo|a figura)(?:\s+d[oae]\s+([^:<\n]+?))?"
-    r"\s*:\s*([^()<\n]+?)\s*$", re.I)
+    r"\s*:\s*([^()<\n]+?)(?:\s*,\s*(?:nota\s*)?(" + _RATING + r"))?\s*$", re.I)
 # Leading "O melhor em campo" / "A figura" -- handled by the MVP box pass, never
 # as a rating row.
 MVP_LEAD_RE = re.compile(r"^\s*(o melhor em campo|a figura)\b", re.I)
@@ -968,6 +970,7 @@ def _mvp_boxes(soup) -> list[dict]:
         elif (m := MVP_BARE_RE.match(node)) and _player_name(m.group(3)):
             name = _player_name(m.group(3))
             team = (m.group(2) or "").strip() or None
+            score = _score(m.group(4)) if m.group(4) else None
             title = re.sub(r"\s+", " ", m.group(0)).strip()
             narrative = _mvp_narrative(node, title)
         elif re.match(r"\s*(?:(?:o\s+)?melhor em campo|a figura)\b", node, re.I):
