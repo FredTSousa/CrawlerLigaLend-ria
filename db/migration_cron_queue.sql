@@ -58,7 +58,8 @@ begin
     -- until they all die or their leases expire (reclaim_jobs handles that).
     select count(*) into v_running
       from public.jobs
-     where status = 'running' and lease_expires_at > now();
+     where status = 'running' and lease_expires_at > now()
+       and kind <> 'watch';  -- the live-watch daemon never drains the queue
     if v_running > 0 then
         return;
     end if;

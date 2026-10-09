@@ -329,6 +329,12 @@ def daemon_loop(sb, session, *, light_interval, full_interval, max_minutes,
                 if stale:
                     _abandon_stale_watch(sb, session, gid, url)
                     continue
+                # Already seen live this run: the feed just dropped the row for a
+                # poll (it does, intermittently). Keep the last live state —
+                # re-seeding here would write status=scheduled and wipe the
+                # score/minute, making the match flicker back to pre-kickoff.
+                if st["last_score"] is not None:
+                    continue
                 # Seed the lineup on first encounter and keep the match page
                 # fresh every full_interval so postponements/delays are caught
                 # early.
