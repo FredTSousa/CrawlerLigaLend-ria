@@ -1,0 +1,37 @@
+name: Queue watchdog
+
+# Independent backstop for the job queue (tools/queue_watchdog.py). Supabase
+# pg_cron normally wakes workers; this catches the case where that path breaks
+# (SQL bug, expired Vault token, pg_cron down) and jobs would otherwise sit
+# pending forever. It wakes a worker itself and goes red so you notice.
+#
+# Runs on a GitHub-hosted runner — it only talks to the Supabase REST API and
+# the GitHub API, so it doesn't need the residential IP or take a self-hosted
+# runner away from real work. GitHub's cron can lag under load; that's fine for
+# a backstop.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write   # to dispatch worker.yml
+
+concurrency:
+  group: queue-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --quiet requests
+      - name: Check queue
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python tools/queue_watchdog.py
