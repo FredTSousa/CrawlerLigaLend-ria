@@ -217,6 +217,33 @@ def _abandon_stale_watch(sb, session, gid, url):
     sb.set_watch(gid, False)
 
 
+# A match already seen live whose row has been missing from the feed this long
+# is checked against its match page (finished games vanish from the feed).
+FEED_GONE_MINUTES = 5
+
+
+def _check_gone_from_feed(sb, session, gid, url):
+    """Seen-live match missing from the feed: if the match page says it's over,
+    write the page's real final state and drop the watch flag."""
+    try:
+        game = crawler.get_match(url, session=session)
+    except Exception as e:  # noqa: BLE001 - retry on the next check
+        print(f"  ! gone-from-feed crawl failed for {gid}: {e}",
+              file=sys.stderr)
+        return
+    if game.get("status") != "final":
+        print(f"  {gid}: missing from feed but page says "
+              f"{game.get('status')} — still watching.", file=sys.stderr)
+        return
+    print(f"Full-time (page, feed row gone) for {gid} — finalizing.",
+          file=sys.stderr)
+    game["minute"] = None
+    sync.write_games(sb, [game], competition=None, round_no=None,
+                     scraped_at=sync._now())
+    sb.set_watch(gid, False)
+    phase_followup(sb, gid)
+
+
 def watch_loop(sb, session, match_url, *, light_interval, full_interval,
                max_minutes, run_id=None):
     gid = game_id_from(match_url)
@@ -333,7 +360,14 @@ def daemon_loop(sb, session, *, light_interval, full_interval, max_minutes,
                 # poll (it does, intermittently). Keep the last live state —
                 # re-seeding here would write status=scheduled and wipe the
                 # score/minute, making the match flicker back to pre-kickoff.
+                # But zerozero also drops finished games from the feed outright,
+                # so if we missed the brief state=1 window the row never comes
+                # back — after FEED_GONE_MINUTES ask the match page itself.
                 if st["last_score"] is not None:
+                    gone = st.setdefault("missing_since", time.time())
+                    if (time.time() - gone) / 60 >= FEED_GONE_MINUTES:
+                        st["missing_since"] = time.time()  # recheck later
+                        _check_gone_from_feed(sb, session, gid, url)
                     continue
                 # Seed the lineup on first encounter and keep the match page
                 # fresh every full_interval so postponements/delays are caught
@@ -352,6 +386,7 @@ def daemon_loop(sb, session, *, light_interval, full_interval, max_minutes,
             gc, gf = _int(_field(row, 3)), _int(_field(row, 4))
             if not result:
                 continue
+            st.pop("missing_since", None)
             score = (gc, gf)
             if _is_finished_row(row):  # state=1 -> finished (incl. ET/pens)
                 print(f"Full-time (state=1) for {gid} — finalizing.",
