@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   // Squad kinds drive roster_sync.py via squads.yml; the rest drive sync.py.
   const squadKinds = ["teams", "roster", "players", "comp_full", "comp_players", "comp_sold"];
   const allowed = [
-    "round", "match", "watch", "reporter", "backfill", "dates", ...squadKinds,
+    "round", "match", "watch", "reporter", "backfill", "dates", "official", ...squadKinds,
   ];
   const kind = allowed.includes(body.kind as string) ? (body.kind as string) : "round";
   const isSquad = squadKinds.includes(kind);
@@ -39,7 +39,8 @@ export async function POST(request: Request) {
   if (!target) {
     return NextResponse.json({ error: "Missing target" }, { status: 400 });
   }
-  const source = kind === "reporter" ? "abola" : "zerozero";
+  const source =
+    kind === "reporter" ? "abola" : kind === "official" ? "ligaportugal" : "zerozero";
 
   // 1) Record a queued run (RLS allows the approved user to insert).
   const { data: run, error: insErr } = await supabase
@@ -112,6 +113,12 @@ export async function POST(request: Request) {
     if (body.competition) params.competition = body.competition;
     dedupe = `dates:${body.competition || "default"}:${target}`;
     priority = 55;
+  } else if (kind === "official") {
+    // ligaportugal.py: official stats for a competition's finished matches
+    // (zerozero-vs-official report). Talks to ligaportugal.pt, not zerozero.
+    params.competition = target;
+    dedupe = `official:${target}`;
+    priority = 80;
   } else if (isSquad) {
     // Squad syncs (roster_sync.py): teams/comp_full/comp_players/roster/players.
     if (kind === "players") {

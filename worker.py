@@ -57,6 +57,7 @@ KIND_MODULE = {
     "teams": "roster_sync", "roster": "roster_sync", "players": "roster_sync",
     "comp_full": "roster_sync", "comp_players": "roster_sync",
     "comp_sold": "roster_sync",
+    "official": "ligaportugal",
 }
 
 # Human label shown in the tray (JOB_KIND), per kind.
@@ -68,6 +69,7 @@ KIND_LABEL = {
     "teams": "Squads", "roster": "Roster", "players": "Player",
     "comp_full": "Full squads", "comp_players": "Squad positions",
     "comp_departed": "Departed positions", "comp_sold": "Sold positions",
+    "official": "Official stats",
 }
 
 # Generic param -> env var. The job's params mirror the old workflow inputs.
@@ -103,7 +105,7 @@ def _target_fallback(kind: str, params: dict) -> None:
     elif kind in ("match", "watch"):
         params.setdefault("match", t)
     elif kind == "backfill" or kind in ("teams", "roster", "comp_full",
-                                        "comp_players", "comp_sold"):
+                                        "comp_players", "comp_sold", "official"):
         params.setdefault("competition", t)
     elif kind == "reporter":
         params.setdefault("match_id", t)

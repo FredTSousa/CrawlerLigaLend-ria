@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
-  kind: "round" | "match" | "watch" | "reporter" | "dates";
-  // round number, match URL (match/watch), or match id (reporter)
+  kind: "round" | "match" | "watch" | "reporter" | "dates" | "official";
+  // round number, match URL (match/watch), match id (reporter), or
+  // competition id (official)
   target: string | number;
   label?: string;
   competition?: string;
@@ -93,7 +94,9 @@ export default function CrawlButton({ kind, target, label, competition }: Props)
           ? "Fetch reporter score"
           : kind === "dates"
             ? "Refresh dates"
-            : "Crawl match");
+            : kind === "official"
+              ? "Fetch official stats"
+              : "Crawl match");
 
   function pillClass(s: string) {
     if (s === "watching" || s === "running" || s === "queued") return "running";
