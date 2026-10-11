@@ -46,6 +46,14 @@ COMPETITION_SLUG = "liga-portuguesa"
 # ends up covering doesn't get swept forever.
 REPORTER_SWEEP_MAX_AGE_DAYS = 7
 
+# zerozero keeps correcting a match's stats for hours after the whistle (missed
+# yellows, sub minutes, assists), but nothing re-crawls a match once it's final.
+# The hourly settle sweep re-crawls each finished match once, this long after
+# kickoff (~12 h after the end), within a bounded window.
+SETTLE_AFTER_HOURS = 14
+SETTLE_MAX_AGE_DAYS = 7
+SETTLE_MAX_PER_RUN = 30
+
 
 def _load_dotenv(path: str = ".env") -> None:
     """Load KEY=VALUE lines from a local .env (gitignored) for local runs.
@@ -1511,6 +1519,49 @@ def run_reporter_sweep(*, github_run_id: str | None, delay: float) -> dict:
             "skipped": skipped, "failed": failed}
 
 
+def run_settle_sweep(*, github_run_id: str | None, delay: float) -> dict:
+    """Hourly cron: re-crawl every finished match of an active competition once,
+    SETTLE_AFTER_HOURS after kickoff, so zerozero's post-match corrections land
+    in the DB (and reach subscribers through the usual match_players webhooks).
+    Stamps matches.settled_crawl_at so each match is only re-crawled once.
+    Scheduled-trigger crawls never chain reporter fetches."""
+    sb = Supabase()
+    comp_ids = [c["id"] for c in sb.active_competitions() if c.get("id")]
+    if not comp_ids:
+        return {"settled": 0, "failed": 0}
+    now = datetime.now(timezone.utc)
+    lo = (now - timedelta(days=SETTLE_MAX_AGE_DAYS)).isoformat()
+    hi = (now - timedelta(hours=SETTLE_AFTER_HOURS)).isoformat()
+    due = sb._rest("GET", "matches", params=[
+        ("select", "id,url,kickoff_at"),
+        ("status", "eq.final"),
+        ("settled_crawl_at", "is.null"),
+        ("url", "not.is.null"),
+        ("competition_id", f"in.({','.join(comp_ids)})"),
+        ("and", f"(kickoff_at.gte.{lo},kickoff_at.lte.{hi})"),
+        ("order", "kickoff_at"),
+        ("limit", str(SETTLE_MAX_PER_RUN)),
+    ]).json()
+    print(f"Settle sweep: {len(due)} finished match(es) to re-crawl.", file=sys.stderr)
+
+    settled = failed = 0
+    for i, m in enumerate(due, 1):
+        jobstatus.report(f"Settle re-crawl {m['id']}", current=i, total=len(due))
+        try:
+            run(jornada=None, match_url=m["url"], run_id=None, trigger="schedule",
+                github_run_id=github_run_id, delay=delay)
+            sb.update("matches", f"id=eq.{m['id']}", {"settled_crawl_at": _now()})
+            settled += 1
+        except Exception as err:  # noqa: BLE001 - retried next hour, within the window
+            failed += 1
+            print(f"  ! settle re-crawl {m['id']} failed: {err}", file=sys.stderr)
+
+    summary = f"Settle sweep done: {settled} re-crawled, {failed} failed."
+    print(summary, file=sys.stderr)
+    jobstatus.done("success", message=summary)
+    return {"settled": settled, "failed": failed}
+
+
 def _env(*names: str) -> str | None:
     """First non-empty environment variable among names."""
     for n in names:
@@ -1575,6 +1626,10 @@ def main() -> int:
                          "(current round + next 2) across every active "
                          "competition (never visits a match page). This is "
                          "what the daily schedule runs.")
+    ap.add_argument("--settle-sweep", action="store_true",
+                    help="Hourly cron: re-crawl each finished match once, "
+                         f"{SETTLE_AFTER_HOURS} h after kickoff, to pick up "
+                         "zerozero's post-match corrections.")
     ap.add_argument("--run-id", type=int,
                     help="Existing crawl_runs row to update (else a new one is created).")
     ap.add_argument("--trigger", default="manual", choices=["manual", "schedule"],
@@ -1626,6 +1681,10 @@ def main() -> int:
     # must be checked before the generic schedule->run_scheduled fallback.
     if args.dates_sweep or _flag(_env("IN_DATES_SWEEP")):
         run_dates_sweep(github_run_id=args.github_run_id, delay=args.delay)
+        return 0
+
+    if args.settle_sweep or _flag(_env("IN_SETTLE_SWEEP")):
+        run_settle_sweep(github_run_id=args.github_run_id, delay=args.delay)
         return 0
 
     if (args.scheduled or _flag(_env("IN_SCHEDULED"))

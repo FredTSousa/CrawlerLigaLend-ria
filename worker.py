@@ -57,7 +57,8 @@ KIND_MODULE = {
     "teams": "roster_sync", "roster": "roster_sync", "players": "roster_sync",
     "comp_full": "roster_sync", "comp_players": "roster_sync",
     "comp_sold": "roster_sync",
-    "official": "ligaportugal",
+    "official": "ligaportugal", "official_sweep": "ligaportugal",
+    "settle_sweep": "sync",
 }
 
 # Human label shown in the tray (JOB_KIND), per kind.
@@ -69,7 +70,8 @@ KIND_LABEL = {
     "teams": "Squads", "roster": "Roster", "players": "Player",
     "comp_full": "Full squads", "comp_players": "Squad positions",
     "comp_departed": "Departed positions", "comp_sold": "Sold positions",
-    "official": "Official stats",
+    "official": "Official stats", "official_sweep": "Official sweep",
+    "settle_sweep": "Settle re-crawl",
 }
 
 # Generic param -> env var. The job's params mirror the old workflow inputs.
@@ -89,7 +91,7 @@ PARAM_ENV = {
 _JOB_ENV = set(PARAM_ENV.values()) | {
     "IN_BACKFILL", "IN_FORCE", "IN_SCHEDULED", "IN_REPORTER_SWEEP",
     "IN_FULL", "IN_PLAYERS_ONLY", "IN_DEPARTED_ONLY", "IN_SOLD_ONLY", "IN_RUN_ID",
-    "IN_DATES_ONLY", "IN_DATES_SWEEP",
+    "IN_DATES_ONLY", "IN_DATES_SWEEP", "IN_SETTLE_SWEEP", "IN_OFFICIAL_SWEEP",
     "WATCH_DAEMON", "JOB_KIND",
 }
 
@@ -135,6 +137,10 @@ def _prepare_env(kind: str, params: dict) -> None:
         os.environ["IN_DATES_ONLY"] = "true"
     elif kind == "dates_sweep":
         os.environ["IN_DATES_SWEEP"] = "true"
+    elif kind == "settle_sweep":
+        os.environ["IN_SETTLE_SWEEP"] = "true"
+    elif kind == "official_sweep":
+        os.environ["IN_OFFICIAL_SWEEP"] = "true"
     elif kind == "comp_full":
         os.environ["IN_FULL"] = "true"
     elif kind == "comp_players":

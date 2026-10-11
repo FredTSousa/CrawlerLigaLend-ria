@@ -159,11 +159,31 @@ export default async function OfficialDiffPage({
     .at(-1);
   const provisional = synced.filter((m) => !m.official_final).length;
 
+  // Official values that changed after the first fetch of a match
+  // (db/migration_official_history.sql). Empty until that migration has run.
+  const { data: historyRows } = await supabase
+    .from("official_stat_history")
+    .select(
+      "match_id, player_id, lp_name, stat, old_value, new_value, official_final, observed_at, " +
+        "matches!inner(competition_id, round, kickoff_at)",
+    )
+    .eq("matches.competition_id", comp.id)
+    .gte("matches.round", fromRound)
+    .order("observed_at", { ascending: false })
+    .limit(500);
+  const history = (historyRows ?? []) as any[];
+
   // Names for the rows on screen.
   const matchIds = [
-    ...new Set([...diffs.map((d) => d.match_id), ...((unmapped ?? []) as any[]).map((u) => u.match_id)]),
+    ...new Set([
+      ...diffs.map((d) => d.match_id),
+      ...((unmapped ?? []) as any[]).map((u) => u.match_id),
+      ...history.map((h) => h.match_id),
+    ]),
   ];
-  const playerIds = [...new Set(diffs.map((d) => d.player_id))];
+  const playerIds = [
+    ...new Set([...diffs.map((d) => d.player_id), ...history.map((h) => h.player_id).filter(Boolean)]),
+  ];
   const [{ data: matches }, { data: players }] = await Promise.all([
     matchIds.length
       ? supabase
@@ -323,6 +343,57 @@ export default async function OfficialDiffPage({
           Goals include penalties on both sides. Assists only show once the official
           per-match split for that player has been fetched. ✎ = zerozero value was set by hand.
         </p>
+      </div>
+
+      <div className="panel">
+        <h3 style={{ margin: "0 0 8px" }}>Official values that changed after the first fetch</h3>
+        <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+          Each match is fetched soon after it ends, re-checked hourly until the site marks it
+          official, and once more a day after kickoff. Anything listed here was not final at
+          the first fetch.
+          {synced.length
+            ? ` ${new Set(history.map((h) => h.match_id)).size} of ${synced.length} compared ` +
+              `match${synced.length === 1 ? "" : "es"} changed.`
+            : ""}
+        </p>
+        {history.length ? (
+          <table>
+            <thead>
+              <tr>
+                <th>Match</th>
+                <th>Player</th>
+                <th>Stat</th>
+                <th>Before → after</th>
+                <th>Seen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((h, i) => {
+                const kick = h.matches?.kickoff_at ? new Date(h.matches.kickoff_at).getTime() : null;
+                const hours =
+                  kick != null ? (new Date(h.observed_at).getTime() - kick) / 3_600_000 : null;
+                return (
+                  <tr key={`${h.match_id}-${i}`}>
+                    <td>
+                      R{h.matches?.round} · {label(h.match_id)}
+                    </td>
+                    <td>{(h.player_id && pName.get(h.player_id)) || h.lp_name}</td>
+                    <td>{h.stat}</td>
+                    <td>
+                      {h.old_value ?? "–"} → <b>{h.new_value ?? "–"}</b>
+                    </td>
+                    <td className="muted">
+                      {hours != null ? `${hours.toFixed(1)} h after kickoff` : h.observed_at}
+                      {h.official_final === false ? " · not yet official" : ""}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <p className="muted">No changes recorded yet.</p>
+        )}
       </div>
 
       {(unmapped ?? []).length > 0 && (
