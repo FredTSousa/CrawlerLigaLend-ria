@@ -363,7 +363,9 @@ def daemon_loop(sb, session, *, light_interval, full_interval, max_minutes,
                 # But zerozero also drops finished games from the feed outright,
                 # so if we missed the brief state=1 window the row never comes
                 # back — after FEED_GONE_MINUTES ask the match page itself.
-                if st["last_score"] is not None:
+                # The DB status counts too: a daemon restarted after the whistle
+                # never saw the match live itself.
+                if st["last_score"] is not None or t.get("status") == "live":
                     gone = st.setdefault("missing_since", time.time())
                     if (time.time() - gone) / 60 >= FEED_GONE_MINUTES:
                         st["missing_since"] = time.time()  # recheck later
