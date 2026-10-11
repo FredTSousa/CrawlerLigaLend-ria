@@ -53,6 +53,9 @@ REPORTER_SWEEP_MAX_AGE_DAYS = 7
 SETTLE_AFTER_HOURS = 14
 SETTLE_MAX_AGE_DAYS = 7
 SETTLE_MAX_PER_RUN = 30
+# What the settle re-crawl records in zerozero_stat_history when it changes.
+SETTLE_HISTORY_STATS = ("goals", "penalties_scored", "own_goals", "assists",
+                        "yellow_cards", "red_card", "entered_min", "left_min")
 
 
 def _load_dotenv(path: str = ".env") -> None:
@@ -1519,6 +1522,40 @@ def run_reporter_sweep(*, github_run_id: str | None, delay: float) -> dict:
             "skipped": skipped, "failed": failed}
 
 
+def _zerozero_snapshot(sb: Supabase, match_id: str) -> dict[str, dict]:
+    """zerozero's own per-player values for a match (a hand-overridden stat is
+    read from stat_crawled, so a ✎ fix never counts as a zerozero change)."""
+    rows = sb._rest("GET", (
+        f"match_players?match_id=eq.{match_id}&select=player_id,stat_overrides,"
+        f"stat_crawled,{','.join(SETTLE_HISTORY_STATS)}")).json()
+    snap = {}
+    for r in rows:
+        overridden, crawled = r.get("stat_overrides") or {}, r.get("stat_crawled") or {}
+        snap[r["player_id"]] = {
+            k: int(v) if isinstance(v, bool) else v
+            for k in SETTLE_HISTORY_STATS
+            for v in [crawled.get(k, r[k]) if k in overridden else r[k]]}
+    return snap
+
+
+def _record_zerozero_changes(sb: Supabase, match_id: str,
+                             before: dict[str, dict], after: dict[str, dict]) -> int:
+    """Store every value the re-crawl changed in zerozero_stat_history."""
+    rows = []
+    for pid in before.keys() | after.keys():
+        b, a = before.get(pid) or {}, after.get(pid) or {}
+        for stat in SETTLE_HISTORY_STATS:
+            old, new = b.get(stat), a.get(stat)
+            # Equal, or a player added to / dropped from the lineup with
+            # nothing in this stat: not a change worth recording.
+            if old == new or (old in (None, 0) and new in (None, 0)):
+                continue
+            rows.append({"match_id": match_id, "player_id": pid, "stat": stat,
+                         "old_value": old, "new_value": new, "observed_at": _now()})
+    sb.insert("zerozero_stat_history", rows)
+    return len(rows)
+
+
 def run_settle_sweep(*, github_run_id: str | None, delay: float) -> dict:
     """Hourly cron: re-crawl every finished match of an active competition once,
     SETTLE_AFTER_HOURS after kickoff, so zerozero's post-match corrections land
@@ -1548,10 +1585,20 @@ def run_settle_sweep(*, github_run_id: str | None, delay: float) -> dict:
     for i, m in enumerate(due, 1):
         jobstatus.report(f"Settle re-crawl {m['id']}", current=i, total=len(due))
         try:
+            before = _zerozero_snapshot(sb, m["id"])
             run(jornada=None, match_url=m["url"], run_id=None, trigger="schedule",
                 github_run_id=github_run_id, delay=delay)
             sb.update("matches", f"id=eq.{m['id']}", {"settled_crawl_at": _now()})
             settled += 1
+            try:  # history is a side record: never fail the re-crawl over it
+                n = _record_zerozero_changes(sb, m["id"], before,
+                                             _zerozero_snapshot(sb, m["id"]))
+                if n:
+                    print(f"  {m['id']}: {n} zerozero value(s) changed since the "
+                          "first crawl", file=sys.stderr)
+            except Exception as err:  # noqa: BLE001
+                print(f"  ! {m['id']}: could not record zerozero changes: {err}",
+                      file=sys.stderr)
         except Exception as err:  # noqa: BLE001 - retried next hour, within the window
             failed += 1
             print(f"  ! settle re-crawl {m['id']} failed: {err}", file=sys.stderr)

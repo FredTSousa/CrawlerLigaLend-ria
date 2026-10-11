@@ -156,19 +156,44 @@ export default async function OfficialDiffPage({
     .at(-1);
   const provisional = synced.filter((m) => !m.official_final).length;
 
-  // Official values that changed after the first fetch of a match
-  // (db/migration_official_history.sql). Empty until that migration has run.
-  const { data: historyRows } = await supabase
-    .from("official_stat_history")
-    .select(
-      "match_id, player_id, lp_name, stat, old_value, new_value, official_final, observed_at, " +
-        "matches!inner(competition_id, round, kickoff_at)",
-    )
-    .eq("matches.competition_id", comp.id)
-    .gte("matches.round", fromRound)
-    .order("observed_at", { ascending: false })
-    .limit(500);
-  const history = (historyRows ?? []) as any[];
+  // Values that changed after a match was first read, from both sources:
+  // official re-fetches (db/migration_official_history.sql) and zerozero's ~14 h
+  // settle re-crawl (db/migration_zerozero_history.sql). Each query is empty
+  // until its migration has run.
+  const historyMatch = "matches!inner(competition_id, round, kickoff_at)";
+  const [{ data: officialHistory }, { data: zerozeroHistory }, { data: settledMatches }] =
+    await Promise.all([
+      supabase
+        .from("official_stat_history")
+        .select(
+          "match_id, player_id, lp_name, stat, old_value, new_value, official_final, observed_at, " +
+            historyMatch,
+        )
+        .eq("matches.competition_id", comp.id)
+        .gte("matches.round", fromRound)
+        .order("observed_at", { ascending: false })
+        .limit(500),
+      supabase
+        .from("zerozero_stat_history")
+        .select("match_id, player_id, stat, old_value, new_value, observed_at, " + historyMatch)
+        .eq("matches.competition_id", comp.id)
+        .gte("matches.round", fromRound)
+        .order("observed_at", { ascending: false })
+        .limit(500),
+      supabase
+        .from("matches")
+        .select("id")
+        .eq("competition_id", comp.id)
+        .gte("round", fromRound)
+        .not("settled_crawl_at", "is", null),
+    ]);
+  const history = [
+    ...((officialHistory ?? []) as any[]).map((h) => ({ ...h, source: "official" })),
+    ...((zerozeroHistory ?? []) as any[]).map((h) => ({ ...h, source: "zerozero" })),
+  ].sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+  const changedMatches = (source: string) =>
+    new Set(history.filter((h) => h.source === source).map((h) => h.match_id)).size;
+  const settledCount = (settledMatches ?? []).length;
 
   // Names for the rows on screen.
   const matchIds = [
@@ -343,20 +368,21 @@ export default async function OfficialDiffPage({
       </div>
 
       <div className="panel">
-        <h3 style={{ margin: "0 0 8px" }}>Official values that changed after the first fetch</h3>
+        <h3 style={{ margin: "0 0 8px" }}>Values that changed after the first read</h3>
         <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
-          Each match is fetched soon after it ends, re-checked hourly until the site marks it
-          official, and once more a day after kickoff. Anything listed here was not final at
-          the first fetch.
-          {synced.length
-            ? ` ${new Set(history.map((h) => h.match_id)).size} of ${synced.length} compared ` +
-              `match${synced.length === 1 ? "" : "es"} changed.`
-            : ""}
+          Official: fetched soon after the end, re-checked hourly until the site marks it
+          official, and once more a day after kickoff. zerozero: re-crawled once ~14 h after
+          kickoff. Anything listed here wasn't final the first time we read it.
+          {` Official: ${changedMatches("official")} of ${synced.length} match` +
+            `${synced.length === 1 ? "" : "es"} changed. zerozero: ` +
+            `${changedMatches("zerozero")} of ${settledCount} re-crawled match` +
+            `${settledCount === 1 ? "" : "es"} changed.`}
         </p>
         {history.length ? (
           <table>
             <thead>
               <tr>
+                <th>Source</th>
                 <th>Match</th>
                 <th>Player</th>
                 <th>Stat</th>
@@ -370,11 +396,12 @@ export default async function OfficialDiffPage({
                 const hours =
                   kick != null ? (new Date(h.observed_at).getTime() - kick) / 3_600_000 : null;
                 return (
-                  <tr key={`${h.match_id}-${i}`}>
+                  <tr key={`${h.source}-${h.match_id}-${i}`}>
+                    <td>{h.source}</td>
                     <td>
                       R{h.matches?.round} · {label(h.match_id)}
                     </td>
-                    <td>{(h.player_id && pName.get(h.player_id)) || h.lp_name}</td>
+                    <td>{(h.player_id && pName.get(h.player_id)) || h.lp_name || h.player_id}</td>
                     <td>{h.stat}</td>
                     <td>
                       {h.old_value ?? "–"} → <b>{h.new_value ?? "–"}</b>
