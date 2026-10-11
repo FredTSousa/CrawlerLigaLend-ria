@@ -82,7 +82,7 @@ export default async function OfficialDiffPage({
 
   const { data: comps, error: compErr } = await supabase
     .from("competitions")
-    .select("id, name, lp_competition")
+    .select("*")
     .not("lp_competition", "is", null)
     .order("updated_at", { ascending: false });
 
@@ -115,6 +115,8 @@ export default async function OfficialDiffPage({
       </>
     );
   }
+  // The league only counts from this round on (competitions.official_from_round).
+  const fromRound: number = comp.official_from_round ?? 1;
   const statFilter = STATS.find((s) => s.key === searchParams.stat)?.key ?? null;
 
   const [{ data: diffRows }, { data: syncedMatches }, { data: unmapped }] =
@@ -124,16 +126,19 @@ export default async function OfficialDiffPage({
         .select("*")
         .eq("competition_id", comp.id)
         .eq("differs", true)
+        .gte("round", fromRound)
         .limit(5000),
       supabase
         .from("matches")
         .select("id, official_synced_at, official_final")
         .eq("competition_id", comp.id)
+        .gte("round", fromRound)
         .not("official_synced_at", "is", null),
       supabase
         .from("official_match_players")
         .select("match_id, lp_name, shirt_number, matches!inner(competition_id, round)")
         .eq("matches.competition_id", comp.id)
+        .gte("matches.round", fromRound)
         .is("player_id", null),
     ]);
 
@@ -154,8 +159,6 @@ export default async function OfficialDiffPage({
     .at(-1);
   const provisional = synced.filter((m) => !m.official_final).length;
 
-  const assists = await assistTotals(supabase, comp.id);
-
   // Names for the rows on screen.
   const matchIds = [
     ...new Set([...diffs.map((d) => d.match_id), ...((unmapped ?? []) as any[]).map((u) => u.match_id)]),
@@ -166,7 +169,8 @@ export default async function OfficialDiffPage({
       ? supabase
           .from("matches")
           .select(
-            "id, round, home_team:teams!matches_home_team_id_fkey(name), " +
+            "id, round, played_on, url, lp_round, lp_fixture, " +
+              "home_team:teams!matches_home_team_id_fkey(name), " +
               "away_team:teams!matches_away_team_id_fkey(name)",
           )
           .in("id", matchIds)
@@ -181,6 +185,14 @@ export default async function OfficialDiffPage({
     const m = mById.get(id);
     return m ? `${m.home_team?.name} – ${m.away_team?.name}` : id;
   };
+  // Where to check each match by hand: zerozero's page and the official one.
+  const officialUrl = (m: any) =>
+    m?.lp_round != null
+      ? `https://www.ligaportugal.pt/match/${comp.lp_season}/${comp.lp_competition}/` +
+        `${m.lp_round}/${m.lp_fixture}?tab=match_formations`
+      : null;
+  const byMatch = new Map<string, Diff[]>();
+  for (const d of diffs) byMatch.set(d.match_id, [...(byMatch.get(d.match_id) ?? []), d]);
   const statLabel = (k: StatKey) => STATS.find((s) => s.key === k)!.label;
   const href = (stat: string | null) =>
     `/official-diff?competition=${comp.id}${stat ? `&stat=${stat}` : ""}`;
@@ -203,7 +215,9 @@ export default async function OfficialDiffPage({
                 </Link>
               ))}
             <span className="muted" style={{ fontSize: 13 }}>
-              {comp.name}: {synced.length} match{synced.length === 1 ? "" : "es"} compared
+              {comp.name}
+              {fromRound > 1 ? ` from round ${fromRound}` : ""}: {synced.length} match
+              {synced.length === 1 ? "" : "es"} compared
               {provisional ? ` (${provisional} not yet marked official)` : ""}
               {lastSync ? ` · last fetched ${new Date(lastSync).toLocaleString("pt-PT")}` : ""}
             </span>
@@ -213,7 +227,9 @@ export default async function OfficialDiffPage({
       </div>
 
       <div className="panel">
-        <h3 style={{ margin: "0 0 8px" }}>Per-match differences</h3>
+        <h3 style={{ margin: "0 0 8px" }}>
+          Matches that differ ({byMatch.size})
+        </h3>
         <div className="row" style={{ marginBottom: 10 }}>
           <Link href={href(null)} className={`round-chip${statFilter ? "" : " active"}`}>
             All ({all.length})
@@ -228,49 +244,76 @@ export default async function OfficialDiffPage({
             </Link>
           ))}
         </div>
-        {diffs.length ? (
-          <table>
-            <thead>
-              <tr>
-                <th>Round</th>
-                <th>Match</th>
-                <th>Player</th>
-                <th>Stat</th>
-                <th>zerozero</th>
-                <th>Official</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {diffs.map((d, i) => (
-                <tr key={`${d.match_id}-${d.player_id}-${d.stat}-${i}`}>
-                  <td>{d.round ?? "–"}</td>
-                  <td>{label(d.match_id)}</td>
-                  <td>
-                    <Link href={`/players/${d.player_id}`}>{pName.get(d.player_id) ?? d.player_id}</Link>
-                    {d.zzMissing && (
-                      <span className="muted" style={{ fontSize: 12 }}> · not in zerozero lineup</span>
+        {byMatch.size ? (
+          [...byMatch].map(([matchId, rows]) => {
+            const m = mById.get(matchId);
+            const off = officialUrl(m);
+            return (
+              <div key={matchId} style={{ marginBottom: 18 }}>
+                <div className="row" style={{ marginBottom: 4 }}>
+                  <b>
+                    R{m?.round ?? "?"} · {label(matchId)}
+                  </b>
+                  {m?.played_on && <span className="muted">{m.played_on}</span>}
+                  <span className="muted" style={{ fontSize: 13 }}>
+                    {m?.url && (
+                      <a href={m.url} target="_blank" rel="noreferrer">
+                        zerozero ↗
+                      </a>
                     )}
-                  </td>
-                  <td>{statLabel(d.stat)}</td>
-                  <td>
-                    {d.zz}
-                    {d.overridden && (
-                      <span className="tag-yellow" style={{ fontSize: 12 }} title="Set by hand with ✎">
-                        {" "}✎
-                      </span>
+                    {off && (
+                      <>
+                        {" · "}
+                        <a href={off} target="_blank" rel="noreferrer">
+                          official ↗
+                        </a>
+                      </>
                     )}
-                  </td>
-                  <td>
-                    <b>{d.off}</b>
-                  </td>
-                  <td>
-                    <Link href={`/match/${d.match_id}`}>fix →</Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    {" · "}
+                    <Link href={`/match/${matchId}`}>fix on match page →</Link>
+                  </span>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Player</th>
+                      <th>Stat</th>
+                      <th>zerozero</th>
+                      <th>Official</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((d, i) => (
+                      <tr key={`${d.player_id}-${d.stat}-${i}`}>
+                        <td>
+                          <Link href={`/players/${d.player_id}`}>
+                            {pName.get(d.player_id) ?? d.player_id}
+                          </Link>
+                          {d.zzMissing && (
+                            <span className="muted" style={{ fontSize: 12 }}>
+                              {" "}· not in zerozero lineup
+                            </span>
+                          )}
+                        </td>
+                        <td>{statLabel(d.stat)}</td>
+                        <td>
+                          {d.zz}
+                          {d.overridden && (
+                            <span className="tag-yellow" style={{ fontSize: 12 }} title="Set by hand with ✎">
+                              {" "}✎
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <b>{d.off}</b>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })
         ) : (
           <p className="muted">
             {synced.length ? "No differences. 🎉" : "Nothing fetched yet: press “Fetch official stats”."}
@@ -279,50 +322,6 @@ export default async function OfficialDiffPage({
         <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>
           Goals include penalties on both sides. Assists only show once the official
           per-match split for that player has been fetched. ✎ = zerozero value was set by hand.
-        </p>
-      </div>
-
-      <div className="panel">
-        <h3 style={{ margin: "0 0 8px" }}>Season assist totals that differ</h3>
-        {assists.length ? (
-          <table>
-            <thead>
-              <tr>
-                <th>Player</th>
-                <th>Team</th>
-                <th className="num">zerozero</th>
-                <th className="num">Official</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {assists.map((a) => (
-                <tr key={a.key}>
-                  <td>
-                    {a.player_id ? <Link href={`/players/${a.player_id}`}>{a.name}</Link> : a.name}
-                  </td>
-                  <td className="muted">{a.team}</td>
-                  <td className="num">{a.zz}</td>
-                  <td className="num">
-                    <b>{a.off}</b>
-                  </td>
-                  <td className="muted" style={{ fontSize: 12 }}>
-                    {!a.player_id
-                      ? "not mapped to a zerozero player yet"
-                      : a.pending
-                        ? "per-match split still loading"
-                        : ""}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="muted">No differences. 🎉</p>
-        )}
-        <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>
-          The official total can be a match ahead: the leaderboard updates before the
-          match is in zerozero or marked official.
         </p>
       </div>
 
@@ -375,76 +374,4 @@ function Header() {
       </p>
     </div>
   );
-}
-
-// Season assist totals: official leaderboard vs the sum of zerozero's per-match
-// assists, per player. Only the rows that differ.
-async function assistTotals(supabase: ReturnType<typeof createClient>, compId: string) {
-  const [{ data: totals }, { data: zzRows }] = await Promise.all([
-    supabase
-      .from("official_assist_totals")
-      .select("lp_player_id, lp_name, lp_team_name, total, detail_total")
-      .eq("competition_id", compId),
-    supabase
-      .from("match_players")
-      .select("player_id, assists, players(name, lp_player_id), teams(name), matches!inner(competition_id)")
-      .eq("matches.competition_id", compId)
-      .gt("assists", 0)
-      .limit(5000),
-  ]);
-
-  const zz = new Map<string, { name: string; team: string; lp: string | null; n: number }>();
-  for (const r of (zzRows ?? []) as any[]) {
-    const e = zz.get(r.player_id) ?? {
-      name: r.players?.name ?? r.player_id,
-      team: r.teams?.name ?? "",
-      lp: r.players?.lp_player_id ?? null,
-      n: 0,
-    };
-    e.n += r.assists;
-    zz.set(r.player_id, e);
-  }
-
-  const off = ((totals ?? []) as any[]).filter((t) => t.total > 0);
-  const lpIds = off.map((t) => t.lp_player_id);
-  const { data: mapped } = lpIds.length
-    ? await supabase.from("players").select("id, name, lp_player_id").in("lp_player_id", lpIds)
-    : { data: [] as any[] };
-  const byLp = new Map(((mapped ?? []) as any[]).map((p) => [p.lp_player_id, p]));
-
-  type Row = {
-    key: string;
-    player_id: string | null;
-    name: string;
-    team: string;
-    zz: number;
-    off: number;
-    pending: boolean;
-  };
-  const rows: Row[] = [];
-  const seen = new Set<string>();
-  for (const t of off) {
-    const p = byLp.get(t.lp_player_id);
-    const z = p ? zz.get(p.id) : undefined;
-    if (p) seen.add(p.id);
-    const zzN = z?.n ?? 0;
-    if (zzN !== t.total) {
-      rows.push({
-        key: `lp-${t.lp_player_id}`,
-        player_id: p?.id ?? null,
-        name: p?.name ?? t.lp_name,
-        team: z?.team || t.lp_team_name || "",
-        zz: zzN,
-        off: t.total,
-        pending: t.detail_total !== t.total,
-      });
-    }
-  }
-  // zerozero assisters the official leaderboard doesn't have. Only certain when
-  // we know the player's official id (otherwise they may just be unmapped).
-  for (const [pid, z] of zz) {
-    if (seen.has(pid) || !z.lp) continue;
-    rows.push({ key: `zz-${pid}`, player_id: pid, name: z.name, team: z.team, zz: z.n, off: 0, pending: false });
-  }
-  return rows.sort((a, b) => Math.abs(b.off - b.zz) - Math.abs(a.off - a.zz) || a.name.localeCompare(b.name));
 }

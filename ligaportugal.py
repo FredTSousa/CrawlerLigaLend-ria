@@ -92,12 +92,16 @@ class LPClient:
                     requests.exceptions.Timeout) as err:
                 err_text = str(err)
             else:
-                body = resp.json() if resp.ok else None
-                # Upstream errors (incl. the 429) arrive as a 200 with an error
-                # object, not as an HTTP error.
+                try:
+                    body = resp.json()
+                except ValueError:
+                    body = None
+                # Upstream errors (incl. the 429) arrive as an error object, with
+                # either a 200 or a 400 status.
                 if isinstance(body, dict) and "code" in body and "message" in body:
                     err_text = f"{body['code']}: {body['message'][:200]}"
-                    if "429" not in err_text:
+                    # Rate limit, or the upstream's cooldown after one.
+                    if "429" not in err_text and "circuit breaker" not in err_text:
                         raise LPError(f"{path} -> {err_text}")
                 elif resp.ok:
                     return body
@@ -319,6 +323,8 @@ def sync_competition(sb: sync.Supabase, comp: dict, *, round_no: int | None,
                      force: bool, assists: bool, max_details: int) -> int:
     lp = LPClient(comp["lp_competition"], comp["lp_season"])
     comp_id = comp["id"]
+    # The league only counts from this round on; earlier rounds are skipped.
+    from_round = comp.get("official_from_round") or 1
 
     matches = sb._rest("GET", (
         f"matches?competition_id=eq.{comp_id}&select=id,round,status,home_team_id,"
@@ -332,9 +338,11 @@ def sync_competition(sb: sync.Supabase, comp: dict, *, round_no: int | None,
     def todo(m: dict) -> bool:
         return m["status"] == "final" and (force or m.get("official_final") is not True)
 
+    # Newest first: recent zerozero crawls carry shirt numbers (older ones may
+    # not), so the players learned there map the older rounds by id.
     rounds = sorted({m["round"] for m in matches
-                     if m["round"] is not None and todo(m)
-                     and (round_no is None or m["round"] == round_no)})
+                     if m["round"] is not None and m["round"] >= from_round and todo(m)
+                     and (round_no is None or m["round"] == round_no)}, reverse=True)
     synced = 0
     for i, r in enumerate(rounds, 1):
         jobstatus.report(f"Official stats: round {r}", current=i, total=len(rounds))
@@ -391,13 +399,36 @@ def sync_competition(sb: sync.Supabase, comp: dict, *, round_no: int | None,
                   + (f", {unmapped} unmapped" if unmapped else ""), file=sys.stderr)
             synced += 1
 
+    remap_unmapped(sb, comp_id, lp_cache)
     if assists:
-        sync_assists(sb, lp, comp_id, matches, max_details=max_details)
+        sync_assists(sb, lp, comp_id,
+                     [m for m in matches if (m["round"] or 0) >= from_round],
+                     from_round=from_round, max_details=max_details)
     return synced
 
 
+def remap_unmapped(sb: sync.Supabase, comp_id: str, lp_cache: dict[str, str]) -> None:
+    """Attach official rows saved without a zerozero player once that player's
+    id has been learned from another match (no refetch needed)."""
+    rows = _get_all(sb, (
+        "official_match_players?player_id=is.null&select=match_id,lp_player_id,"
+        f"matches!inner(competition_id)&matches.competition_id=eq.{comp_id}&order=match_id"))
+    fixed = 0
+    for r in rows:
+        pid = lp_cache.get(r["lp_player_id"])
+        if pid:
+            sb.update("official_match_players",
+                      f"match_id=eq.{r['match_id']}&lp_player_id=eq.{r['lp_player_id']}",
+                      {"player_id": pid})
+            fixed += 1
+    if rows:
+        print(f"  remapped {fixed} of {len(rows)} unmapped official row(s)", file=sys.stderr)
+
+
 def sync_assists(sb: sync.Supabase, lp: LPClient, comp_id: str, matches: list[dict],
-                 *, max_details: int) -> None:
+                 *, from_round: int, max_details: int) -> None:
+    """Official per-match assists for the compared matches (`matches`, already
+    limited to from_round on)."""
     jobstatus.report("Official stats: assist leaderboard")
     leaders = lp.assist_leaders()
     by_fixture = {(m["lp_round"], m["lp_fixture"]): m["id"]
@@ -410,28 +441,36 @@ def sync_assists(sb: sync.Supabase, lp: LPClient, comp_id: str, matches: list[di
     stale = [x for x in leaders
              if held.get(x["playerId"], {}).get("detail_total") != x["total"]]
     stale.sort(key=lambda x: x["playerId"] in held)
-    detail: dict[str, int] = {}
+    detail: dict[str, int | None] = {}
     # A player's history spans every competition (cups too); keep this one's.
     competition_name = (lp.fixtures(1) or [{}])[0].get("competitionName") if stale else None
     for i, x in enumerate(stale[:max_details], 1):
         jobstatus.report(f"Official stats: assists of {x['playerName']}",
                          current=i, total=min(len(stale), max_details))
         hist = lp.player_matches(x["playerId"])
-        rows, total = [], 0
+        rows, unplaced, season = [], 0, 0
         for h in hist:
             if h.get("competitionName") != competition_name:
                 continue
             n = sum(int(s.get("value") or 0) for s in h.get("playerFixtureStatistics") or []
                     if s.get("statisticTypeId") == 3)
-            total += n
+            season += n
+            if h["round"] < from_round:
+                continue
             mid = by_fixture.get((h["round"], h["fixtureNumber"]))
             if n and mid:
                 rows.append({"match_id": mid, "lp_player_id": x["playerId"],
                              "assists": n, "updated_at": _now()})
+            elif n:
+                unplaced += n
         sb.delete("official_match_assists",
                   f"lp_player_id=eq.{x['playerId']}&match_id=in.({comp_match_ids})")
         sb.insert("official_match_assists", rows)
-        detail[x["playerId"]] = total
+        # detail_total = the leaderboard total this split is complete for. It
+        # stays unset (refetched next run, hidden on the page meanwhile) when an
+        # assist sits on a match not compared yet, or when the history lags the
+        # leaderboard (the latest match shows up there first).
+        detail[x["playerId"]] = x["total"] if not unplaced and season == x["total"] else None
 
     if len(stale) > max_details:
         print(f"  {len(stale) - max_details} assister(s) left for the next run",
@@ -440,8 +479,8 @@ def sync_assists(sb: sync.Supabase, lp: LPClient, comp_id: str, matches: list[di
     totals = [{"competition_id": comp_id, "lp_player_id": x["playerId"],
                "lp_name": x["playerName"], "lp_team_name": x["teamName"],
                "total": x["total"],
-               "detail_total": detail.get(x["playerId"],
-                                          held.get(x["playerId"], {}).get("detail_total")),
+               "detail_total": (detail[x["playerId"]] if x["playerId"] in detail
+                                else held.get(x["playerId"], {}).get("detail_total")),
                "fetched_at": _now()} for x in leaders]
     # Dropped off the leaderboard (an assist taken away): now zero everywhere.
     current = {x["playerId"] for x in leaders}
@@ -467,6 +506,8 @@ def main() -> int:
     ap.add_argument("--competition", help="zerozero competition id (default: every "
                                           "competition with lp_competition set)")
     ap.add_argument("--round", type=int, help="only this round")
+    ap.add_argument("--from-round", type=int,
+                    help="override competitions.official_from_round")
     ap.add_argument("--force", action="store_true",
                     help="re-sync matches already marked officially final")
     ap.add_argument("--no-assists", action="store_true")
@@ -486,7 +527,7 @@ def main() -> int:
         run_id = int(sync._env("IN_RUN_ID"))
 
     sb = sync.Supabase()
-    q = "competitions?lp_competition=not.is.null&select=id,name,lp_competition,lp_season"
+    q = "competitions?lp_competition=not.is.null&select=*"
     if competition:
         q += f"&id=eq.{competition}"
     comps = sb._rest("GET", q).json()
@@ -500,6 +541,8 @@ def main() -> int:
                           "set competitions.lp_competition / lp_season")
         synced = 0
         for comp in comps:
+            if args.from_round:
+                comp["official_from_round"] = args.from_round
             print(f"{comp['name']}: official stats", file=sys.stderr)
             synced += sync_competition(sb, comp, round_no=round_no, force=force,
                                        assists=not args.no_assists,
