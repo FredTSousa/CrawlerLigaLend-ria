@@ -14,7 +14,6 @@ type SearchParams = { competition?: string; stat?: string };
 
 const STATS = [
   { key: "goals", label: "Goals" },
-  { key: "assists", label: "Assists" },
   { key: "yellow_cards", label: "Yellows" },
   { key: "red_card", label: "Red card" },
   { key: "own_goals", label: "Own goals" },
@@ -56,8 +55,6 @@ function explode(r: any): Diff[] {
     out.push({ ...base, stat, zz, off, overridden: !!ovKey && ovKey in ov });
 
   if (r.zz_goals !== r.off_goals) add("goals", String(r.zz_goals), String(r.off_goals), "goals");
-  if (r.off_assists != null && r.zz_assists !== r.off_assists)
-    add("assists", String(r.zz_assists), String(r.off_assists), "assists");
   if (r.zz_yellow_cards !== r.off_yellow_cards)
     add("yellow_cards", String(r.zz_yellow_cards), String(r.off_yellow_cards), "yellow_cards");
   if (r.zz_red_card !== r.off_red_card)
@@ -340,8 +337,8 @@ export default async function OfficialDiffPage({
           </p>
         )}
         <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>
-          Goals include penalties on both sides. Assists only show once the official
-          per-match split for that player has been fetched. ✎ = zerozero value was set by hand.
+          Goals include penalties on both sides. Assists aren't compared: they
+          stay on zerozero. ✎ = zerozero value was set by hand.
         </p>
       </div>
 

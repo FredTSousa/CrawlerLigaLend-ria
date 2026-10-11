@@ -3,7 +3,7 @@
 Official Liga Portugal stats (ligaportugal.pt) for the zerozero-vs-official
 report page (/official-diff). Job kind 'official'.
 
-The league scores goals / assists / yellows / sub minutes from ligaportugal.pt,
+The league scores goals / yellows / sub minutes from ligaportugal.pt,
 not zerozero. The site's frontend reads a public JSON API (no auth, no cookies);
 this module reads the same endpoints and stores what the site says in the
 official_* tables (db/migration_official_stats.sql). It never touches
@@ -20,11 +20,8 @@ Per finished match (one small request + one squad request):
                             'G. Silva' is two Vitória players). Mappings are
                             cached in players.lp_player_id / teams.lp_team_id.
 
-Assists are not in the event feed. Once per run:
-  v2/competition/top/players?statId=3  -> season totals for every assister
-  v1/player/{id}/matches               -> per-match split, fetched only for
-                                          players whose total changed (both
-                                          responses are bloated: ~25 MB / ~3 MB)
+Assists are not compared: the league keeps taking them from zerozero (the
+official site only has them per player, at ~3 MB a request).
 
 The API rate-limits (~50 quick requests -> 429, returned INSIDE a JSON body as
 {"code": 400, "message": "...429 Too Many Requests..."}), so requests are paced.
@@ -51,7 +48,6 @@ import sync
 
 API = "https://www.ligaportugal.pt/api"
 MIN_INTERVAL = 1.5          # seconds between requests (rate limit)
-MAX_DETAIL_FETCHES = 40     # per-player assist histories per run (~3 MB each)
 
 # Hourly sweep (--sweep, job kind 'official_sweep'): fetch a finished match soon
 # after the whistle, re-check it until the site marks it official, and once more
@@ -61,7 +57,7 @@ SWEEP_RECHECK = timedelta(minutes=50)
 SWEEP_SETTLE = timedelta(hours=24)
 SWEEP_MAX_AGE = timedelta(days=14)
 
-# Stats tracked in official_stat_history (assists are recorded separately).
+# Stats tracked in official_stat_history.
 HISTORY_STATS = ("goals", "own_goals", "yellow_cards", "red_card",
                  "entered_min", "left_min")
 
@@ -139,22 +135,6 @@ class LPClient:
 
     def details(self, round_no: int, fixture: int) -> dict:
         return self.get("v1/match/details", self._q(round=round_no, fixture=fixture))
-
-    def assist_leaders(self) -> list[dict]:
-        size = 200
-        while True:
-            data = self.get("v2/competition/top/players",
-                            self._q(statId=3, size=size)) or []
-            leaders = data[0]["leaders"] if data else []
-            # Ranked by total, so a zero at the tail means every assister is in.
-            if len(leaders) < size or leaders[-1].get("total", 0) == 0:
-                return [{"playerId": str(x["playerId"]), "playerName": x.get("playerName"),
-                         "teamName": x.get("teamName"), "total": int(x.get("total") or 0)}
-                        for x in leaders if x.get("total")]
-            size *= 2
-
-    def player_matches(self, lp_player_id: str) -> list[dict]:
-        return self.get(f"v1/player/{lp_player_id}/matches", {"season": self.season}) or []
 
 
 # ----------------------------------------------------------------------------
@@ -378,8 +358,7 @@ def _pair_round(fixtures: list[dict], zz_matches: list[dict], teams: dict[str, d
 
 
 def sync_competition(sb: sync.Supabase, comp: dict, *, round_no: int | None,
-                     force: bool, assists: bool, max_details: int,
-                     sweep: bool = False) -> int:
+                     force: bool, sweep: bool = False) -> int:
     lp = LPClient(comp["lp_competition"], comp["lp_season"])
     comp_id = comp["id"]
     # The league only counts from this round on; earlier rounds are skipped.
@@ -477,12 +456,6 @@ def sync_competition(sb: sync.Supabase, comp: dict, *, round_no: int | None,
             synced += 1
 
     remap_unmapped(sb, comp_id, lp_cache)
-    # The leaderboard is ~25 MB: an hourly sweep only reads it when it fetched
-    # a match (lagging splits are retried on the next such run).
-    if assists and (synced or not sweep):
-        sync_assists(sb, lp, comp_id,
-                     [m for m in matches if (m["round"] or 0) >= from_round],
-                     from_round=from_round, max_details=max_details, lp_cache=lp_cache)
     return synced
 
 
@@ -504,88 +477,6 @@ def remap_unmapped(sb: sync.Supabase, comp_id: str, lp_cache: dict[str, str]) ->
         print(f"  remapped {fixed} of {len(rows)} unmapped official row(s)", file=sys.stderr)
 
 
-def sync_assists(sb: sync.Supabase, lp: LPClient, comp_id: str, matches: list[dict],
-                 *, from_round: int, max_details: int,
-                 lp_cache: dict[str, str]) -> None:
-    """Official per-match assists for the compared matches (`matches`, already
-    limited to from_round on)."""
-    jobstatus.report("Official stats: assist leaderboard")
-    leaders = lp.assist_leaders()
-    by_fixture = {(m["lp_round"], m["lp_fixture"]): m["id"]
-                  for m in matches if m.get("lp_round") is not None}
-    comp_match_ids = ",".join(m["id"] for m in matches)
-    held = {t["lp_player_id"]: t for t in sb._rest(
-        "GET", f"official_assist_totals?competition_id=eq.{comp_id}&select=*").json()}
-
-    # Changed totals first; within those, players never fetched before.
-    stale = [x for x in leaders
-             if held.get(x["playerId"], {}).get("detail_total") != x["total"]]
-    stale.sort(key=lambda x: x["playerId"] in held)
-    detail: dict[str, int | None] = {}
-    # A player's history spans every competition (cups too); keep this one's.
-    competition_name = (lp.fixtures(1) or [{}])[0].get("competitionName") if stale else None
-    for i, x in enumerate(stale[:max_details], 1):
-        jobstatus.report(f"Official stats: assists of {x['playerName']}",
-                         current=i, total=min(len(stale), max_details))
-        hist = lp.player_matches(x["playerId"])
-        rows, unplaced, season = [], 0, 0
-        for h in hist:
-            if h.get("competitionName") != competition_name:
-                continue
-            n = sum(int(s.get("value") or 0) for s in h.get("playerFixtureStatistics") or []
-                    if s.get("statisticTypeId") == 3)
-            season += n
-            if h["round"] < from_round:
-                continue
-            mid = by_fixture.get((h["round"], h["fixtureNumber"]))
-            if n and mid:
-                rows.append({"match_id": mid, "lp_player_id": x["playerId"],
-                             "assists": n, "updated_at": _now()})
-            elif n:
-                unplaced += n
-        before = {a["match_id"]: a["assists"] for a in sb._rest("GET", (
-            f"official_match_assists?lp_player_id=eq.{x['playerId']}"
-            f"&match_id=in.({comp_match_ids})&select=match_id,assists")).json()}
-        after = {a["match_id"]: a["assists"] for a in rows}
-        # A player's first split is the baseline, not a change.
-        changes = [] if x["playerId"] not in held else [
-            {"match_id": mid, "lp_player_id": x["playerId"],
-             "player_id": lp_cache.get(x["playerId"]), "lp_name": x["playerName"],
-             "stat": "assists", "old_value": before.get(mid), "new_value": after.get(mid),
-             "official_final": None, "observed_at": _now()}
-            for mid in before.keys() | after.keys() if before.get(mid) != after.get(mid)]
-        sb.delete("official_match_assists",
-                  f"lp_player_id=eq.{x['playerId']}&match_id=in.({comp_match_ids})")
-        sb.insert("official_match_assists", rows)
-        sb.insert("official_stat_history", changes)
-        # detail_total = the leaderboard total this split is complete for. It
-        # stays unset (refetched next run, hidden on the page meanwhile) when an
-        # assist sits on a match not compared yet, or when the history lags the
-        # leaderboard (the latest match shows up there first).
-        detail[x["playerId"]] = x["total"] if not unplaced and season == x["total"] else None
-
-    if len(stale) > max_details:
-        print(f"  {len(stale) - max_details} assister(s) left for the next run",
-              file=sys.stderr)
-
-    totals = [{"competition_id": comp_id, "lp_player_id": x["playerId"],
-               "lp_name": x["playerName"], "lp_team_name": x["teamName"],
-               "total": x["total"],
-               "detail_total": (detail[x["playerId"]] if x["playerId"] in detail
-                                else held.get(x["playerId"], {}).get("detail_total")),
-               "fetched_at": _now()} for x in leaders]
-    # Dropped off the leaderboard (an assist taken away): now zero everywhere.
-    current = {x["playerId"] for x in leaders}
-    for lp_id, t in held.items():
-        if lp_id not in current and t["total"]:
-            totals.append({**t, "total": 0, "detail_total": 0, "fetched_at": _now()})
-            sb.delete("official_match_assists",
-                      f"lp_player_id=eq.{lp_id}&match_id=in.({comp_match_ids})")
-    sb.upsert("official_assist_totals", totals, "competition_id,lp_player_id")
-    print(f"  assists: {len(leaders)} assister(s), {len(detail)} split(s) refreshed",
-          file=sys.stderr)
-
-
 # ----------------------------------------------------------------------------
 # Entry point
 # ----------------------------------------------------------------------------
@@ -605,8 +496,6 @@ def main() -> int:
     ap.add_argument("--sweep", action="store_true",
                     help="hourly cron: fetch the finished matches that are due "
                          "(after the end, until official, and a day after kickoff)")
-    ap.add_argument("--no-assists", action="store_true")
-    ap.add_argument("--max-details", type=int, default=MAX_DETAIL_FETCHES)
     ap.add_argument("--run-id", type=int)
     ap.add_argument("--trigger", default="manual", choices=["manual", "schedule"])
     ap.add_argument("--github-run-id", default=os.environ.get("GITHUB_RUN_ID"))
@@ -648,8 +537,7 @@ def main() -> int:
                 comp["official_from_round"] = args.from_round
             print(f"{comp['name']}: official stats", file=sys.stderr)
             synced += sync_competition(sb, comp, round_no=round_no, force=force,
-                                       assists=not args.no_assists,
-                                       max_details=args.max_details, sweep=sweep)
+                                       sweep=sweep)
     except Exception as err:
         sync._finish_run(sb, run_id if run_id is not None else begin(),
                          status="error", error=str(err)[:1000])
