@@ -1,4 +1,5 @@
 import React from "react";
+import StatEditor, { type EditableStat } from "./StatEditor";
 
 type MatchEvent = {
   event_type: string;
@@ -28,6 +29,8 @@ type Player = {
   reporter_score: number | null;
   reporter_is_mvp: boolean;
   reporter_linked: boolean;
+  stat_overrides?: Partial<Record<EditableStat, number>> | null;
+  stat_crawled?: Partial<Record<EditableStat, number>> | null;
   events?: MatchEvent[];
 };
 
@@ -64,8 +67,19 @@ const EVENT_CHIP: Record<string, { icon: string; cls: string; title: string }> =
   sub_out:          { icon: "🔽",    cls: "chip out", title: "Subbed out" },
 };
 
+// Event types whose timeline chips are replaced by a count chip when the
+// matching stat was corrected by hand (the crawled events are the wrong ones).
+const OVERRIDE_EVENT: Record<EditableStat, string> = {
+  goals: "goal",
+  assists: "assist",
+  yellow_cards: "yellow_card",
+};
+
 function StatIcons({ p }: { p: Player }) {
   const chips: React.ReactNode[] = [];
+  const over = p.stat_overrides ?? {};
+  const overKeys = Object.keys(over) as EditableStat[];
+  const hiddenEvents = new Set(overKeys.map((k) => OVERRIDE_EVENT[k]));
 
   if (p.events && p.events.length > 0) {
     const sorted = [...p.events].sort(
@@ -73,7 +87,7 @@ function StatIcons({ p }: { p: Player }) {
     );
     sorted.forEach((ev, i) => {
       const meta = EVENT_CHIP[ev.event_type];
-      if (!meta) return;
+      if (!meta || hiddenEvents.has(ev.event_type)) return;
       chips.push(
         <span className={meta.cls} title={meta.title} key={`${ev.event_type}-${i}`}>
           {ev.event_type === "sub_in" || ev.event_type === "sub_out"
@@ -82,14 +96,26 @@ function StatIcons({ p }: { p: Player }) {
         </span>,
       );
     });
+    // Hand-corrected stats: the minute-by-minute events are untrustworthy, so
+    // show the corrected count instead.
+    for (const k of overKeys) {
+      const n = p[k];
+      if (n <= 0) continue;
+      const meta = EVENT_CHIP[OVERRIDE_EVENT[k]];
+      chips.push(
+        <span className={`${meta.cls} edited`} title={`${meta.title} (edited by hand)`} key={`ov-${k}`}>
+          {meta.icon}{count(n)}
+        </span>,
+      );
+    }
   } else {
     // Fallback when event timeline hasn't been crawled yet: show counts only.
     if (p.goals > 0)
-      chips.push(<span className="chip" title="Goals" key="g">⚽{count(p.goals)}</span>);
+      chips.push(<span className={`chip${"goals" in over ? " edited" : ""}`} title="Goals" key="g">⚽{count(p.goals)}</span>);
     if (p.assists > 0)
-      chips.push(<span className="chip" title="Assists" key="a">👟{count(p.assists)}</span>);
+      chips.push(<span className={`chip${"assists" in over ? " edited" : ""}`} title="Assists" key="a">👟{count(p.assists)}</span>);
     if (p.yellow_cards > 0)
-      chips.push(<span className="chip" title="Yellow card" key="y">🟨{count(p.yellow_cards)}</span>);
+      chips.push(<span className={`chip${"yellow_cards" in over ? " edited" : ""}`} title="Yellow card" key="y">🟨{count(p.yellow_cards)}</span>);
     if (p.red_card)
       chips.push(<span className="chip" title="Red card" key="r">🟥</span>);
     if (p.own_goals > 0)
@@ -135,7 +161,7 @@ function RepScore({ p, show }: { p: Player; show: boolean }) {
   );
 }
 
-function PlayerLine({ p, rep }: { p: Player; rep: boolean }) {
+function PlayerLine({ p, rep, matchId }: { p: Player; rep: boolean; matchId?: string }) {
   return (
     <div className="pline">
       <span className="num">{p.shirt_number ?? ""}</span>
@@ -145,22 +171,41 @@ function PlayerLine({ p, rep }: { p: Player; rep: boolean }) {
         {p.is_captain && <span className="badge">C</span>}
       </span>
       <StatIcons p={p} />
+      {matchId && (
+        <StatEditor
+          matchId={matchId}
+          playerId={p.player_id}
+          values={{ goals: p.goals, assists: p.assists, yellow_cards: p.yellow_cards }}
+          overrides={p.stat_overrides ?? {}}
+          crawled={p.stat_crawled ?? {}}
+        />
+      )}
     </div>
   );
 }
 
-function TeamColumn({ name, rows, rep }: { name: string; rows: Player[]; rep: boolean }) {
+function TeamColumn({
+  name,
+  rows,
+  rep,
+  matchId,
+}: {
+  name: string;
+  rows: Player[];
+  rep: boolean;
+  matchId?: string;
+}) {
   const starters = rows.filter((r) => r.is_starter);
   const subs = rows.filter((r) => !r.is_starter);
   return (
     <div className="team-col">
       <h3>{name}</h3>
       {starters.map((p) => (
-        <PlayerLine key={p.player_id} p={p} rep={rep} />
+        <PlayerLine key={p.player_id} p={p} rep={rep} matchId={matchId} />
       ))}
       {subs.length > 0 && <div className="subhead">Substitutes used</div>}
       {subs.map((p) => (
-        <PlayerLine key={p.player_id} p={p} rep={rep} />
+        <PlayerLine key={p.player_id} p={p} rep={rep} matchId={matchId} />
       ))}
     </div>
   );
@@ -171,11 +216,14 @@ export default function Lineup({
   away,
   players,
   reporterFetched = false,
+  matchId,
 }: {
   home: Team;
   away: Team;
   players: Player[];
   reporterFetched?: boolean;
+  // Enables the per-player ✎ stat correction.
+  matchId?: string;
 }) {
   const col = (teamId: string) =>
     players.filter((p) => p.team_id === teamId).sort(orderCmp);
@@ -184,8 +232,8 @@ export default function Lineup({
   }
   return (
     <div className="lineup">
-      <TeamColumn name={home.name} rows={col(home.id)} rep={reporterFetched} />
-      <TeamColumn name={away.name} rows={col(away.id)} rep={reporterFetched} />
+      <TeamColumn name={home.name} rows={col(home.id)} rep={reporterFetched} matchId={matchId} />
+      <TeamColumn name={away.name} rows={col(away.id)} rep={reporterFetched} matchId={matchId} />
     </div>
   );
 }

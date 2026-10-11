@@ -130,6 +130,7 @@ export default async function MatchPage({
           away={{ id: m.away_team_id, name: m.away_team?.name }}
           players={ps}
           reporterFetched={!!rep}
+          matchId={m.id}
         />
       </div>
 

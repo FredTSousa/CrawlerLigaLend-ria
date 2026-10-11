@@ -87,6 +87,8 @@ create table if not exists public.match_players (
     penalties_defended  int  not null default 0,
     played_under_20m    boolean not null default false,
     did_not_play        boolean not null default false,
+    stat_overrides      jsonb not null default '{}'::jsonb, -- manual fixes, see migration_stat_overrides.sql
+    stat_crawled        jsonb not null default '{}'::jsonb, -- crawled value behind each override
     updated_at          timestamptz not null default now(),
     primary key (match_id, player_id)
 );
@@ -221,7 +223,9 @@ select
     mp.reporter_raw_score,
     mp.reporter_is_mvp,
     mp.reporter_linked,
-    mp.reporter_manual
+    mp.reporter_manual,
+    mp.stat_overrides,
+    mp.stat_crawled
 from public.match_players mp
 join public.matches m on m.id = mp.match_id
 join public.players p on p.id = mp.player_id
