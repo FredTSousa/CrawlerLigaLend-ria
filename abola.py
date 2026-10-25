@@ -514,8 +514,12 @@ TOKEN_RE = re.compile(r"\(\s*" + _RATING + r"\s*" + _CLOSE)
 ENTRY_RE = re.compile(r"([A-ZÀ-Ÿ][^():]*?)\s*\(\s*(" + _RATING + r")\s*" + _CLOSE)
 # MVP box. The parenthesis holds EITHER a score ("Richard Ríos (7)") OR the team
 # ("Larrazabal (Casa Pia)") -- both forms appear, so capture it raw and classify.
+# The label is usually followed by ":", but some boxes use a spaced dash instead
+# ("O melhor em campo - Borja Sainz (nota 7)"); the dash must be preceded by
+# whitespace so a hyphenated team in the "do <team>" hint never splits there.
 MVP_RE = re.compile(
-    r"((?:o\s+)?melhor em campo|a figura)(?:\s+d[oae]\s+([^:<\n]+?))?\s*:\s*"
+    r"((?:o\s+)?melhor em campo|a figura)(?:\s+d[oae]\s+([^:<\n]+?))?"
+    r"(?:\s*:|\s+[—–-])\s*"
     r"([^()<\n]+?)\s*\(\s*([^)<\n]+?)\s*\)", re.I)
 # Suffix form: "Prestianni (7) — o melhor em campo" (name + score, label after).
 MVP_SUFFIX_RE = re.compile(

@@ -248,6 +248,11 @@ def _link_scores(sb, match_id, team_id, ratings):
 
     ambiguous = _dups([abola._norm(pn) for _, pn in zz]) \
         | _dups([abola._norm(r["player_name"]) for r in ratings])
+    # An A Bola id on 2+ ratings is a bad autolink (a fresh crónica once tagged
+    # 'Ee' with Lee Hyunju's id, so Lee got van Ee's score). Don't trust that
+    # id for anyone -- fall back to names, which leaves a gap, not a wrong link.
+    for aid in _dups([r.get("player_id") for r in ratings]):
+        abolaid_map.pop(aid, None)
 
     used, linked = set(), 0
     for r in ratings:
