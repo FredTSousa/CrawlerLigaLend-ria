@@ -512,6 +512,11 @@ TOKEN_RE = re.compile(r"\(\s*" + _RATING + r"\s*" + _CLOSE)
 # A name never contains ":", so excluding it drops in-list labels like
 # "Suplentes :" that would otherwise glue onto the first substitute's name.
 ENTRY_RE = re.compile(r"([A-ZÀ-Ÿ][^():]*?)\s*\(\s*(" + _RATING + r")\s*" + _CLOSE)
+# Inside an inline ratings list A Bola sometimes leaves an unrated cameo's
+# parenthesis empty ("Patricio Salas (), Paulo Moreira ()") instead of "(-)".
+# Only accepted there (the list already has real tokens), never in prose.
+INLINE_ENTRY_RE = re.compile(
+    r"([A-ZÀ-Ÿ][^():]*?)\s*\(\s*(" + _RATING + r")?\s*" + _CLOSE)
 # MVP box. The parenthesis holds EITHER a score ("Richard Ríos (7)") OR the team
 # ("Larrazabal (Casa Pia)") -- both forms appear, so capture it raw and classify.
 # The label is usually followed by ":", but some boxes use a spaced dash instead
@@ -657,12 +662,13 @@ def _inline_entries(text: str, id_map: dict) -> list[dict]:
     """Parse 'Name (6); Name (4), ...' from TEXT (so players A Bola didn't
     autolink are still captured), attaching ids where a link exists."""
     out = []
-    for m in ENTRY_RE.finditer(text):
+    for m in INLINE_ENTRY_RE.finditer(text):
         name = _player_name(m.group(1))
         if name:
             out.append({
                 "player_name": name, "player_id": _attach_id(name, id_map),
-                "score": _score(m.group(2)), "is_mvp": False, "description": None,
+                # "()" = no rating, same as "(-)"
+                "score": _score(m.group(2) or "-"), "is_mvp": False, "description": None,
             })
     return out
 
@@ -857,6 +863,11 @@ def _split_leading_score(narrative: str | None) -> tuple[int | None, str | None]
 _GRADIENT_RE = re.compile(r"linear-gradient", re.I)
 _BOLD_CLASS_RE = re.compile(r"font-bold", re.I)
 _SCORE_NAME_RE = re.compile(r"\(\s*(" + _RATING + r")\s*\)\s*(.+)")   # "(8) Name"
+# Some cards prefix the bold line with a team label: "Figura do Sporting -
+# Irankunda (6)". Strip it (keeping the team as a hint) so it doesn't end up
+# glued onto the player's name.
+_CARD_LABEL_RE = re.compile(
+    r"^\s*(?:a\s+)?figura(?:\s+d[oae]\s+([^:]+?))?\s*(?::|\s[–—-])\s*", re.I)
 
 
 def _highlight_cards(soup) -> list[dict]:
@@ -871,11 +882,13 @@ def _highlight_cards(soup) -> list[dict]:
         if not bold:
             continue
         head = bold.get_text(" ", strip=True)
-        m = _SCORE_NAME_RE.match(head)
+        lbl = _CARD_LABEL_RE.match(head)
+        line = head[lbl.end():] if lbl else head
+        m = _SCORE_NAME_RE.match(line)
         if m:
             score, name = _score(m.group(1)), _player_name(m.group(2))
         else:
-            m = ENTRY_RE.match(head)                                  # "Name (8)"
+            m = ENTRY_RE.match(line)                                  # "Name (8)"
             if not m:
                 continue
             name, score = _player_name(m.group(1)), _score(m.group(2))
@@ -883,7 +896,8 @@ def _highlight_cards(soup) -> list[dict]:
             continue
         full = box.get_text(" ", strip=True)
         desc = full.split(head, 1)[1].strip(" :—–-") if head in full else ""
-        out.append({"kind": "figura", "team": None, "name": name,
+        team = (lbl.group(1) or "").strip() or None if lbl else None
+        out.append({"kind": "figura", "team": team, "name": name,
                     "score": score, "description": desc or None})
     return out
 
@@ -1109,17 +1123,20 @@ def apply_mvp(teams: dict, boxes: list[dict]) -> None:
             top_figura = max(figuras, key=lambda b: b["score"] if b["score"] is not None else -1)
     for b in boxes:
         is_mvp = b["kind"] == "melhor" or (b["kind"] == "figura" and b is top_figura)
-        found = False
-        for plist in teams.values():
-            for pl in plist:
-                if _names_match(pl["player_name"], b["name"]):
-                    if is_mvp:
-                        pl["is_mvp"] = True
-                    if not pl.get("description") and b["description"]:
-                        pl["description"] = b["description"]
-                    if pl.get("score") is None and b["score"] is not None:
-                        pl["score"] = b["score"]
-                    found = True
+        # An exact name match wins over a fuzzy one: the box "João Guilherme"
+        # must not also crown the other team's "Guilherme" (Luís Guilherme)
+        # just because one name contains the other.
+        hits = [pl for plist in teams.values() for pl in plist
+                if _names_match(pl["player_name"], b["name"])]
+        exact = [pl for pl in hits if _norm(pl["player_name"]) == _norm(b["name"])]
+        for pl in exact or hits:
+            if is_mvp:
+                pl["is_mvp"] = True
+            if not pl.get("description") and b["description"]:
+                pl["description"] = b["description"]
+            if pl.get("score") is None and b["score"] is not None:
+                pl["score"] = b["score"]
+        found = bool(hits)
         if not found and teams:
             target = _target_team(teams, b["team"])
             if target:
