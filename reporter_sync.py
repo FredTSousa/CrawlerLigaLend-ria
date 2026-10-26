@@ -230,13 +230,19 @@ def _link_scores(sb, match_id, team_id, ratings):
         f"reporter_aliases?or=(team_id.eq.{team_id},team_id.is.null)"
         "&select=abola_norm,player_id",
     ).json()}
-    abolaid_map = {}
+    owners: dict[str, list[str]] = {}  # abolaid -> roster players holding it
     if zz:
         ids = ",".join(p[0] for p in zz)
-        abolaid_map = {p["abolaid"]: p["id"] for p in sb._rest(
+        for p in sb._rest(
             "GET",
             f"players?id=in.({ids})&abolaid=not.is.null&select=id,abolaid",
-        ).json()}
+        ).json():
+            owners.setdefault(p["abolaid"], []).append(p["id"])
+    # An id held by 2+ teammates was learned from a bad autolink at some point
+    # (Ivan Lima carried Aursnes's id, so Aursnes's rating went to Lima) --
+    # it can't tell them apart, so it isn't used for either.
+    abolaid_map = {aid: pids[0] for aid, pids in owners.items() if len(pids) == 1}
+    has_abolaid = {pid for pids in owners.values() for pid in pids}
 
     # A name is ambiguous when it repeats WITHIN the roster or WITHIN the
     # ratings (two players share it) -> never auto-link, assign by hand.
@@ -251,7 +257,8 @@ def _link_scores(sb, match_id, team_id, ratings):
     # An A Bola id on 2+ ratings is a bad autolink (a fresh crónica once tagged
     # 'Ee' with Lee Hyunju's id, so Lee got van Ee's score). Don't trust that
     # id for anyone -- fall back to names, which leaves a gap, not a wrong link.
-    for aid in _dups([r.get("player_id") for r in ratings]):
+    dup_ids = _dups([r.get("player_id") for r in ratings])
+    for aid in dup_ids:
         abolaid_map.pop(aid, None)
 
     used, linked = set(), 0
@@ -270,8 +277,14 @@ def _link_scores(sb, match_id, team_id, ratings):
                    "reporter_raw_score": r.get("raw_score"),
                    "reporter_is_mvp": bool(r["is_mvp"]),
                    "reporter_linked": True})
-        if r.get("player_id"):
-            sb.update("players", f"id=eq.{pid}", {"abolaid": r["player_id"]})
+        # Learn the A Bola id only when it's new information: never overwrite a
+        # player's existing id, and never hand out one a teammate already holds
+        # or one the page put on two ratings -- one bad autolink used to stick
+        # to the wrong player for good and misroute every later rating.
+        aid = r.get("player_id")
+        if aid and pid not in has_abolaid and aid not in owners \
+                and aid not in dup_ids:
+            sb.update("players", f"id=eq.{pid}", {"abolaid": aid})
     return linked
 
 
