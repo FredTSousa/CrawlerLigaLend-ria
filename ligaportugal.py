@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-Official Liga Portugal stats (ligaportugal.pt) for the zerozero-vs-official
-report page (/official-diff). Job kind 'official'.
+Official Liga Portugal stats (ligaportugal.pt). Job kind 'official'.
 
 The league scores goals / yellows / sub minutes from ligaportugal.pt,
-not zerozero. The site's frontend reads a public JSON API (no auth, no cookies);
-this module reads the same endpoints and stores what the site says in the
-official_* tables (db/migration_official_stats.sql). It never touches
-match_players -- the page only compares for now.
+not zerozero, and zerozero can take up to ~48 h to fix its drafts. The site's
+frontend reads a public JSON API (no auth, no cookies); this module reads the
+same endpoints, stores what the site says in the official_* tables
+(db/migration_official_stats.sql) and then applies it to match_players through
+apply_official_stats() (db/migration_official_apply.sql): official values win
+over zerozero's on every later write, a manual ✎ fix still wins over both.
+/official-diff keeps comparing zerozero's raw values with the official ones.
 
 Per finished match (one small request + one squad request):
   v2/match/info/dynamic  -> event feed. occurrenceTypeId: 0 sub in, 1 sub out,
@@ -443,6 +445,7 @@ def sync_competition(sb: sync.Supabase, comp: dict, *, round_no: int | None,
                 patch["official_first_synced_at"] = patch["official_synced_at"]
             sb.update("matches", f"id=eq.{m['id']}", patch)
             m.update(patch)
+            applied = sb.rpc("apply_official_stats", {"p_match_id": m["id"]}) or 0
 
             new = {k: v for k, v in learned.items() if lp_cache.get(k) != v}
             for lp_id, pid in new.items():
@@ -451,7 +454,8 @@ def sync_competition(sb: sync.Supabase, comp: dict, *, round_no: int | None,
             unmapped = sum(1 for row in rows if not row["player_id"])
             print(f"  round {r} fixture {fx} -> match {m['id']}: {len(rows)} player(s)"
                   + (f", {unmapped} unmapped" if unmapped else "")
-                  + (f", {len(changes)} value(s) changed since last fetch" if changes else ""),
+                  + (f", {len(changes)} value(s) changed since last fetch" if changes else "")
+                  + (f", {applied} lineup row(s) updated" if applied else ""),
                   file=sys.stderr)
             synced += 1
 
@@ -466,6 +470,7 @@ def remap_unmapped(sb: sync.Supabase, comp_id: str, lp_cache: dict[str, str]) ->
         "official_match_players?player_id=is.null&select=match_id,lp_player_id,"
         f"matches!inner(competition_id)&matches.competition_id=eq.{comp_id}&order=match_id"))
     fixed = 0
+    touched: set[str] = set()
     for r in rows:
         pid = lp_cache.get(r["lp_player_id"])
         if pid:
@@ -473,6 +478,9 @@ def remap_unmapped(sb: sync.Supabase, comp_id: str, lp_cache: dict[str, str]) ->
                       f"match_id=eq.{r['match_id']}&lp_player_id=eq.{r['lp_player_id']}",
                       {"player_id": pid})
             fixed += 1
+            touched.add(r["match_id"])
+    for match_id in sorted(touched):
+        sb.rpc("apply_official_stats", {"p_match_id": match_id})
     if rows:
         print(f"  remapped {fixed} of {len(rows)} unmapped official row(s)", file=sys.stderr)
 

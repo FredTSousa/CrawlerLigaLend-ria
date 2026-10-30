@@ -137,6 +137,7 @@ select:focus, input:focus { outline: 1px solid var(--accent); }
 .chip.og { background: #3d1717; color: var(--red); padding: 1px 5px; border-radius: 4px; font-weight: 700; font-size: 11px; }
 .chip.pen { background: var(--panel-2); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
 .chip.edited { box-shadow: inset 0 -2px 0 var(--yellow); padding-bottom: 1px; }
+.chip.official { box-shadow: inset 0 -2px 0 var(--accent); padding-bottom: 1px; }
 
 /* Manual stat correction (goals / assists / yellows) on the lineup */
 .stat-edit { position: relative; flex-shrink: 0; }

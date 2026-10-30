@@ -30,7 +30,8 @@ type Player = {
   reporter_is_mvp: boolean;
   reporter_linked: boolean;
   stat_overrides?: Partial<Record<EditableStat, number>> | null;
-  stat_crawled?: Partial<Record<EditableStat, number>> | null;
+  stat_crawled?: Record<string, number | boolean | null> | null;
+  stat_official?: Record<string, number | boolean> | null;
   events?: MatchEvent[];
 };
 
@@ -75,11 +76,34 @@ const OVERRIDE_EVENT: Record<EditableStat, string> = {
   yellow_cards: "yellow_card",
 };
 
+// Official (ligaportugal.pt) values that replaced zerozero's: the stats each
+// one covers, and the zerozero event chips that no longer add up.
+const OFFICIAL_STATS: { key: string; cols: (keyof Player)[]; events: string[] }[] = [
+  { key: "goals", cols: ["goals", "penalties_scored"], events: ["goal", "penalty_scored"] },
+  { key: "own_goals", cols: ["own_goals"], events: ["own_goal"] },
+  { key: "yellow_cards", cols: ["yellow_cards"], events: ["yellow_card"] },
+  { key: "red_card", cols: ["red_card"], events: ["red_card"] },
+  { key: "entered_min", cols: ["entered_min"], events: ["sub_in"] },
+  { key: "left_min", cols: ["left_min"], events: ["sub_out"] },
+];
+
 function StatIcons({ p }: { p: Player }) {
   const chips: React.ReactNode[] = [];
   const over = p.stat_overrides ?? {};
   const overKeys = Object.keys(over) as EditableStat[];
   const hiddenEvents = new Set(overKeys.map((k) => OVERRIDE_EVENT[k]));
+  // Official stats that differ from zerozero's own value (stat_crawled).
+  const crawled = p.stat_crawled ?? {};
+  const officialKeys = new Set(
+    OFFICIAL_STATS.filter(
+      ({ key, cols }) =>
+        key in (p.stat_official ?? {}) &&
+        cols.some((c) => c in crawled && (crawled[c] ?? null) !== (p[c] ?? null)),
+    ).map(({ key, events }) => {
+      events.forEach((e) => hiddenEvents.add(e));
+      return key;
+    }),
+  );
 
   if (p.events && p.events.length > 0) {
     const sorted = [...p.events].sort(
@@ -108,6 +132,27 @@ function StatIcons({ p }: { p: Player }) {
         </span>,
       );
     }
+    // Official values: the counts / minutes the league scores on.
+    const off = (cls: string, title: string, key: string, body: React.ReactNode) =>
+      chips.push(
+        <span className={`${cls} official`} title={`${title} (official, Liga Portugal)`} key={`off-${key}`}>
+          {body}
+        </span>,
+      );
+    if (officialKeys.has("goals")) {
+      if (p.goals > 0 && !("goals" in over)) off("chip", "Goals", "g", <>⚽{count(p.goals)}</>);
+      if (p.penalties_scored > 0)
+        off("chip pen", "Penalty scored", "ps", <>PK ⚽{p.penalties_scored > 1 ? ` ${p.penalties_scored}` : ""}</>);
+    }
+    if (officialKeys.has("own_goals") && p.own_goals > 0)
+      off("chip og", "Own goal", "og", <>OG{p.own_goals > 1 ? ` ${p.own_goals}` : ""}</>);
+    if (officialKeys.has("yellow_cards") && p.yellow_cards > 0 && !("yellow_cards" in over))
+      off("chip", "Yellow card", "y", <>🟨{count(p.yellow_cards)}</>);
+    if (officialKeys.has("red_card") && p.red_card) off("chip", "Red card", "r", <>🟥</>);
+    if (officialKeys.has("entered_min") && p.entered_min != null)
+      off("chip in", "Subbed in", "in", <>🔼 {p.entered_min}&#39;</>);
+    if (officialKeys.has("left_min") && p.left_min != null)
+      off("chip out", "Subbed out", "out", <>🔽 {p.left_min}&#39;</>);
   } else {
     // Fallback when event timeline hasn't been crawled yet: show counts only.
     if (p.goals > 0)
@@ -178,6 +223,7 @@ function PlayerLine({ p, rep, matchId }: { p: Player; rep: boolean; matchId?: st
           values={{ goals: p.goals, assists: p.assists, yellow_cards: p.yellow_cards }}
           overrides={p.stat_overrides ?? {}}
           crawled={p.stat_crawled ?? {}}
+          official={p.stat_official ?? {}}
         />
       )}
     </div>

@@ -18,6 +18,7 @@ const STATS = [
   { key: "red_card", label: "Red card" },
   { key: "own_goals", label: "Own goals" },
   { key: "under_20m", label: "Under 20'" },
+  { key: "sub_minutes", label: "Sub minutes" },
 ] as const;
 type StatKey = (typeof STATS)[number]["key"];
 
@@ -66,6 +67,17 @@ function explode(r: any): Diff[] {
       "under_20m",
       `${r.zz_under_20m ? "yes" : "no"} (${minutes(r.zz_entered_min, r.zz_left_min)})`,
       `${r.off_under_20m ? "yes" : "no"} (${minutes(r.off_entered_min, r.off_left_min)})`,
+    );
+  // Raw sub minutes, when they differ without flipping the under-20' flag (that
+  // row above already shows both sides' minutes).
+  else if (
+    (r.zz_entered_min ?? null) !== (r.off_entered_min ?? null) ||
+    (r.zz_left_min ?? null) !== (r.off_left_min ?? null)
+  )
+    add(
+      "sub_minutes",
+      minutes(r.zz_entered_min, r.zz_left_min),
+      minutes(r.off_entered_min, r.off_left_min),
     );
   return out;
 }
@@ -142,7 +154,10 @@ export default async function OfficialDiffPage({
   const all = ((diffRows ?? []) as any[]).flatMap(explode);
   const counts = new Map<StatKey, number>();
   for (const d of all) counts.set(d.stat, (counts.get(d.stat) ?? 0) + 1);
-  const diffs = (statFilter ? all.filter((d) => d.stat === statFilter) : all).sort(
+  // "All" leaves out raw sub minutes: the sites routinely disagree by a minute,
+  // which would bury the real differences. They have their own filter.
+  const main = all.filter((d) => d.stat !== "sub_minutes");
+  const diffs = (statFilter ? all.filter((d) => d.stat === statFilter) : main).sort(
     (a, b) =>
       (b.round ?? 0) - (a.round ?? 0) ||
       a.match_id.localeCompare(b.match_id) ||
@@ -274,7 +289,7 @@ export default async function OfficialDiffPage({
         </h3>
         <div className="row" style={{ marginBottom: 10 }}>
           <Link href={href(null)} className={`round-chip${statFilter ? "" : " active"}`}>
-            All ({all.length})
+            All ({main.length})
           </Link>
           {STATS.map((s) => (
             <Link
@@ -341,7 +356,11 @@ export default async function OfficialDiffPage({
                         <td>
                           {d.zz}
                           {d.overridden && (
-                            <span className="tag-yellow" style={{ fontSize: 12 }} title="Set by hand with ✎">
+                            <span
+                              className="tag-yellow"
+                              style={{ fontSize: 12 }}
+                              title="A hand fix (✎) is stored instead of the official value"
+                            >
                               {" "}✎
                             </span>
                           )}
@@ -362,8 +381,12 @@ export default async function OfficialDiffPage({
           </p>
         )}
         <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>
-          Goals include penalties on both sides. Assists aren't compared: they
-          stay on zerozero. ✎ = zerozero value was set by hand.
+          Official values are what we store and send: they replace zerozero&apos;s
+          automatically after every official fetch, and a hand fix (✎) still wins over
+          both. The zerozero column is zerozero&apos;s own value, kept for comparison.
+          Goals include penalties on both sides. Sub minutes are listed whenever they
+          differ; the two sites often disagree by a minute (45&apos; vs 46&apos; at
+          half-time). Assists aren&apos;t compared: they stay on zerozero.
         </p>
       </div>
 

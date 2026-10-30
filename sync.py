@@ -516,6 +516,15 @@ def _match_player_rows(game: dict) -> list[dict]:
             "penalties_defended": s["penalties_defended"],
             "played_under_20m": s["played_under_20m"],
             "did_not_play": p.get("did_not_play", False),
+            # zerozero's own values, kept even when an official (or manual)
+            # value replaces the column -- see db/migration_official_apply.sql.
+            "stat_crawled": {
+                "goals": s["goals"], "penalties_scored": s["penalties_scored"],
+                "assists": s["assists"], "yellow_cards": s["yellow_cards"],
+                "red_card": s["red_card"], "own_goals": s["own_goals"],
+                "entered_min": m.get("entered"), "left_min": m.get("left"),
+                "played_under_20m": s["played_under_20m"],
+            },
             "updated_at": now,
         })
     return rows
@@ -1523,18 +1532,19 @@ def run_reporter_sweep(*, github_run_id: str | None, delay: float) -> dict:
 
 
 def _zerozero_snapshot(sb: Supabase, match_id: str) -> dict[str, dict]:
-    """zerozero's own per-player values for a match (a hand-overridden stat is
-    read from stat_crawled, so a ✎ fix never counts as a zerozero change)."""
+    """zerozero's own per-player values for a match: read from stat_crawled when
+    it holds them, so neither a ✎ fix nor an official value counts as a zerozero
+    change."""
     rows = sb._rest("GET", (
-        f"match_players?match_id=eq.{match_id}&select=player_id,stat_overrides,"
+        f"match_players?match_id=eq.{match_id}&select=player_id,"
         f"stat_crawled,{','.join(SETTLE_HISTORY_STATS)}")).json()
     snap = {}
     for r in rows:
-        overridden, crawled = r.get("stat_overrides") or {}, r.get("stat_crawled") or {}
+        crawled = r.get("stat_crawled") or {}
         snap[r["player_id"]] = {
             k: int(v) if isinstance(v, bool) else v
             for k in SETTLE_HISTORY_STATS
-            for v in [crawled.get(k, r[k]) if k in overridden else r[k]]}
+            for v in [crawled[k] if k in crawled else r[k]]}
     return snap
 
 

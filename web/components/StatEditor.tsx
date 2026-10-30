@@ -21,12 +21,14 @@ export default function StatEditor({
   values,
   overrides,
   crawled,
+  official,
 }: {
   matchId: string;
   playerId: string;
   values: Record<EditableStat, number>;
   overrides: Partial<Record<EditableStat, number>>;
-  crawled: Partial<Record<EditableStat, number>>;
+  crawled: Record<string, number | boolean | null>;
+  official: Record<string, number | boolean>;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -83,10 +85,16 @@ export default function StatEditor({
                   <button
                     className="link"
                     disabled={busy}
-                    title="Drop the manual value and go back to the crawled one"
+                    title={
+                      key in official
+                        ? "Drop the manual value and go back to the official one"
+                        : "Drop the manual value and go back to the crawled one"
+                    }
                     onClick={() => save(key, null)}
                   >
-                    reset{crawled[key] != null ? ` (zz: ${crawled[key]})` : ""}
+                    {key in official
+                      ? "reset (official)"
+                      : `reset${crawled[key] != null ? ` (zz: ${crawled[key]})` : ""}`}
                   </button>
                 )}
               </span>
