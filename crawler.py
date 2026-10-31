@@ -685,7 +685,16 @@ def classify_events(events_html: str) -> dict:
             events.append({"type": "sub_out", "minute": minute, "extra": None})
 
         elif title == "Assistência" or "assist" in title_l:
-            if minute is not None:
+            # A brace is one icon + one div ("13' 90+4'"): Loop #2 counted the
+            # icon once, so add the extra minutes here.
+            tokens = MINUTE_TOKEN_RE.findall(minute_text)
+            if len(tokens) > 1:
+                stats["assists"] += len(tokens) - 1
+            if tokens:
+                for _min, _ann in tokens:
+                    base, extra = _parse_minute_token(_min)
+                    events.append({"type": "assist", "minute": base, "extra": extra})
+            elif minute is not None:
                 events.append({"type": "assist", "minute": minute, "extra": None})
 
         elif title == "Amarelos" or "yellow" in klass:
