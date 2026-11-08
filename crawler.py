@@ -311,6 +311,12 @@ def parse_round_games(html: str) -> list[dict]:
     """
     start = html.find('id="fixture_games"')
     if start == -1:
+        # zerozero dropped the id around 2026-10-28: the round table is now a
+        # bare <table class="zztable stats">, rows unchanged. Anchor on the
+        # <table> that holds the first match cell instead.
+        cell = html.find('id="tdl_')
+        start = html.rfind("<table", 0, cell) if cell != -1 else -1
+    if start == -1:
         raise RuntimeError("Could not find the fixtures table (#fixture_games).")
     end = html.find("</table>", start)
     block = html[start:end if end != -1 else len(html)]

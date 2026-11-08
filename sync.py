@@ -833,6 +833,27 @@ def _fetch_missing_reporters(sb: Supabase, competition_id: str, *,
         return 0
 
 
+def _hand_live_to_watcher(sb: Supabase, game: dict) -> None:
+    """A single-match crawl can only guess the state from the kickoff time (the
+    page has no static finished marker), so within ~150 min of kickoff it writes
+    'live' — and nothing ever re-crawled it, leaving the match stuck live forever
+    (Nacional-Académico, 2026-11-08). Flag it for the live watcher instead: the
+    kickoff cron starts the daemon for any watch=true non-final match, and the
+    daemon finalizes it from the feed (state=1) or, once the row is gone, from
+    the match page itself."""
+    gid = game.get("game_id")
+    if not gid or game.get("status") != "live":
+        return
+    try:
+        row = sb.match_existing([gid]).get(gid) or {}
+        if row.get("status") == "live":
+            sb.set_watch(gid, True)
+            print(f"  {gid} still live — handed to the live watcher.",
+                  file=sys.stderr)
+    except Exception as err:  # noqa: BLE001 - never fail the crawl over this
+        print(f"  ! could not flag {gid} for watching: {err}", file=sys.stderr)
+
+
 def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
         trigger: str, github_run_id: str | None, delay: float,
         competition_url: str | None = None) -> dict:
@@ -865,6 +886,8 @@ def run(*, jornada: int | None, match_url: str | None, run_id: int | None,
         jobstatus.report(f"Writing {len(games)} game(s) to the database")
         write_games(sb, games, competition=competition, round_no=round_no,
                     scraped_at=scraped_at)
+        if match_url:
+            _hand_live_to_watcher(sb, games[0])
         _finish_run(sb, run_id, status="success", games_count=len(games))
         jobstatus.done("success",
                        message=f"Synced {len(games)} game(s) (round {round_no}).")
