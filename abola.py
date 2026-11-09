@@ -526,6 +526,13 @@ MVP_RE = re.compile(
     r"((?:o\s+)?melhor em campo|a figura)(?:\s+d[oae]\s+([^:<\n]+?))?"
     r"(?:\s*:|\s+[—–-])\s*"
     r"([^()<\n]+?)\s*\(\s*([^)<\n]+?)\s*\)", re.I)
+# Score-first label box: "O MELHOR EM CAMPO: (8) Prestianni" -- the score sits
+# in parens BEFORE the name. Must be tried ahead of MVP_RE, which otherwise
+# matches it with a blank name (the lone space before "(8)") and drops the box.
+MVP_SCORE_FIRST_RE = re.compile(
+    r"((?:o\s+)?melhor em campo|a figura)(?:\s+d[oae]\s+([^:<\n]+?))?"
+    r"(?:\s*:|\s+[—–-])\s*\(\s*(?:nota\s*)?(" + _RATING + r")\s*\)"
+    r"\s*([^()<\n]+?)\s*$", re.I)
 # Suffix form: "Prestianni (7) — o melhor em campo" (name + score, label after).
 MVP_SUFFIX_RE = re.compile(
     r"([^()<\n]+?)\s*\(\s*(" + _RATING + r")\s*\)\s*[—–-]\s*"
@@ -949,8 +956,12 @@ def _mvp_boxes(soup) -> list[dict]:
     for node in soup.find_all(string=re.compile(r"melhor em campo|a figura", re.I)):
         lbl = re.search(r"(?:o\s+)?melhor em campo|a figura", node, re.I)
         name = score = team = narrative = None
-        m = MVP_RE.search(node)
-        if m:
+        if (m := MVP_SCORE_FIRST_RE.search(node)) and _player_name(m.group(4)):
+            name = _player_name(m.group(4))
+            score = _score(m.group(3))
+            team = (m.group(2) or "").strip() or None
+            narrative = _mvp_narrative(node, re.sub(r"\s+", " ", m.group(0)).strip())
+        elif (m := MVP_RE.search(node)) and _clean_name(m.group(3)):
             name, paren = _clean_name(m.group(3)), m.group(4).strip()
             combo = re.fullmatch(r"(.+?)\s*,\s*(" + _RATING + r")", paren)
             if re.fullmatch(r"(?:nota\s*)?[\d\-–—]+", paren, re.I):
