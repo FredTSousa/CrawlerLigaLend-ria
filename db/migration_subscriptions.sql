@@ -111,6 +111,9 @@ create trigger matches_enqueue
 
 -- match_players: any stat/reporter-score change enqueues the PARENT match
 -- (competition_id is looked up; coalescing collapses the whole lineup to one).
+-- NOTE: this function and trg_reporter_link_enqueue below are redefined by
+-- migration_enqueue_skip_noop.sql to skip no-op re-saves — run that after this
+-- file, or re-running this file reverts them to enqueue-on-every-write.
 create or replace function public.trg_match_players_enqueue()
 returns trigger language plpgsql as $$
 declare cid text;
